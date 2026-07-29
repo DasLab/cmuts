@@ -1,10 +1,10 @@
 #!/bin/bash
 
 HDF5="profile.h5"
-SHAPE="/bicine-2A3/reactivity"
-DMS="/bicine-DMS/reactivity"
 
-cmuts plot \
-  --files "$HDF5" "$HDF5" \
-  --datasets "$SHAPE" "$DMS" \
-  --labels "SHAPE" "DMS"
+# Render a self-contained HTML report (stats + plots) for every group in the file.
+cmuts plot "$HDF5" -o report.html
+
+# Add --all to also embed each reference's profile/matrices behind a dropdown
+# (small runs only). Open report.html in any browser; use each figure's toolbar
+# camera button to download it as a PNG.

@@ -1,7 +1,8 @@
 """Plotly implementations of cmuts plots.
 
-Each function returns a ``go.Figure`` for interactive display (e.g. in Gradio).
-The matplotlib module (``plotting.py``) remains the CLI default and saves PNGs.
+Each function returns a ``go.Figure``. Every builder takes the raw arrays it
+needs (read from the reactivity HDF5 by the caller), so this module depends only
+on numpy/plotly and never on the normalize pipeline internals.
 """
 
 from typing import Any, Optional
@@ -10,24 +11,34 @@ import numpy as np
 import plotly.colors as pc
 import plotly.graph_objects as go
 
-from cmuts.internal import SNRCurves
-
 from . import _transforms
 
-# Styling constants matching the matplotlib versions
+# ===========================================================================
+# Styling constants
+# ===========================================================================
 FONT_FAMILY = "Helvetica"
 LABEL_SIZE = 14
 TITLE_SIZE = 15
 TICK_SIZE = 13
 LEGEND_SIZE = 12
 
-# Pre-sampled colors from colorscales
+# Tight margins so the data area fills its container (the report figure card).
+_MARGIN = {"l": 55, "r": 20, "t": 40, "b": 45}
+
+# Pre-sampled colours: a light fill + darker line for area plots, and a mid tone
+# for the SNR confidence bands (modified = RdPu, unmodified = PuBu).
 _RDPU_FILL = pc.sample_colorscale("RdPu", [0.3])[0]
 _RDPU_LINE = pc.sample_colorscale("RdPu", [0.8])[0]
-_RDPU_070 = pc.sample_colorscale("RdPu", [0.7])[0]
-_PUBU_FILL = pc.sample_colorscale("PuBu", [0.3])[0]
-_PUBU_LINE = pc.sample_colorscale("PuBu", [0.8])[0]
-_PUBU_070 = pc.sample_colorscale("PuBu", [0.7])[0]
+_RDPU_MID = pc.sample_colorscale("RdPu", [0.7])[0]
+_PUBU_MID = pc.sample_colorscale("PuBu", [0.7])[0]
+
+
+# ===========================================================================
+# Shared trace / layout / colorbar helpers
+# ===========================================================================
+def _title(base: str, name: str) -> str:
+    """`"Base (name)"` when a group name is given, else just `"Base"`."""
+    return f"{base} ({name})" if name else base
 
 
 def _rgba(rgb_str: str, alpha: float) -> str:
@@ -49,7 +60,27 @@ def _base_layout(title: str, xlabel: str = "", ylabel: str = "") -> dict[str, An
         },
         "plot_bgcolor": "white",
         "legend": {"font": {"size": LEGEND_SIZE}},
+        "margin": _MARGIN,
     }
+
+
+def _colorbar(title: str, **extra: Any) -> dict[str, Any]:
+    """A colorbar styled like the old matplotlib figures: outlined, with outside
+    ticks and a rotated title on the right. ``extra`` overrides/adds keys (e.g.
+    tickvals/ticktext). Length is tied to the plotting area (see the heatmap
+    builders' xaxis domain) so it matches the plot height."""
+    cb = {
+        "title": {"text": title, "side": "right", "font": {"size": LABEL_SIZE}},
+        "outlinecolor": "black",
+        "outlinewidth": 1,
+        "ticks": "outside",
+        "ticklen": 5,
+        "tickcolor": "black",
+        "tickfont": {"size": TICK_SIZE},
+        "thickness": 15,
+    }
+    cb.update(extra)
+    return cb
 
 
 def _line_trace(
@@ -98,11 +129,64 @@ def _add_band(
     )
 
 
-# ---------------------------------------------------------------------------
-# Public plot functions — each returns a go.Figure
-# ---------------------------------------------------------------------------
+def _line_figure(
+    data: np.ndarray,
+    title: str,
+    xlabel: str,
+    ylabel: str,
+    *,
+    yrange: Optional[list] = None,
+    axis_lines: bool = False,
+) -> go.Figure:
+    """A single fill-to-zero line plot -- the shape shared by coverage,
+    terminations, reads-per-block, etc. ``axis_lines`` draws black x/y spines and
+    ``yrange`` fixes the y extent."""
+    fig = go.Figure()
+    _line_trace(fig, data)
+    fig.update_layout(**_base_layout(title, xlabel, ylabel))
+    spine = {"showline": True, "linecolor": "black", "linewidth": 1} if axis_lines else {}
+    fig.update_xaxes(range=[0, len(data)], **spine)
+    if yrange is not None:
+        fig.update_yaxes(range=yrange, **spine)
+    elif spine:
+        fig.update_yaxes(**spine)
+    return fig
 
 
+def _square_matrix_layout(fig: go.Figure) -> None:
+    """Square, reversed-y layout for an L x L matrix heatmap. scaleanchor keeps
+    the cells square; the wide ``.square`` report card leaves the *width* with
+    slack, so the x-domain shrinks to square the data while the y-axis keeps the
+    full height -- so the colorbar (full height) matches the plot exactly."""
+    fig.update_layout(
+        yaxis_autorange="reversed",
+        yaxis_scaleanchor="x",
+        xaxis_constrain="domain",
+        yaxis_constrain="domain",
+    )
+
+
+def _matrix_heatmap(
+    z: np.ndarray,
+    name: str,
+    base_title: str,
+    colorscale: Any,
+    zmin: float,
+    zmax: float,
+    colorbar: dict,
+) -> go.Figure:
+    """An L x L matrix as a square, reversed-y heatmap with a styled colorbar."""
+    fig = go.Figure(
+        data=go.Heatmap(z=z, colorscale=colorscale, zmin=zmin, zmax=zmax, colorbar=colorbar)
+    )
+    fig.update_layout(**_base_layout(_title(base_title, name), "Residue", "Residue"))
+    _square_matrix_layout(fig)
+    return fig
+
+
+# ===========================================================================
+# Per-base mutation heatmap
+# ===========================================================================
 _HEATMAP_NTS = ["A", "C", "G", "U"]
 _HEATMAP_MODS = ["A", "C", "G", "U", "del", "ins", "term"]
 
@@ -131,7 +215,7 @@ def plot_heatmap(heatmap: np.ndarray, name: str = "") -> go.Figure:
                 row.append(f"Termination at {nt}<br>Probability: {prob}")
         hover_text.append(row)
 
-    title = f"Modification Heatmap ({name})" if name else "Modification Heatmap"
+    title = _title("Modification Heatmap", name)
     fig = go.Figure(
         data=go.Heatmap(
             z=log_heatmap,
@@ -143,7 +227,7 @@ def plot_heatmap(heatmap: np.ndarray, name: str = "") -> go.Figure:
             text=hover_text,
             hoverinfo="text",
             colorbar={
-                "title": "Probability",
+                **_colorbar("Probability"),
                 "tickvals": [-4, -3, -2, -1, 0],
                 "ticktext": [
                     "10\u207b\u2074",
@@ -169,10 +253,11 @@ def plot_heatmap(heatmap: np.ndarray, name: str = "") -> go.Figure:
                 layer="above",
             )
 
-    # Intentionally not using _base_layout: heatmaps need square cells
-    # (yaxis scaleanchor + constrain "domain"), a reversed y-axis, and fixed
-    # sizing that the shared line-plot layout does not provide. Keep in sync
-    # with _base_layout's font sizing by hand if the base style changes.
+    # Not using _base_layout: this heatmap has a reversed y-axis and its own
+    # categorical axis titles. Square cells (scaleanchor + constrain "domain")
+    # give the data portion a 7x4 = 7:4 aspect; no fixed width/height, so the
+    # figure stays responsive and fits (centers) within its report card. Keep in
+    # sync with _base_layout's font sizing by hand if the base style changes.
     fig.update_layout(
         font={"family": FONT_FAMILY},
         title={"text": title, "font": {"size": TITLE_SIZE}},
@@ -188,18 +273,19 @@ def plot_heatmap(heatmap: np.ndarray, name: str = "") -> go.Figure:
             "constrain": "domain",
         },
         template="plotly_white",
-        height=300,
-        width=550,
-        margin={"l": 50, "r": 20, "t": 40, "b": 40},
+        margin=_MARGIN,
     )
     return fig
 
 
+# ===========================================================================
+# Position (line) plots
+# ===========================================================================
 def plot_read_hist(reads: np.ndarray, name: str = "") -> go.Figure:
     bin_centers, counts, normed = _transforms.read_histogram(reads)
     colors = [pc.sample_colorscale("RdPu", [float(v)])[0] for v in normed]
 
-    title = f"Read distribution ({name})" if name else "Read distribution"
+    title = _title("Read distribution", name)
     fig = go.Figure(
         data=go.Bar(
             x=bin_centers,
@@ -214,119 +300,62 @@ def plot_read_hist(reads: np.ndarray, name: str = "") -> go.Figure:
 
 
 def plot_reads_per_block(reads: np.ndarray, name: str = "", nblocks: int = 100) -> go.Figure:
-    """Plot mean reads per reference, with the references split into a
-    fixed number of equal-sized blocks in their FASTA order.
-
-    The x-axis is the block index (0..nblocks-1); the y-axis is the
-    arithmetic mean of per-reference read counts inside that block. No
-    sorting is applied, so spatial trends along the FASTA are preserved.
-    """
+    """Mean reads per reference, references split into ``nblocks`` equal-sized
+    blocks in FASTA order (no sorting, so spatial trends are preserved)."""
     means = _transforms.reads_per_block(reads, nblocks)
-
-    title = f"Mean reads per reference bin ({name})" if name else "Mean reads per reference bin"
-    fig = go.Figure()
-    _line_trace(fig, means)
-    fig.update_layout(**_base_layout(title, "Reference bin", "Mean reads"))
-    fig.update_xaxes(range=[0, len(means)])
-    return fig
+    return _line_figure(
+        means, _title("Mean reads per reference bin", name), "Reference bin", "Mean reads"
+    )
 
 
 def plot_termination(term: np.ndarray, name: str = "") -> go.Figure:
-    term = _transforms.termination_density(term)
+    """Termination density for one reference's raw 1-D termination counts.
 
-    title = f"Termination by position ({name})" if name else "Termination by position"
-    fig = go.Figure()
-    _line_trace(fig, term)
-    fig.update_layout(**_base_layout(title, "Residue", "Termination density"))
-    fig.update_xaxes(range=[0, len(term)])
-    fig.update_yaxes(range=[0, 1.05])
-    return fig
-
-
-def _seq_tick_labels(sequence: str) -> tuple[list[int], list[str]]:
-    """Build x-axis tick values/labels showing nucleotide letters.
-
-    Each position gets a letter; positions 1, every 10th, and the last also
-    get the residue number on a second line below the letter.
+    Row-normalizes the input to a density. Passing an already-normalized density
+    (e.g. the cross-reference aggregate from ``_transforms.termination_density``)
+    is a no-op, so callers plot a single reference with ``terminations[i]`` and
+    the aggregate with ``termination_density(terminations)``.
     """
-    n = len(sequence)
-    tickvals = list(range(n))
-    ticktext: list[str] = []
-    for i, nt in enumerate(sequence):
-        pos = i + 1
-        if pos == 1 or pos % 10 == 0 or pos == n:
-            ticktext.append(f"{nt}<br>{pos}")
-        else:
-            ticktext.append(nt)
-    return tickvals, ticktext
+    term = np.asarray(term, dtype=float)
+    total = term.sum()
+    if total > 0:
+        term = term / total
+    return _line_figure(
+        term,
+        _title("Termination by position", name),
+        "Residue",
+        "Termination density",
+        yrange=[0, 1.05],
+        axis_lines=True,
+    )
 
 
-def _apply_sequence_axis(fig: go.Figure, sequence: Optional[str], length: int) -> None:
-    """Replace the x-axis numeric ticks with sequence letter ticks (if seq fits)."""
-    if not sequence or len(sequence) < length:
-        return
-    tickvals, ticktext = _seq_tick_labels(sequence[:length])
-    fig.update_xaxes(tickmode="array", tickvals=tickvals, ticktext=ticktext)
+def plot_coverage(coverage: np.ndarray, reads: np.ndarray, name: str = "") -> go.Figure:
+    data = _transforms.coverage_fraction(coverage, reads)
+    return _line_figure(
+        data,
+        _title("Coverage by position", name),
+        "Residue",
+        "Fraction of reads",
+        yrange=[0, 1.05],
+        axis_lines=True,
+    )
 
 
-def plot_profile(
-    reactivity: np.ndarray,
-    error: Optional[np.ndarray] = None,
-    name: str = "",
-    sequence: Optional[str] = None,
-) -> go.Figure:
-    title = f"Reactivity Profile ({name})" if name else "Reactivity Profile"
-    fig = go.Figure()
+# ===========================================================================
+# Matrix heatmaps (reference x position, and L x L pairwise)
+# ===========================================================================
+def plot_reactivity_heatmap(reactivity: np.ndarray, name: str = "", num: int = 250) -> go.Figure:
+    """Reactivity of every reference as a (reference x position) heatmap.
 
-    if error is not None:
-        _line_trace(fig, reactivity, label="Reactivity")
-        _line_trace(fig, -error, _PUBU_FILL, _PUBU_LINE, label="Stat. Error")
-    else:
-        _line_trace(fig, reactivity)
-
-    fig.update_layout(**_base_layout(title, "Residue", "Reactivity"))
-    fig.update_xaxes(range=[0, len(reactivity)])
-    _apply_sequence_axis(fig, sequence, len(reactivity))
-    return fig
-
-
-def plot_profiles(
-    reactivities: list[np.ndarray],
-    names: list[str],
-    sequence: Optional[str] = None,
-) -> go.Figure:
-    color_sets = [
-        (_RDPU_FILL, _RDPU_LINE),
-        (pc.sample_colorscale("PiYG", [0.3])[0], pc.sample_colorscale("PiYG", [0.8])[0]),
-    ]
-    fig = go.Figure()
-    for ix, (reac, label) in enumerate(zip(reactivities, names)):
-        fill_c, line_c = color_sets[ix % len(color_sets)]
-        _line_trace(fig, reac, fill_c, line_c, label=label)
-
-    fig.update_layout(**_base_layout("Reactivity Profile", "Residue", "Reactivity"))
-    max_len = max(len(r) for r in reactivities)
-    fig.update_xaxes(range=[0, max_len])
-    _apply_sequence_axis(fig, sequence, max_len)
-    return fig
-
-
-def plot_error(error: np.ndarray, name: str = "") -> go.Figure:
-    title = f"Error Profile ({name})" if name else "Error Profile"
-    fig = go.Figure()
-    _line_trace(fig, error)
-    fig.update_layout(**_base_layout(title, "Residue", "Error"))
-    fig.update_xaxes(range=[0, len(error)])
-    return fig
-
-
-def plot_multiple_examples(reactivity: np.ndarray, name: str = "") -> go.Figure:
-    title = f"Heatmap of profiles ({name})" if name else "Heatmap of profiles"
-
+    Clipped to the first ``num`` references so it stays bounded (and renders
+    without ``--all``) even for reference-heavy experiments.
+    """
     sentinel = -0.01
-    data = reactivity.copy()
+    data = np.asarray(reactivity)[:num].copy()
     data[np.isnan(data)] = sentinel
 
+    # Grey for the NaN sentinel just below zero, then the RdPu ramp above it.
     eps = 0.001
     colorscale = [
         [0.0, "grey"],
@@ -341,167 +370,118 @@ def plot_multiple_examples(reactivity: np.ndarray, name: str = "") -> go.Figure:
             colorscale=colorscale,
             zmin=sentinel,
             zmax=1,
-            colorbar={"title": "Reactivity"},
+            colorbar=_colorbar("Reactivity"),
         )
     )
-    fig.update_layout(**_base_layout(title, "Residue", "Sequence Index"))
+    fig.update_layout(
+        **_base_layout(_title("Heatmap of profiles", name), "Residue", "Sequence Index")
+    )
     fig.update_layout(yaxis_autorange="reversed")
-    return fig
-
-
-def plot_examples(
-    reactivity: np.ndarray,
-    error: np.ndarray,
-    name: str = "",
-    num: int = 250,
-    sequence: Optional[str] = None,
-) -> go.Figure:
-    reactivity = np.asarray(reactivity)
-    error = np.asarray(error)
-    if reactivity.shape[0] == 1:
-        return plot_profile(reactivity[0], error[0], name, sequence=sequence)
-    else:
-        return plot_multiple_examples(reactivity[:num], name)
-
-
-def plot_coverage(coverage: np.ndarray, reads: np.ndarray, name: str = "") -> go.Figure:
-    data = _transforms.coverage_fraction(coverage, reads)
-
-    title = f"Coverage by position ({name})" if name else "Coverage by position"
-    fig = go.Figure()
-    _line_trace(fig, data)
-    fig.update_layout(**_base_layout(title, "Residue", "Fraction of reads"))
-    fig.update_xaxes(range=[0, len(data)])
-    fig.update_yaxes(range=[0, 1.05])
-    return fig
-
-
-def plot_variance(values: np.ndarray, name: str = "") -> go.Figure:
-    title = f"Variance ({name})" if name else "Variance"
-    fig = go.Figure()
-    _line_trace(fig, values)
-    fig.update_layout(**_base_layout(title, "Residue", "Variance"))
-    fig.update_xaxes(range=[0, len(values)])
     return fig
 
 
 def plot_pairwise_coverage(values: np.ndarray, name: str = "") -> go.Figure:
     vlow = _transforms.pairwise_coverage_bounds(values).vlow
     with np.errstate(divide="ignore"):
-        log_values = np.log10(np.clip(values, vlow, 1.0))
-
-    title = f"Pairwise Coverage ({name})" if name else "Pairwise Coverage"
-    fig = go.Figure(
-        data=go.Heatmap(
-            z=log_values,
-            colorscale="RdPu",
-            zmin=np.log10(vlow),
-            zmax=0,
-            colorbar={"title": "Pairwise Correlation"},
-        )
+        z = np.log10(np.clip(values, vlow, 1.0))
+    return _matrix_heatmap(
+        z, name, "Pairwise Coverage", "RdPu", np.log10(vlow), 0, _colorbar("Pairwise Coverage")
     )
-    fig.update_layout(**_base_layout(title, "Residue", "Residue"))
-    fig.update_layout(yaxis_autorange="reversed", yaxis_scaleanchor="x")
-    return fig
 
 
 def plot_correlation(values: np.ndarray, name: str = "") -> go.Figure:
     linthresh = _transforms.CORRELATION_LINTHRESH
-    transformed = _transforms.symlog(values, linthresh)
-    t_max = _transforms.symlog(np.array([1.0]), linthresh)[0]
-
-    title = f"Correlation ({name})" if name else "Correlation"
-    fig = go.Figure(
-        data=go.Heatmap(
-            z=transformed,
-            colorscale="PiYG",
-            zmin=-t_max,
-            zmax=t_max,
-            colorbar={
-                "title": "Pairwise Correlation",
-                "tickvals": [
-                    _transforms.symlog(np.array([v]), linthresh)[0]
-                    for v in [-1, -0.1, -0.01, 0, 0.01, 0.1, 1]
-                ],
-                "ticktext": ["-1", "-0.1", "-0.01", "0", "0.01", "0.1", "1"],
-            },
-        )
-    )
-    fig.update_layout(**_base_layout(title, "Residue", "Residue"))
-    fig.update_layout(yaxis_autorange="reversed", yaxis_scaleanchor="x")
-    return fig
+    z = _transforms.symlog(values, linthresh)
+    t_max = float(_transforms.symlog(np.array([1.0]), linthresh)[0])
+    colorbar = {
+        **_colorbar("Pairwise Correlation"),
+        "tickvals": [
+            _transforms.symlog(np.array([v]), linthresh)[0]
+            for v in [-1, -0.1, -0.01, 0, 0.01, 0.1, 1]
+        ],
+        "ticktext": ["-1", "-0.1", "-0.01", "0", "0.01", "0.1", "1"],
+    }
+    return _matrix_heatmap(z, name, "Correlation", "PiYG", -t_max, t_max, colorbar)
 
 
 def plot_mi(values: np.ndarray, name: str = "") -> go.Figure:
     vlow, vhigh = _transforms.mi_bounds(values)
-
     with np.errstate(divide="ignore"):
-        log_values = np.log10(np.clip(values, vlow, vhigh))
-
-    title = f"Mutual Information ({name})" if name else "Mutual Information"
-    fig = go.Figure(
-        data=go.Heatmap(
-            z=log_values,
-            colorscale="RdPu",
-            zmin=np.log10(vlow),
-            zmax=np.log10(vhigh),
-            colorbar={"title": "Mutual information"},
-        )
+        z = np.log10(np.clip(values, vlow, vhigh))
+    return _matrix_heatmap(
+        z,
+        name,
+        "Mutual Information",
+        "RdPu",
+        np.log10(vlow),
+        np.log10(vhigh),
+        _colorbar("Mutual information"),
     )
-    fig.update_layout(**_base_layout(title, "Residue", "Residue"))
-    fig.update_layout(yaxis_autorange="reversed", yaxis_scaleanchor="x")
-    return fig
 
 
-def plot_snr_scaling(curves: SNRCurves, name: str = "") -> go.Figure:
-    """Render precomputed SNR-vs-read-depth curves (see cmuts.compute_snr_curves)."""
+# ===========================================================================
+# SNR vs read depth
+# ===========================================================================
+def plot_snr_scaling(
+    xi: np.ndarray,
+    mod: np.ndarray,
+    mod_sem: np.ndarray,
+    nomod: Optional[np.ndarray] = None,
+    nomod_sem: Optional[np.ndarray] = None,
+    pareto: Optional[np.ndarray] = None,
+    pareto_sem: Optional[np.ndarray] = None,
+    name: str = "",
+) -> go.Figure:
+    """Render precomputed SNR-vs-read-depth curves (see cmuts.compute_snr_curves).
+
+    ``xi`` is the relative-depth axis; ``mod``/``mod_sem`` the modified mean-SNR
+    curve and its band. The ``nomod`` and ``pareto`` curves (with their SEMs) are
+    present only when an unmodified control exists; they are drawn together.
+    """
 
     def _trim(snr: np.ndarray) -> slice:
         nz = np.nonzero(snr > 0.01)[0]
         start = max(nz[0] - 1, 0) if len(nz) > 0 else 0
         return slice(start, None)
 
-    xi = curves.xi
     fig = go.Figure()
 
-    if curves.nomod is not None:
+    if nomod is not None:
         # nomod_sem, pareto and pareto_sem are populated together with nomod.
-        assert curves.nomod_sem is not None
-        assert curves.pareto is not None and curves.pareto_sem is not None
-        s = _trim(curves.mod)
+        assert nomod_sem is not None
+        assert pareto is not None and pareto_sem is not None
+        s = _trim(mod)
         _add_band(
             fig,
             xi[s],
-            (curves.mod - curves.mod_sem)[s],
-            (curves.mod + curves.mod_sem)[s],
-            _rgba(_RDPU_070, 0.2),
+            (mod - mod_sem)[s],
+            (mod + mod_sem)[s],
+            _rgba(_RDPU_MID, 0.2),
         )
         fig.add_trace(
-            go.Scatter(
-                x=xi[s], y=curves.mod[s], line={"color": _RDPU_070, "width": 2}, name="Modified"
-            )
+            go.Scatter(x=xi[s], y=mod[s], line={"color": _RDPU_MID, "width": 2}, name="Modified")
         )
 
-        s = _trim(curves.nomod)
+        s = _trim(nomod)
         _add_band(
             fig,
             xi[s],
-            (curves.nomod - curves.nomod_sem)[s],
-            (curves.nomod + curves.nomod_sem)[s],
-            _rgba(_PUBU_070, 0.2),
+            (nomod - nomod_sem)[s],
+            (nomod + nomod_sem)[s],
+            _rgba(_PUBU_MID, 0.2),
         )
         fig.add_trace(
             go.Scatter(
-                x=xi[s], y=curves.nomod[s], line={"color": _PUBU_070, "width": 2}, name="Unmodified"
+                x=xi[s], y=nomod[s], line={"color": _PUBU_MID, "width": 2}, name="Unmodified"
             )
         )
 
         curve_max = max(
-            float(np.nanmax(curves.mod + curves.mod_sem)),
-            float(np.nanmax(curves.nomod + curves.nomod_sem)),
+            float(np.nanmax(mod + mod_sem)),
+            float(np.nanmax(nomod + nomod_sem)),
         )
         y_top = curve_max * 1.1
-        pareto_upper = curves.pareto + curves.pareto_sem
+        pareto_upper = pareto + pareto_sem
         _add_band(fig, xi, pareto_upper, np.full_like(xi, y_top), "rgba(200, 200, 200, 0.3)")
         fig.add_trace(
             go.Scatter(
@@ -513,15 +493,13 @@ def plot_snr_scaling(curves: SNRCurves, name: str = "") -> go.Figure:
         )
         fig.update_yaxes(range=[0, y_top])
     else:
-        _add_band(
-            fig, xi, curves.mod - curves.mod_sem, curves.mod + curves.mod_sem, _rgba(_RDPU_070, 0.2)
-        )
+        _add_band(fig, xi, mod - mod_sem, mod + mod_sem, _rgba(_RDPU_MID, 0.2))
         fig.add_trace(
-            go.Scatter(x=xi, y=curves.mod, line={"color": _RDPU_070, "width": 2}, name="Modified")
+            go.Scatter(x=xi, y=mod, line={"color": _RDPU_MID, "width": 2}, name="Modified")
         )
 
     fig.add_vline(x=1.0, line={"color": "grey", "dash": "dash", "width": 1}, opacity=0.7)
-    title = f"SNR vs Read Depth ({name})" if name else "SNR vs Read Depth"
+    title = _title("SNR vs Read Depth", name)
     fig.update_layout(**_base_layout(title, "Relative Total Read Depth", "Mean SNR"))
     fig.update_xaxes(type="log", range=[np.log10(xi[0]), np.log10(xi[-1])])
     return fig

@@ -112,11 +112,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _annotate_files(norm, {"file": ("h5",), "--fasta": ("fa", "fasta", "fna"), "--out": ("h5",)})
 
-    # cmuts-plot delegates to plotting:main (no module-level parser to import).
-    plot = sub.add_parser("plot", help="Plot reactivity profiles from a normalize h5")
+    # cmuts-plot delegates to report:main (no module-level parser to import).
+    plot = sub.add_parser("plot", help="Render an HTML report from a normalize h5")
     _file(plot.add_argument("file", help="Reactivity HDF5 file"), "h5")
-    plot.add_argument("--group", help="Plot only this group")
-    _file(plot.add_argument("-o", "--out", help="Output directory"))
+    plot.add_argument(
+        "--all", action="store_true", help="Embed per-reference plots behind a dropdown"
+    )
+    plot.add_argument("--group", help="Report only this group")
+    _file(plot.add_argument("-o", "--out", help="Output HTML file"), "html")
 
     vis = sub.add_parser(
         "visualize",

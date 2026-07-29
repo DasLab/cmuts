@@ -2,11 +2,8 @@ import os
 import subprocess
 from typing import Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 from Bio import PDB, Align
-
-FIGURES = "figures"
 
 
 def _seq_from_cif(filename: str, chain_id: Union[str, None] = None) -> str:
@@ -116,25 +113,6 @@ def _data_aln(data: np.ndarray, aln1: str, aln2: str) -> np.ndarray:
 
     result: np.ndarray = np.array(mapped_data)
     return result
-
-
-def _plot_single_profile(reactivity: np.ndarray, name: str, dir: str = FIGURES) -> None:
-    prefix = f"{name}-" if name else ""
-    x = range(len(reactivity))
-
-    plt.grid(axis="y", alpha=0.5)
-    cmap = plt.get_cmap("RdPu")
-    plt.fill_between(x, reactivity, alpha=0.5, color=cmap(0.3))
-    plt.plot(reactivity, color=cmap(0.8), linewidth=1)
-
-    plt.xlabel("Residue", fontsize=14)
-    plt.ylabel("Reactivity", fontsize=14)
-    if name:
-        plt.title(f"Profile of {name}", fontsize=14)
-    plt.tick_params(axis="both", labelsize=13)
-
-    plt.savefig(f"{dir}/{prefix}profile.png", dpi=300, bbox_inches="tight")
-    plt.close()
 
 
 def _to_defattr(

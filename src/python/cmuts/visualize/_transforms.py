@@ -1,10 +1,8 @@
-"""Pure-numpy data preparation shared by the matplotlib and plotly backends.
+"""Pure-numpy data preparation for the plotly plot builders.
 
 Every plot is "compute the array(s) to draw, then draw them". The compute half
-is identical across the two backends, so it lives here -- numpy in, numpy out,
-no matplotlib/plotly imports -- and both renderers call it. This keeps the two
-backends from drifting on the math and makes the transforms unit-testable on
-their own.
+lives here -- numpy in, numpy out, no plotly imports -- so the drawing code stays
+thin and the transforms are unit-testable on their own.
 """
 
 from __future__ import annotations
@@ -76,9 +74,8 @@ def symlog(x: npt.ArrayLike, linthresh: float = CORRELATION_LINTHRESH) -> np.nda
     return np.sign(x) * np.log10(1.0 + np.abs(x) / linthresh)
 
 
-# Colour-scale bounds for the log-scaled matrix plots. matplotlib applies them
-# via a Norm; plotly applies log10 by hand -- only the bounds are shared.
-# A NamedTuple so callers can either unpack ``vlow, vhigh`` or use ``.vlow``.
+# Colour-scale bounds for the log-scaled matrix plots (plotly applies log10 by
+# hand). A NamedTuple so callers can either unpack ``vlow, vhigh`` or use ``.vlow``.
 class LogBounds(NamedTuple):
     vlow: float
     vhigh: float

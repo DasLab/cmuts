@@ -4,12 +4,11 @@ This module provides normalization schemes and utilities for converting
 raw mutation rates into normalized reactivity values.
 """
 
-from .schemes import Scheme, normalization, register, requires_sequence, scheme_names
+from .schemes import Scheme, normalization, register, scheme_names
 
 __all__ = [
     "Scheme",
     "normalization",
     "register",
-    "requires_sequence",
     "scheme_names",
 ]

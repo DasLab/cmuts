@@ -31,16 +31,13 @@ keywords = ["RNA", "DNA", "mutation", "probing", "MaP-seq", "bioinformatics"]
 dependencies = [
     "numpy>=1.21,<3.0",
     "scipy>=1.9,<2.0",
-    "matplotlib>=3.5",
+    "plotly>=5.0",
     "h5py>=3.0",
     "dask>=2022.1",
     "biopython>=1.80",
 ]
 
 [project.optional-dependencies]
-hf = [
-    "plotly>=5.0",
-]
 completions = [
     "shtab>=1.6.0",
 ]
@@ -68,7 +65,7 @@ Changelog = "https://github.com/hmblair/cmuts/releases"
 
 [project.scripts]
 cmuts-normalize = "cmuts.normalize.__main__:main"
-cmuts-plot = "cmuts.visualize.plotting:main"
+cmuts-plot = "cmuts.report:main"
 cmuts-visualize = "cmuts.visualize.structure:main"
 
 [tool.setuptools_scm]

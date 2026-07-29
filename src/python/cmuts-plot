@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Thin entry point that delegates to ``cmuts.visualize.plotting:main``.
+"""Thin entry point that delegates to ``cmuts.report:main``.
 
-Renders all standard figures (profiles, heatmap, coverage, termination, mutual
-information, SNR-vs-depth, ...) from a reactivity HDF5 file written by
-``cmuts normalize``. Plotting is decoupled from normalization: normalize writes
-the data, ``cmuts plot`` draws it.
+Renders a self-contained HTML report (stats, profiles, heatmap, coverage,
+termination, mutual information, SNR-vs-depth, ...) from a reactivity HDF5 file
+written by ``cmuts normalize``. Plotting is decoupled from normalization:
+normalize writes the data, ``cmuts plot`` draws it.
 """
 
-from cmuts.visualize.plotting import main
+from cmuts.report import main
 
 if __name__ == "__main__":
     main()

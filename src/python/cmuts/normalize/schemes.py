@@ -41,7 +41,6 @@ __all__ = [
     "Scheme",
     "normalization",
     "register",
-    "requires_sequence",
     "scheme_names",
 ]
 
@@ -112,12 +111,6 @@ def register(scheme_cls: type[Scheme]) -> type[Scheme]:
 def scheme_names() -> list[str]:
     """Names of all registered schemes (drives the CLI ``--norm`` choices)."""
     return list(_SCHEMES)
-
-
-def requires_sequence(name: str) -> bool:
-    """Whether scheme ``name`` reads the per-position sequence (so the caller
-    must attach it before normalization)."""
-    return _resolve(name).needs_sequence
 
 
 def _resolve(name: str) -> Scheme:

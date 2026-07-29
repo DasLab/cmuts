@@ -28,8 +28,8 @@ Example:
 
 from importlib.metadata import version as _get_version
 
-# Visualization submodule
-from . import visualize
+# Visualization + report submodules
+from . import report, visualize
 
 # Core data types and functions
 from .internal import (
@@ -44,7 +44,7 @@ from .internal import (
     compute_snr_curves,
     save_groups,
 )
-from .normalize import Scheme, normalization, register, requires_sequence, scheme_names
+from .normalize import Scheme, normalization, register, scheme_names
 
 # Output formatting
 from .output import (
@@ -69,7 +69,7 @@ __all__ = [
     "compute_snr_curves",
     "normalization",
     "register",
-    "requires_sequence",
+    "report",
     "save_groups",
     "scheme_names",
     "stats",
