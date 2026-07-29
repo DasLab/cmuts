@@ -9,6 +9,7 @@ import sys
 import h5py
 
 import cmuts
+from cmuts.internal import _names_from_fasta
 
 NAME = "cmuts normalize"
 
@@ -157,6 +158,8 @@ def main():
     names = [e.name for e in experiments]
     if len(set(names)) != len(names):
         parser.error("--experiment names must be unique (each is an output HDF5 group).")
+    if "meta" in names:
+        parser.error("'meta' is a reserved group name (used for shared metadata).")
 
     print()
     print(cmuts.title(NAME, cmuts.__version__))
@@ -186,8 +189,10 @@ def main():
         results = cmuts.compute_reactivities(f, args.fasta, experiments, opts)
 
     # Save all experiments to a single output file (one HDF5 group per name).
+    # Reference names (FASTA order) are stored so the report can label by name.
 
-    cmuts.save_groups(args.out, [(r.experiment.name, r.combined) for r in results])
+    names = _names_from_fasta(args.fasta)
+    cmuts.save_groups(args.out, [(r.experiment.name, r.combined) for r in results], names=names)
 
     # Print stats and save the SNR-vs-depth curves alongside each experiment.
     # Plotting is decoupled: `cmuts plot <out.h5>` renders the figures.

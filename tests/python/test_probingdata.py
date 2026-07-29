@@ -74,6 +74,51 @@ def test_load_falls_back_for_legacy_files(tmp_path):
         del f["grp/terminations"]
     with h5py.File(out, "r") as f:
         loaded = ProbingData.load("grp", f)
-    # Reconstructed, not crashed.
-    assert loaded.coverage.shape == (pd.reactivity.shape[1],)
+    # Reconstructed (per reference), not crashed.
+    assert loaded.coverage.shape == pd.reactivity.shape
     assert loaded.terminations.shape == pd.reactivity.shape
+
+
+def test_per_reference_coverage_round_trips(tmp_path):
+    """Coverage is stored per reference (n_ref, L) so the report can plot a single
+    sequence's coverage; the shape and values must survive save/load."""
+    pd = _make(n=4, length=20)
+    rng = np.random.default_rng(1)
+    pd.coverage = rng.random((4, 20))  # per-reference, as compute_reactivities now writes
+    out = tmp_path / "profiles.h5"
+    save_groups(str(out), [("g1", pd)])
+    with h5py.File(out, "r") as f:
+        loaded = ProbingData.load("g1", f)
+    assert loaded.coverage.shape == (4, 20)
+    assert np.allclose(loaded.coverage, pd.coverage)
+
+
+def test_save_groups_writes_reference_names(tmp_path):
+    """Reference names (FASTA order) are persisted under meta/name so the report
+    can label sequences by name rather than index."""
+    pd = _make()
+    out = tmp_path / "profiles.h5"
+    save_groups(str(out), [("g1", pd)], names=["tRNA", "16S", "riboswitch"])
+    with h5py.File(out, "r") as f:
+        assert "name" in f["meta"]
+        names = [n.decode() if isinstance(n, bytes) else n for n in f["meta"]["name"]]
+    assert names == ["tRNA", "16S", "riboswitch"]
+
+
+def test_save_groups_writes_sequence_under_meta(tmp_path):
+    """Sequences (base tokens) are persisted under meta/sequence and round-trip."""
+    pd = _make(n=3, length=10)
+    pd.sequences = np.tile(np.arange(10, dtype=np.int8), (3, 1))
+    out = tmp_path / "profiles.h5"
+    save_groups(str(out), [("g1", pd)])
+    with h5py.File(out, "r") as f:
+        assert "sequence" in f["meta"] and "sequence" not in f
+        loaded = ProbingData.load("g1", f)
+    assert np.array_equal(loaded.sequences, pd.sequences)
+
+
+def test_save_groups_rejects_meta_experiment_name(tmp_path):
+    """'meta' is reserved for the metadata group, not an experiment name."""
+    pd = _make()
+    with pytest.raises(ValueError, match="reserved"):
+        save_groups(str(tmp_path / "x.h5"), [("meta", pd)])

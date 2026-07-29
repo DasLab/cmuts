@@ -35,7 +35,7 @@ import h5py
 import numpy as np
 from scipy.stats import t as student
 
-from .normalize.schemes import normalization, requires_sequence
+from .normalize.schemes import normalization
 
 # Core datatypes and dataclasses
 
@@ -118,6 +118,11 @@ class Datasets:
     MI = "mutual-information"
     COV = "covariance"
     SEQUENCE = "sequence"
+    NAME = "name"
+    # Shared, experiment-independent datasets live under this top-level group
+    # (SEQUENCE, NAME, ...); keeping them grouped leaves room for future metadata
+    # and keeps them from colliding with experiment groups.
+    META = "meta"
 
 
 # Misc utils
@@ -426,11 +431,11 @@ def _data_from_counts(
     heatmap = da.mean(counts, axis=(0, 1))
     heatmap = heatmap / heatmap.sum()
 
-    # Compute the coverage as the sum of all matches and mismatches.
-    # Store the mean coverage as a function of position for later.
+    # Per-reference coverage: matches + mismatches at each position. Stored per
+    # reference (n_ref, L) so the report can plot both the aggregate (mean over
+    # references) and a single sequence's coverage.
 
     coverage = da.sum(counts[..., :IX_DEL], axis=(2, 3))
-    mc = da.mean(coverage, axis=0)
 
     # Compute the coverage mask
 
@@ -503,7 +508,7 @@ def _data_from_counts(
         snr,
         mask,
         heatmap,
-        mc,
+        coverage,
         term,
         pairs,
         prob,
@@ -654,7 +659,7 @@ class ProbingData:
             for key, arr in self.datasets().items()
         }
         if self.sequences is not None:
-            data[Datasets.SEQUENCE] = da.from_array(self.sequences)
+            data[f"{Datasets.META}/{Datasets.SEQUENCE}"] = da.from_array(self.sequences)
         da.to_hdf5(file, data)
 
     @classmethod
@@ -669,7 +674,15 @@ class ProbingData:
             key = f"{group}/{name}" if group else name
             return np.array(file[key]) if key in file else None
 
-        sequences = np.array(file[Datasets.SEQUENCE]) if Datasets.SEQUENCE in file else None
+        # Sequences live under the shared "meta" group; fall back to the old
+        # top-level dataset for files written before that move.
+        _seq_key = f"{Datasets.META}/{Datasets.SEQUENCE}"
+        if _seq_key in file:
+            sequences = np.array(file[_seq_key])
+        elif Datasets.SEQUENCE in file:
+            sequences = np.array(file[Datasets.SEQUENCE])
+        else:
+            sequences = None
         reactivity = get(Datasets.REACTIVITY)
         reads = get(Datasets.READS)
         error = get(Datasets.ERROR)
@@ -704,7 +717,7 @@ class ProbingData:
             snr=snr,
             mask=np.ones_like(reactivity, dtype=bool),
             heatmap=heatmap if heatmap is not None else np.zeros((4, 7)),
-            coverage=coverage if coverage is not None else np.sum(~np.isnan(reactivity), axis=0),
+            coverage=coverage if coverage is not None else (~np.isnan(reactivity)).astype(float),
             terminations=terminations if terminations is not None else np.zeros((n, length)),
             pairs=None,
             probability=None,
@@ -845,13 +858,28 @@ def _sequences_from_fasta(fasta: str, width: int) -> np.ndarray:
     return out
 
 
-def _ensure_sequences(data: ProbingData, fasta: str, opts: Opts) -> None:
-    """Attach per-position base tokens from the FASTA when the active norm scheme
-    needs the sequence and the counts file provided none (no-``--tokenize`` case).
+def _names_from_fasta(fasta: str) -> list[str]:
+    """Reference names in FASTA order: the first whitespace-delimited token of each
+    header (matching the reference names used by the aligner / BAM)."""
+    names: list[str] = []
+    with open(fasta) as f:
+        for line in f:
+            if line.startswith(">"):
+                header = line[1:].strip()
+                names.append(header.split()[0] if header else "")
+    return names
 
-    Gated on the scheme so schemes that ignore the sequence keep their previous
-    output (no extra sequence dataset)."""
-    if data.sequences is None and requires_sequence(opts.norm):
+
+def _ensure_sequences(data: ProbingData, fasta: str, opts: Opts) -> None:
+    """Attach per-position base tokens from the FASTA when the counts file provided
+    none (no-``--tokenize`` case).
+
+    Always attached (not gated on the norm scheme) so the file-level ``sequence``
+    dataset is present for every run -- sequence-aware norm schemes and the report
+    (which colors each base by its reactivity) both read it. ``opts`` is retained
+    for signature stability."""
+    del opts  # no longer used; sequences are attached unconditionally
+    if data.sequences is None:
         width = int(np.asarray(data.reactivity).shape[1])
         data.sequences = _sequences_from_fasta(fasta, width)
 
@@ -1158,21 +1186,39 @@ def compute_snr_curves(
 def save_groups(
     path: str,
     results: list[tuple[str, ProbingData]],
+    names: Union[list[str], None] = None,
 ) -> None:
     """Save multiple ProbingData objects to a single HDF5 file.
 
-    Each entry is written under its own group at the file root. The
-    sequences dataset (shared across groups) is written once.
+    Each experiment is written under its own group at the file root. Shared,
+    experiment-independent datasets (the reference sequences and names) go under a
+    single ``meta`` group, leaving room for future metadata.
 
     Args:
         path: Output HDF5 file. Overwritten if it exists.
-        results: List of ``(group_name, ProbingData)`` tuples.
+        results: List of ``(group_name, ProbingData)`` tuples. ``meta`` is reserved
+            for the metadata group and may not be used as an experiment name.
+        names: Reference names in FASTA order (see ``_names_from_fasta``). Written
+            as the ``meta/name`` dataset when provided, so downstream consumers
+            (e.g. the report) can label references by name rather than index.
     """
+    if any(name == Datasets.META for name, _ in results):
+        raise ValueError(
+            f"'{Datasets.META}' is reserved for the metadata group and "
+            "cannot be used as an experiment name."
+        )
     with h5py.File(path, "w") as f:
         for name, data in results:
             grp = f if name == "" else f.create_group(name)
             for key, arr in data.datasets().items():
                 grp.create_dataset(key, data=arr)
 
-        if results and results[0][1].sequences is not None:
-            f.create_dataset(Datasets.SEQUENCE, data=np.asarray(results[0][1].sequences))
+        sequences = results[0][1].sequences if results else None
+        if sequences is not None or names:
+            meta = f.create_group(Datasets.META)
+            if sequences is not None:
+                meta.create_dataset(Datasets.SEQUENCE, data=np.asarray(sequences))
+            if names:
+                meta.create_dataset(
+                    Datasets.NAME, data=np.array(names, dtype=h5py.string_dtype(encoding="utf-8"))
+                )
