@@ -1,10 +1,10 @@
-/* cli.c -- command line parsing, driven by tables of options and positionals.
+/* cli.c -- command line parsing, driven by a program's option table.
  *
- * Every argument the program accepts is described once, in OPTIONS or
- * POSITIONALS. The short option string, the getopt_long table, assignment,
- * bounds checking, which arguments are mandatory, the usage line, the help
- * text and the JSON description all derive from those tables, so nothing can
- * fall out of step with them and adding an argument means adding a row.
+ * Every argument a program accepts is described once, in its cli_spec. The
+ * short option string, the getopt_long table, assignment, bounds checking,
+ * which arguments are mandatory, the usage line, the help text and the JSON
+ * description all derive from it, so nothing can fall out of step with it and
+ * adding an argument means adding a row.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -12,7 +12,6 @@
 #include "cli.h"
 
 #include <getopt.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,232 +20,99 @@
  * anything above the character range will do. */
 #define OPTION_ID_BASE 256
 
-typedef enum {
-    OPT_FLAG,    /* takes no argument; sets a bool */
-    OPT_STRING,
-    OPT_SIZE,
-    OPT_INT,
-    OPT_ENUM,    /* one of a named set of values; stores an int */
-} opt_type;
-
-/* One accepted value of an OPT_ENUM option. A choice list is terminated by an
- * entry with a NULL name. */
-typedef struct {
-    const char *name;
-    int         value;
-} cli_choice;
-
-typedef struct {
-    const char *group;     /* heading this option appears under in the help */
-    const char *name;      /* long form */
-    char        key;       /* short form, or 0 for none */
-    opt_type    type;      /* must match the destination field's C type: the
-                              value is written through a pointer of that type */
-    size_t      offset;    /* destination within cli_args */
-    const char *metavar;   /* argument placeholder; NULL when it takes none */
-    const char *help;      /* one line, for the help output */
-    const char *detail;    /* paragraph for manual pages; NULL to reuse help */
-    bool        required;
-    /* Options that need not be applied at all carry the word the help prints
-     * in place of their default, which is the value meaning "not applied".
-     * NULL where every value is a real setting. */
-    const char *unset_label;
-    long        minimum;   /* bounds for the numeric types */
-    long        maximum;
-    bool        hidden;    /* kept out of the help, still described by JSON */
-    const cli_choice *choices;  /* accepted values, for OPT_ENUM */
-} cli_option;
-
-typedef struct {
-    const char *name;      /* identifier for documentation and completions */
-    const char *metavar;   /* placeholder in the usage line */
-    const char *help;
-    const char *detail;
-    size_t      offset;
-    bool        required;
-} cli_positional;
-
-static const cli_choice STRAND_CHOICES[] = {
-    { "both",    FILTER_STRAND_BOTH    },
-    { "forward", FILTER_STRAND_FORWARD },
-    { "reverse", FILTER_STRAND_REVERSE },
-    { NULL,      0                     },
-};
-
-/* Rows use designated initializers so that a field added to cli_option
- * defaults quietly rather than having to be spelled out in every one. */
-static const cli_option OPTIONS[] = {
-    { .group = "Input and output", .name = "fasta", .key = 'f', .type = OPT_STRING,
-      .offset = offsetof(cli_args, pipeline.fasta_path), .metavar = "FASTA",
-      .help = "reference sequences",
-      .detail = "Reference sequences, in the same order as the alignment file's "
-                "header. Read as a single forward pass and never indexed, so the "
-                "file may be of any size.",
-      .required = true },
-    { .group = "Input and output", .name = "output", .key = 'o', .type = OPT_STRING,
-      .offset = offsetof(cli_args, pipeline.output_path), .metavar = "HDF5",
-      .help = "write results to this file",
-      .detail = "Results are written as one row per reference, with references "
-                "that received no reads left as NaN.",
-      .required = true },
-
-    { .group = "Filtering", .name = "min-mapq", .key = 'q', .type = OPT_INT,
-      .offset = offsetof(cli_args, pipeline.filter.min_mapq), .metavar = "N",
-      .help = "discard alignments below this mapping quality",
-      .detail = "Compared numerically, as samtools does. MAPQ 255 means "
-                "\"unavailable\" rather than \"perfect\", but is treated as passing "
-                "any threshold, since an aligner that emits it throughout would "
-                "otherwise have all of its output discarded. Unmapped reads are "
-                "excluded regardless and counted separately.",
-      .minimum = 0, .maximum = 255 },
-    { .group = "Filtering", .name = "min-length", .type = OPT_INT,
-      .offset = offsetof(cli_args, pipeline.filter.min_length), .metavar = "N",
-      .help = "discard reads shorter than this",
-      .detail = "Measured on the stored sequence, so a hard-clipped read counts "
-                "only the bases the aligner kept. Left unset, no lower bound is "
-                "applied.",
-      .unset_label = "no limit", .minimum = 0, .maximum = INT32_MAX },
-    { .group = "Filtering", .name = "max-length", .type = OPT_INT,
-      .offset = offsetof(cli_args, pipeline.filter.max_length), .metavar = "N",
-      .help = "discard reads longer than this",
-      .detail = "Measured on the stored sequence, as with --min-length. Left "
-                "unset, no upper bound is applied.",
-      .unset_label = "no limit", .minimum = 0, .maximum = INT32_MAX },
-    { .group = "Filtering", .name = "strand", .key = 's', .type = OPT_ENUM,
-      .offset = offsetof(cli_args, pipeline.filter.strand), .metavar = "STRAND",
-      .help = "keep alignments on this strand",
-      .detail = "Tests the alignment's own reverse bit, which for single-end "
-                "reads is the strand the read came from. It says nothing about "
-                "the fragment: with paired data, which strand a fragment belongs "
-                "to depends on the library protocol and on which mate is in hand.",
-      .choices = STRAND_CHOICES },
-
-    { .group = "Performance", .name = "workers", .key = 'j', .type = OPT_SIZE,
-      .offset = offsetof(cli_args, pipeline.workers), .metavar = "N",
-      .help = "threads running the processing step",
-      .detail = "Reads are taken from a shared pool, so a worker is free to cross "
-                "reference boundaries and no thread idles waiting for a reference "
-                "of its own.",
-      .minimum = 1, .maximum = 1024 },
-    { .group = "Performance", .name = "decode-threads", .type = OPT_INT,
-      .offset = offsetof(cli_args, pipeline.decode_threads), .metavar = "N",
-      .help = "htslib threads for BGZF decompression",
-      .detail = "Parallelizes inflation only; reading and record parsing stay "
-                "sequential. Worth raising when the loader is the bottleneck, and "
-                "pointless on small files.",
-      .minimum = 0, .maximum = 64 },
-    { .group = "Performance", .name = "queue-capacity", .type = OPT_SIZE,
-      .offset = offsetof(cli_args, pipeline.queue_capacity), .metavar = "N",
-      .help = "reads in transit at once",
-      .detail = "Bounds how far the loader may run ahead of the workers, and with "
-                "it how much memory reads in flight occupy.",
-      .minimum = 1, .maximum = 1 << 20 },
-    { .group = "Performance", .name = "batch", .type = OPT_SIZE,
-      .offset = offsetof(cli_args, pipeline.batch), .metavar = "N",
-      .help = "reads transferred per queue operation",
-      .detail = "Larger batches amortize locking across more reads, at the cost "
-                "of holding that many reads behind a slow one.",
-      .minimum = 1, .maximum = 1 << 16 },
-    { .group = "Performance", .name = "live-refs", .type = OPT_SIZE,
-      .offset = offsetof(cli_args, pipeline.live_refs), .metavar = "N",
-      .help = "references in flight",
-      .detail = "How far the loader may run ahead of a worker that stalls on one "
-                "read. Left unset, a count is derived from the longest reference "
-                "and a memory budget, which keeps many short references generous "
-                "without letting a few very long ones exhaust memory.",
-      .unset_label = "derived from memory", .minimum = 0, .maximum = 1 << 16 },
-
-    { .group = "Information", .name = "help", .key = 'h', .type = OPT_FLAG,
-      .offset = offsetof(cli_args, show_help),
-      .help = "show this help and exit" },
-    { .group = "Information", .name = "version", .key = 'V', .type = OPT_FLAG,
-      .offset = offsetof(cli_args, show_version),
-      .help = "show the version and exit" },
-    { .group = "Information", .name = "dump-options", .type = OPT_FLAG,
-      .offset = offsetof(cli_args, dump_options),
-      .help = "describe every argument as JSON and exit",
-      .detail = "Intended for generating documentation and shell completions from "
-                "the binary rather than from a separate description of it.",
-      .hidden = true },
-};
-
-static const cli_positional POSITIONALS[] = {
-    { "alignment", "BAM", "coordinate-sorted alignments",
-      "Read once, sequentially. Must be coordinate sorted, so that a "
-      "reference is finished as soon as the reader moves past it.",
-      offsetof(cli_args, pipeline.bam_path), true },
-};
-
-#define OPTION_COUNT     (sizeof OPTIONS / sizeof *OPTIONS)
-#define POSITIONAL_COUNT (sizeof POSITIONALS / sizeof *POSITIONALS)
-
-cli_args cli_defaults(void)
+static bool takes_argument(const cli_option *opt)
 {
-    return (cli_args){ .pipeline = pipeline_defaults() };
+    return opt->type != OPT_FLAG;
+}
+
+/* An option that answers and exits has no destination, so nothing is written
+ * for it and its offset is never used. */
+static bool stores_a_value(const cli_option *opt)
+{
+    return opt->action == CLI_STORE;
 }
 
 /* ------------------------------------------------------------------------ */
 /* Table lookups                                                             */
 /* ------------------------------------------------------------------------ */
 
-static bool takes_argument(const cli_option *opt)
+static const cli_option *option_by_key(const cli_spec *spec, char key)
 {
-    return opt->type != OPT_FLAG;
-}
-
-static const cli_option *option_by_key(char key)
-{
-    for (size_t i = 0; i < OPTION_COUNT; i++)
-        if (OPTIONS[i].key == key)
-            return &OPTIONS[i];
+    for (size_t i = 0; i < spec->n_options; i++)
+        if (spec->options[i].key == key)
+            return &spec->options[i];
 
     return NULL;
 }
 
-static const cli_option *option_by_id(int id)
+static const cli_option *option_by_id(const cli_spec *spec, int id)
 {
     size_t index = (size_t)(id - OPTION_ID_BASE);
 
-    return index < OPTION_COUNT ? &OPTIONS[index] : NULL;
+    return index < spec->n_options ? &spec->options[index] : NULL;
 }
 
 /* ------------------------------------------------------------------------ */
 /* getopt_long inputs, built from the table                                  */
 /* ------------------------------------------------------------------------ */
 
-static void build_short_options(char *out, size_t size)
+static void build_short_options(const cli_spec *spec, char *out, size_t size)
 {
     size_t n = 0;
 
-    for (size_t i = 0; i < OPTION_COUNT && n + 3 < size; i++) {
-        if (!OPTIONS[i].key)
+    for (size_t i = 0; i < spec->n_options && n + 3 < size; i++) {
+        if (!spec->options[i].key)
             continue;
 
-        out[n++] = OPTIONS[i].key;
-        if (takes_argument(&OPTIONS[i]))
+        out[n++] = spec->options[i].key;
+        if (takes_argument(&spec->options[i]))
             out[n++] = ':';
     }
 
     out[n] = '\0';
 }
 
-static void build_long_options(struct option *out)
+static void build_long_options(const cli_spec *spec, struct option *out)
 {
-    for (size_t i = 0; i < OPTION_COUNT; i++) {
-        out[i].name    = OPTIONS[i].name;
-        out[i].has_arg = takes_argument(&OPTIONS[i]) ? required_argument : no_argument;
+    for (size_t i = 0; i < spec->n_options; i++) {
+        out[i].name    = spec->options[i].name;
+        out[i].has_arg = takes_argument(&spec->options[i]) ? required_argument
+                                                           : no_argument;
         out[i].flag    = NULL;
         out[i].val     = (int)(OPTION_ID_BASE + i);
     }
 
-    out[OPTION_COUNT] = (struct option){ 0 };
+    out[spec->n_options] = (struct option){ 0 };
 }
 
 /* ------------------------------------------------------------------------ */
 /* Assignment                                                                */
 /* ------------------------------------------------------------------------ */
 
-static int parse_number(const cli_option *opt, const char *text, const char *program, long *out)
+static void print_choices(FILE *out, const cli_option *opt)
+{
+    for (const cli_choice *choice = opt->choices; choice->name; choice++)
+        fprintf(out, "%s%s", choice == opt->choices ? "" : "|", choice->name);
+}
+
+static int parse_choice(const cli_option *opt, const char *text, const char *program,
+                        int *out)
+{
+    for (const cli_choice *choice = opt->choices; choice->name; choice++)
+        if (strcmp(choice->name, text) == 0) {
+            *out = choice->value;
+            return 0;
+        }
+
+    fprintf(stderr, "%s: --%s: \"%s\" is not one of ", program, opt->name, text);
+    print_choices(stderr, opt);
+    fputc('\n', stderr);
+
+    return -1;
+}
+
+static int parse_number(const cli_option *opt, const char *text, const char *program,
+                        long *out)
 {
     char *end = NULL;
     long  n   = strtol(text, &end, 10);
@@ -266,28 +132,8 @@ static int parse_number(const cli_option *opt, const char *text, const char *pro
     return 0;
 }
 
-static void print_choices(FILE *out, const cli_option *opt)
-{
-    for (const cli_choice *choice = opt->choices; choice->name; choice++)
-        fprintf(out, "%s%s", choice == opt->choices ? "" : "|", choice->name);
-}
-
-static int parse_choice(const cli_option *opt, const char *text, const char *program, int *out)
-{
-    for (const cli_choice *choice = opt->choices; choice->name; choice++)
-        if (strcmp(choice->name, text) == 0) {
-            *out = choice->value;
-            return 0;
-        }
-
-    fprintf(stderr, "%s: --%s: \"%s\" is not one of ", program, opt->name, text);
-    print_choices(stderr, opt);
-    fputc('\n', stderr);
-
-    return -1;
-}
-
-static int assign(const cli_option *opt, cli_args *args, const char *value, const char *program)
+static int assign(const cli_option *opt, void *args, const char *value,
+                  const char *program)
 {
     char *field = (char *)args + opt->offset;
     long  number;
@@ -328,12 +174,17 @@ static int assign(const cli_option *opt, cli_args *args, const char *value, cons
 /* Help                                                                      */
 /* ------------------------------------------------------------------------ */
 
-/* Renders an option's default from a defaults-initialised cli_args, so the
- * help can never advertise a value the program does not actually use. */
-static void format_default(const cli_option *opt, const cli_args *defaults,
+/* Renders an option's default from the spec's defaults, so the help can never
+ * advertise a value the program does not actually use. */
+static void format_default(const cli_option *opt, const void *defaults,
                            char *out, size_t size)
 {
     const char *field = (const char *)defaults + opt->offset;
+
+    out[0] = '\0';
+
+    if (!stores_a_value(opt))
+        return;
 
     /* An option that need not be applied says so rather than showing the value
      * that stands for not applying it. */
@@ -350,21 +201,19 @@ static void format_default(const cli_option *opt, const cli_args *defaults,
             snprintf(out, size, " (default %d)", *(const int *)field);
             break;
         case OPT_ENUM:
-            out[0] = '\0';
             for (const cli_choice *choice = opt->choices; choice->name; choice++)
                 if (choice->value == *(const int *)field)
                     snprintf(out, size, " (default %s)", choice->name);
             break;
         default:
-            out[0] = '\0';
             break;
     }
 }
 
-static void print_option(FILE *out, const cli_option *opt, const cli_args *defaults)
+static void print_option(FILE *out, const cli_option *opt, const void *defaults)
 {
     char invocation[64];
-    char suffix[48];
+    char suffix[64];
     int  n;
 
     if (opt->key)
@@ -391,60 +240,65 @@ static void print_option(FILE *out, const cli_option *opt, const cli_args *defau
  * by group, so a row added anywhere lands under the right heading. Hidden rows
  * do not count, so a group starts at its first visible option and a group with
  * none at all never prints a heading. */
-static bool group_seen_before(size_t index)
+static bool group_seen_before(const cli_spec *spec, size_t index)
 {
     for (size_t i = 0; i < index; i++)
-        if (!OPTIONS[i].hidden && strcmp(OPTIONS[i].group, OPTIONS[index].group) == 0)
+        if (!spec->options[i].hidden &&
+            strcmp(spec->options[i].group, spec->options[index].group) == 0)
             return true;
 
     return false;
 }
 
-static void print_usage_line(FILE *out, const char *program)
+static void print_usage_line(const cli_spec *spec, FILE *out)
 {
-    fprintf(out, "usage: %s [options]", program);
+    fprintf(out, "usage: %s [options]", spec->program);
 
-    for (size_t i = 0; i < OPTION_COUNT; i++) {
-        if (!OPTIONS[i].required)
+    for (size_t i = 0; i < spec->n_options; i++) {
+        if (!spec->options[i].required)
             continue;
 
-        if (OPTIONS[i].key)
-            fprintf(out, " -%c %s", OPTIONS[i].key, OPTIONS[i].metavar);
+        if (spec->options[i].key)
+            fprintf(out, " -%c %s", spec->options[i].key, spec->options[i].metavar);
         else
-            fprintf(out, " --%s %s", OPTIONS[i].name, OPTIONS[i].metavar);
+            fprintf(out, " --%s %s", spec->options[i].name, spec->options[i].metavar);
     }
 
-    for (size_t i = 0; i < POSITIONAL_COUNT; i++)
-        fprintf(out, POSITIONALS[i].required ? " %s" : " [%s]", POSITIONALS[i].metavar);
+    for (size_t i = 0; i < spec->n_positionals; i++)
+        fprintf(out, spec->positionals[i].required ? " %s" : " [%s]",
+                spec->positionals[i].metavar);
 
     fputc('\n', out);
 }
 
-static void print_positionals(FILE *out)
+static void print_positionals(const cli_spec *spec, FILE *out)
 {
+    if (spec->n_positionals == 0)
+        return;
+
     fprintf(out, "\nArguments\n");
 
-    for (size_t i = 0; i < POSITIONAL_COUNT; i++)
-        fprintf(out, "  %-28s %s\n", POSITIONALS[i].metavar, POSITIONALS[i].help);
+    for (size_t i = 0; i < spec->n_positionals; i++)
+        fprintf(out, "  %-28s %s\n", spec->positionals[i].metavar,
+                spec->positionals[i].help);
 }
 
-void cli_usage(FILE *out, const char *program)
+void cli_usage(const cli_spec *spec, FILE *out)
 {
-    cli_args defaults = cli_defaults();
+    fprintf(out, "%s %s -- %s\n\n", spec->program, spec->version, spec->summary);
+    print_usage_line(spec, out);
+    print_positionals(spec, out);
 
-    fprintf(out, "cmuts %s -- per-reference accumulation over a BAM file\n\n", CMUTS_VERSION);
-    print_usage_line(out, program);
-    print_positionals(out);
-
-    for (size_t i = 0; i < OPTION_COUNT; i++) {
-        if (OPTIONS[i].hidden || group_seen_before(i))
+    for (size_t i = 0; i < spec->n_options; i++) {
+        if (spec->options[i].hidden || group_seen_before(spec, i))
             continue;
 
-        fprintf(out, "\n%s\n", OPTIONS[i].group);
+        fprintf(out, "\n%s\n", spec->options[i].group);
 
-        for (size_t j = i; j < OPTION_COUNT; j++)
-            if (!OPTIONS[j].hidden && strcmp(OPTIONS[j].group, OPTIONS[i].group) == 0)
-                print_option(out, &OPTIONS[j], &defaults);
+        for (size_t j = i; j < spec->n_options; j++)
+            if (!spec->options[j].hidden &&
+                strcmp(spec->options[j].group, spec->options[i].group) == 0)
+                print_option(out, &spec->options[j], spec->defaults);
     }
 }
 
@@ -476,7 +330,7 @@ static void print_json_string(FILE *out, const char *text)
     fputc('"', out);
 }
 
-static const char *type_name(opt_type type)
+static const char *type_name(cli_type type)
 {
     switch (type) {
         case OPT_FLAG:   return "flag";
@@ -505,9 +359,14 @@ static void print_json_choices(FILE *out, const cli_option *opt)
     fputc(']', out);
 }
 
-static void print_json_default(FILE *out, const cli_option *opt, const cli_args *defaults)
+static void print_json_default(FILE *out, const cli_option *opt, const void *defaults)
 {
     const char *field = (const char *)defaults + opt->offset;
+
+    if (!stores_a_value(opt)) {
+        fputs("null", out);
+        return;
+    }
 
     switch (opt->type) {
         case OPT_FLAG:   fputs(*(const bool *)field ? "true" : "false", out); break;
@@ -532,25 +391,25 @@ static void print_json_bounds(FILE *out, const cli_option *opt)
     fprintf(out, "      \"minimum\": %ld, \"maximum\": %ld\n", opt->minimum, opt->maximum);
 }
 
-static void print_json_option(FILE *out, const cli_option *opt, const cli_args *defaults,
+static void print_json_option(FILE *out, const cli_option *opt, const void *defaults,
                               bool last)
 {
     char key[2] = { opt->key, '\0' };
 
     fputs("    {\n", out);
-    fputs("      \"name\": ", out);         print_json_string(out, opt->name);
-    fputs(",\n      \"short\": ", out);     print_json_string(out, opt->key ? key : NULL);
-    fputs(",\n      \"group\": ", out);     print_json_string(out, opt->group);
+    fputs("      \"name\": ", out);           print_json_string(out, opt->name);
+    fputs(",\n      \"short\": ", out);       print_json_string(out, opt->key ? key : NULL);
+    fputs(",\n      \"group\": ", out);       print_json_string(out, opt->group);
     fprintf(out, ",\n      \"type\": \"%s\"", type_name(opt->type));
-    fputs(",\n      \"metavar\": ", out);   print_json_string(out, opt->metavar);
-    fputs(",\n      \"help\": ", out);      print_json_string(out, opt->help);
-    fputs(",\n      \"detail\": ", out);    print_json_string(out, opt->detail);
+    fputs(",\n      \"metavar\": ", out);     print_json_string(out, opt->metavar);
+    fputs(",\n      \"help\": ", out);        print_json_string(out, opt->help);
+    fputs(",\n      \"detail\": ", out);      print_json_string(out, opt->detail);
     fprintf(out, ",\n      \"required\": %s", opt->required ? "true" : "false");
     fprintf(out, ",\n      \"hidden\": %s", opt->hidden ? "true" : "false");
     fputs(",\n      \"unset_label\": ", out); print_json_string(out, opt->unset_label);
-    fputs(",\n      \"choices\": ", out);   print_json_choices(out, opt);
-    fputs(",\n      \"default\": ", out);   print_json_default(out, opt, defaults);
-    fputs(",\n", out);                      print_json_bounds(out, opt);
+    fputs(",\n      \"choices\": ", out);     print_json_choices(out, opt);
+    fputs(",\n      \"default\": ", out);     print_json_default(out, opt, defaults);
+    fputs(",\n", out);                        print_json_bounds(out, opt);
     fprintf(out, "    }%s\n", last ? "" : ",");
 }
 
@@ -565,64 +424,58 @@ static void print_json_positional(FILE *out, const cli_positional *pos, bool las
     fprintf(out, "    }%s\n", last ? "" : ",");
 }
 
-void cli_dump_options(FILE *out)
+void cli_dump_options(const cli_spec *spec, FILE *out)
 {
-    cli_args defaults = cli_defaults();
-
     fputs("{\n", out);
-    fputs("  \"program\": \"cmuts\",\n", out);
-    fprintf(out, "  \"version\": \"%s\",\n", CMUTS_VERSION);
+    fputs("  \"program\": ", out); print_json_string(out, spec->program);
+    fputs(",\n  \"version\": ", out); print_json_string(out, spec->version);
+    fputs(",\n  \"summary\": ", out); print_json_string(out, spec->summary);
+    fputs(",\n  \"options\": [\n", out);
 
-    fputs("  \"options\": [\n", out);
-    for (size_t i = 0; i < OPTION_COUNT; i++)
-        print_json_option(out, &OPTIONS[i], &defaults, i + 1 == OPTION_COUNT);
-    fputs("  ],\n", out);
+    for (size_t i = 0; i < spec->n_options; i++)
+        print_json_option(out, &spec->options[i], spec->defaults,
+                          i + 1 == spec->n_options);
 
-    fputs("  \"positionals\": [\n", out);
-    for (size_t i = 0; i < POSITIONAL_COUNT; i++)
-        print_json_positional(out, &POSITIONALS[i], i + 1 == POSITIONAL_COUNT);
-    fputs("  ]\n", out);
+    fputs("  ],\n  \"positionals\": [\n", out);
+    for (size_t i = 0; i < spec->n_positionals; i++)
+        print_json_positional(out, &spec->positionals[i], i + 1 == spec->n_positionals);
 
-    fputs("}\n", out);
+    fputs("  ]\n}\n", out);
 }
 
 /* ------------------------------------------------------------------------ */
 /* Parsing                                                                   */
 /* ------------------------------------------------------------------------ */
 
-static cli_status check_required_options(const bool *seen, const char *program)
+static cli_status check_required_options(const cli_spec *spec, const bool *seen)
 {
-    for (size_t i = 0; i < OPTION_COUNT; i++) {
-        if (!OPTIONS[i].required || seen[i])
+    for (size_t i = 0; i < spec->n_options; i++) {
+        if (!spec->options[i].required || seen[i])
             continue;
 
         fprintf(stderr, "%s: missing required option --%s (%s)\n",
-                program, OPTIONS[i].name, OPTIONS[i].help);
+                spec->program, spec->options[i].name, spec->options[i].help);
         return CLI_ERROR;
     }
 
     return CLI_OK;
 }
 
-static void print_expected_positionals(FILE *out)
-{
-    for (size_t i = 0; i < POSITIONAL_COUNT; i++)
-        fprintf(out, "%s%s", i ? " " : "", POSITIONALS[i].metavar);
-}
-
-static cli_status take_positionals(int argc, char **argv, cli_args *args, const char *program)
+static cli_status take_positionals(const cli_spec *spec, int argc, char **argv,
+                                   void *args)
 {
     int given = argc - optind;
 
-    if (given != (int)POSITIONAL_COUNT) {
-        fprintf(stderr, "%s: expected ", program);
-        print_expected_positionals(stderr);
+    if (given != (int)spec->n_positionals) {
+        fprintf(stderr, "%s: expected ", spec->program);
+        for (size_t i = 0; i < spec->n_positionals; i++)
+            fprintf(stderr, "%s%s", i ? " " : "", spec->positionals[i].metavar);
         fprintf(stderr, ", got %d argument%s\n", given, given == 1 ? "" : "s");
         return CLI_ERROR;
     }
 
-    for (size_t i = 0; i < POSITIONAL_COUNT; i++) {
-        const char **field = (const char **)((char *)args + POSITIONALS[i].offset);
+    for (size_t i = 0; i < spec->n_positionals; i++) {
+        const char **field = (const char **)((char *)args + spec->positionals[i].offset);
 
         *field = argv[optind + (int)i];
     }
@@ -630,64 +483,76 @@ static cli_status take_positionals(int argc, char **argv, cli_args *args, const 
     return CLI_OK;
 }
 
-/* Requests that are answered entirely by the tables, before any argument is
- * required to be present. */
-static bool answered_immediately(const cli_args *args, const char *program)
+/* Requests that the tables answer in full, before any argument is required to
+ * be present. */
+static bool answer(const cli_spec *spec, cli_action action)
 {
-    if (args->show_help) {
-        cli_usage(stdout, program);
-        return true;
-    }
-
-    if (args->show_version) {
-        printf("cmuts %s\n", CMUTS_VERSION);
-        return true;
-    }
-
-    if (args->dump_options) {
-        cli_dump_options(stdout);
-        return true;
+    switch (action) {
+        case CLI_SHOW_HELP:    cli_usage(spec, stdout);        return true;
+        case CLI_SHOW_VERSION: printf("%s %s\n", spec->program, spec->version);
+                               return true;
+        case CLI_DUMP_OPTIONS: cli_dump_options(spec, stdout); return true;
+        case CLI_STORE:        return false;
     }
 
     return false;
 }
 
-cli_status cli_parse(int argc, char **argv, cli_args *args)
+cli_status cli_parse(const cli_spec *spec, int argc, char **argv, void *args)
 {
-    struct option longopts[OPTION_COUNT + 1];
-    char          shortopts[2 * OPTION_COUNT + 1];
-    bool          seen[OPTION_COUNT];
-    const char   *program = argv[0];
-    int           found;
+    struct option *longopts  = calloc(spec->n_options + 1, sizeof *longopts);
+    char          *shortopts = calloc(2 * spec->n_options + 1, sizeof *shortopts);
+    bool          *seen      = calloc(spec->n_options, sizeof *seen);
+    cli_action     requested = CLI_STORE;
+    cli_status     status    = CLI_ERROR;
+    int            found;
 
-    *args = cli_defaults();
-    memset(seen, 0, sizeof seen);
-    build_short_options(shortopts, sizeof shortopts);
-    build_long_options(longopts);
+    if (!longopts || !shortopts || !seen) {
+        fprintf(stderr, "%s: out of memory\n", spec->program);
+        goto done;
+    }
+
+    memcpy(args, spec->defaults, spec->args_size);
+    build_short_options(spec, shortopts, 2 * spec->n_options + 1);
+    build_long_options(spec, longopts);
 
     opterr = 0;
     optind = 1;
 
     while ((found = getopt_long(argc, argv, shortopts, longopts, NULL)) != -1) {
-        const cli_option *opt = found < OPTION_ID_BASE ? option_by_key((char)found)
-                                                       : option_by_id(found);
+        const cli_option *opt = found < OPTION_ID_BASE
+                              ? option_by_key(spec, (char)found)
+                              : option_by_id(spec, found);
 
         if (!opt) {
-            fprintf(stderr, "%s: unrecognized option; try --help\n", program);
-            return CLI_ERROR;
+            fprintf(stderr, "%s: unrecognized option; try --help\n", spec->program);
+            goto done;
         }
 
-        if (assign(opt, args, optarg, program) < 0)
-            return CLI_ERROR;
+        seen[opt - spec->options] = true;
 
-        seen[opt - OPTIONS] = true;
+        if (!stores_a_value(opt)) {
+            requested = opt->action;
+            continue;
+        }
+
+        if (assign(opt, args, optarg, spec->program) < 0)
+            goto done;
     }
 
-    if (answered_immediately(args, program))
-        return CLI_DONE;
+    if (answer(spec, requested)) {
+        status = CLI_DONE;
+        goto done;
+    }
 
-    if (check_required_options(seen, program) != CLI_OK)
-        return CLI_ERROR;
+    if (check_required_options(spec, seen) != CLI_OK)
+        goto done;
 
-    return take_positionals(argc, argv, args, program);
+    status = take_positionals(spec, argc, argv, args);
+
+done:
+    free(seen);
+    free(shortopts);
+    free(longopts);
+    return status;
 }

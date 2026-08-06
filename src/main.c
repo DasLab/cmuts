@@ -6,23 +6,26 @@
 #include <stdio.h>
 
 #include "cli.h"
+#include "options.h"
 #include "pipeline.h"
 
 #define ERROR_MAX 512
 
 int main(int argc, char **argv)
 {
+    cli_args defaults = cmuts_defaults();
+    cli_spec spec     = cmuts_spec(&defaults);
     cli_args args;
     char     error[ERROR_MAX];
 
-    switch (cli_parse(argc, argv, &args)) {
+    switch (cli_parse(&spec, argc, argv, &args)) {
         case CLI_DONE:  return 0;
         case CLI_ERROR: return 2;
         case CLI_OK:    break;
     }
 
     if (pipeline_run(&args.pipeline, error, sizeof error) < 0) {
-        fprintf(stderr, "%s: %s\n", argv[0], error);
+        fprintf(stderr, "%s: %s\n", spec.program, error);
         return 1;
     }
 
