@@ -26,7 +26,7 @@
 #include "h5writer.h"
 #include "itempool.h"
 #include "metadata.h"
-#include "process.h"
+#include "tally.h"
 #include "progress.h"
 #include "queue.h"
 #include "refctx.h"
@@ -45,7 +45,7 @@ typedef struct {
     ctxpool       *contexts;
     h5writer      *out;
     progress      *bar;
-    process_config processing;
+    tally_config  tally;
     bool           may_replace;
     filter_config  filter;
     size_t         batch;
@@ -116,7 +116,7 @@ static void process_run(worker *w, void **slots, size_t n)
         cm_bam_record   read;
 
         cm_bam_record_view(item->rec, &read);
-        process(&read, &ref, &w->pipe->processing, &w->shadow);
+        tally(&read, &ref, &w->pipe->tally, &w->shadow);
     }
 
     /* The whole run is finished at the same moment, so it goes back in one
@@ -621,7 +621,7 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
         open_output(&p, cfg, error, error_len) < 0)
         goto done;
 
-    process_config_build(&p.processing);
+    tally_config_build(&p.tally);
 
     /* Once nothing is left that could fail before a read is taken. */
     p.bar = progress_start(p.bam);

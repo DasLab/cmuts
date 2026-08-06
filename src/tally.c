@@ -1,14 +1,14 @@
-/* process.c -- placeholder read processing.
+/* tally.c -- one read's contribution to a reference.
  *
- * Stands in for the real analysis while the load-sharing machinery is built
- * out. It walks the CIGAR and counts aligned and non-matching reference
- * positions, which is enough to give every reference a non-trivial, exactly
- * reproducible result to check the parallel merge against.
+ * What counts as a modification is still a placeholder. It walks the CIGAR and
+ * counts aligned and non-matching reference positions, which is enough to give
+ * every reference a non-trivial, exactly reproducible result to check the
+ * parallel merge against.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
 
-#include "process.h"
+#include "tally.h"
 
 /* Bit set by bam_cigar_type for operations that advance along the reference. */
 #define CIGAR_CONSUMES_REFERENCE 2
@@ -73,13 +73,13 @@ static void apply_operation(uint32_t op, uint32_t len, hts_pos_t pos,
     }
 }
 
-void process_config_build(process_config *config)
+void tally_config_build(tally_config *config)
 {
     phred_build(&config->quality);
 }
 
-void process(const cm_bam_record *read, const cm_fasta_record *ref,
-             const process_config *config, accum *target)
+void tally(const cm_bam_record *read, const cm_fasta_record *ref,
+           const tally_config *config, accum *target)
 {
     hts_pos_t pos = read->pos;
 
