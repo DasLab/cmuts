@@ -28,7 +28,7 @@ HDF5_LIBS   := $(shell pkg-config --libs   hdf5   2>/dev/null || echo -lhdf5)
 CPATH_CFLAGS := $(addprefix -isystem ,$(subst :, ,$(CPATH)))
 
 CFLAGS    := -std=c11 $(OPT) $(WARNINGS) -pthread -Iinclude $(HTS_CFLAGS) $(HDF5_CFLAGS) $(CPATH_CFLAGS) -MMD -MP
-CMUTS_LIBS := $(HTS_LIBS) $(HDF5_LIBS) -pthread
+CMUTS_LIBS := $(HTS_LIBS) $(HDF5_LIBS) -pthread -lm
 GEN_LIBS   := $(HTS_LIBS)
 
 # A sanitizer has to reach both the compiler and the linker.

@@ -148,6 +148,11 @@ static const char *md_tag(const bam1_t *record)
     return tag ? bam_aux2Z(tag) : NULL;
 }
 
+static const uint8_t *packed_sequence(const bam1_t *record)
+{
+    return record->core.l_qseq > 0 ? bam_get_seq(record) : NULL;
+}
+
 static const uint8_t *quality_scores(const bam1_t *record)
 {
     const uint8_t *qual = bam_get_qual(record);
@@ -167,6 +172,7 @@ void cm_bam_record_view(const bam1_t *record, cm_bam_record *out)
     out->cigar   = bam_get_cigar(record);
     out->n_cigar = record->core.n_cigar;
     out->md      = md_tag(record);
+    out->seq     = packed_sequence(record);
     out->qual    = quality_scores(record);
     out->l_qseq  = record->core.l_qseq;
 }

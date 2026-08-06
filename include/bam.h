@@ -31,8 +31,10 @@ typedef struct {
     const uint32_t *cigar;    /* raw ops; bam_cigar_op / bam_cigar_oplen decode */
     uint32_t        n_cigar;  /* number of ops in cigar */
     const char     *md;       /* MD tag; NULL when the aligner omitted it */
+    const uint8_t  *seq;      /* bases packed two to a byte; nuc_from_read reads
+                                 one. NULL where the record stores no sequence */
     const uint8_t  *qual;     /* raw PHRED scores, no +33 offset; NULL if absent */
-    int32_t         l_qseq;   /* number of bases, and length of qual */
+    int32_t         l_qseq;   /* number of bases, and length of seq and qual */
 } cm_bam_record;
 
 /* Reference index of an unmapped read, and of any tid with no header entry. */
