@@ -2,12 +2,7 @@
 
 CC       := cc
 WARNINGS := -Wall -Wextra -Wpedantic
-# Homebrew ships HDF5 built against MPI, whose headers pull in mpi.h. Where
-# that is the build in use, open-mpi's flags are needed too, even though
-# nothing here is parallel at the MPI level. A serial HDF5 needs no such thing,
-# so the package is added only when it is present.
 PACKAGES := htslib hdf5
-PACKAGES += $(shell pkg-config --exists ompi && echo ompi)
 
 CFLAGS   := -std=c11 -O2 $(WARNINGS) -pthread -Iinclude $(shell pkg-config --cflags $(PACKAGES)) -MMD -MP
 LDLIBS   := $(shell pkg-config --libs $(PACKAGES)) -pthread
