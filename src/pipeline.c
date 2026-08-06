@@ -171,28 +171,73 @@ static void *worker_main(void *arg)
 /* Loader                                                                    */
 /* ------------------------------------------------------------------------ */
 
-static void dispatch_batch(pipeline *p, refctx *ctx, void **batch, size_t *n)
-{
-    if (*n == 0)
-        return;
+/* What the loader has in hand.
+ *
+ * Each of the three is a pair of values that only make sense together: a
+ * reference and the reads it has turned away, a batch bound for the workers
+ * and how much of it is filled, a reservoir of carriers and how many remain.
+ * Kept as locals they were six variables to hold in step by hand. */
+typedef struct {
+    pipeline *pipe;
 
-    refctx_acquire(ctx, (int)*n);
-    queue_push_all(p->work, batch, *n);
-    *n = 0;
+    refctx *reference;  /* the one being filled, or none yet */
+    size_t  rejected;   /* its reads the filter turned away */
+
+    void  **batch;      /* reads bound for the workers */
+    size_t  queued;
+
+    void  **spare;      /* carriers drawn from the pool, not yet spent */
+    size_t  held;
+} loader;
+
+static int loader_open(loader *l, pipeline *p)
+{
+    *l = (loader){ .pipe = p };
+
+    l->batch = calloc(p->batch, sizeof *l->batch);
+    l->spare = calloc(p->batch, sizeof *l->spare);
+
+    if (l->batch && l->spare)
+        return 0;
+
+    free(l->batch);
+    free(l->spare);
+    return -1;
 }
 
-/* Deposits the reads rejected for this reference before the loader's handle
- * goes, so the count cannot arrive after the reference has been written. */
-static void close_reference(pipeline *p, refctx *ctx, size_t filtered)
+/* Hands what is queued to the workers, taking a handle on the reference for
+ * each read so that it cannot be finished while any of them is in transit. */
+static void loader_dispatch(loader *l)
 {
+    if (l->queued == 0)
+        return;
+
+    refctx_acquire(l->reference, (int)l->queued);
+    queue_push_all(l->pipe->work, l->batch, l->queued);
+    l->queued = 0;
+}
+
+/* Lets go of the reference in hand: what is queued for it goes first, then the
+ * count of what it turned away, and the loader's own handle last. The count
+ * has to arrive before the handle goes, or the reference could be written
+ * without it. */
+static void loader_leave_reference(loader *l)
+{
+    refctx *ctx = l->reference;
+
     if (!ctx)
         return;
 
-    if (filtered)
-        refctx_add_scalar(ctx, ACCUM_FILTERED, (double)filtered);
+    loader_dispatch(l);
+
+    if (l->rejected)
+        refctx_add_scalar(ctx, ACCUM_FILTERED, (double)l->rejected);
+
+    l->reference = NULL;
+    l->rejected  = 0;
 
     if (refctx_release(ctx, 1))
-        finish_reference(p, ctx);
+        finish_reference(l->pipe, ctx);
 }
 
 static refctx *open_reference(pipeline *p, int32_t tid)
@@ -209,26 +254,78 @@ static refctx *open_reference(pipeline *p, int32_t tid)
     return ctx;
 }
 
-/* Leaves through a single exit, so that a partly filled batch is always
- * dispatched and the reference in hand always has the loader's handle
- * released. Otherwise a failure part way through would leave a reference that
- * can never complete. */
+/* Moves to the reference a read belongs to, unless it is already the one in
+ * hand. This happens before the filter is applied, so that a read rejected
+ * there can still be counted against its reference: one whose reads were all
+ * turned away is a different thing from one that received none at all. */
+static bool loader_on_reference(loader *l, int32_t tid)
+{
+    if (l->reference && l->reference->tid == tid)
+        return true;
+
+    loader_leave_reference(l);
+    l->reference = open_reference(l->pipe, tid);
+
+    return l->reference != NULL;
+}
+
+/* Carriers are drawn a batch at a time and spent one by one, so the pool's
+ * lock is taken once per batch rather than once per read. One only ever moves
+ * from the reservoir into the batch, so the two together never hold more than
+ * a refill's worth. */
+static workitem *loader_carrier(loader *l)
+{
+    if (l->held == 0)
+        l->held = itempool_take_many(l->pipe->items, l->spare, l->pipe->batch);
+
+    return l->held ? l->spare[--l->held] : NULL;
+}
+
+/* Takes a copy of the record just read, since the reader overwrites its own on
+ * the next advance, and queues it for the workers. */
+static int loader_take_read(loader *l)
+{
+    workitem *item = loader_carrier(l);
+
+    if (!item)
+        return -1;
+
+    if (!bam_copy1(item->rec, cm_bam_raw(l->pipe->bam))) {
+        l->spare[l->held++] = item;
+        return -1;
+    }
+
+    item->ctx             = l->reference;
+    l->batch[l->queued++] = item;
+
+    if (l->queued == l->pipe->batch)
+        loader_dispatch(l);
+
+    return 0;
+}
+
+/* Everything in hand goes back, whichever way the loop was left. */
+static void loader_finish(loader *l)
+{
+    loader_leave_reference(l);
+
+    if (l->held)
+        itempool_give_many(l->pipe->items, l->spare, l->held);
+
+    free(l->spare);
+    free(l->batch);
+}
+
+/* Reads the file once, in order, dispatching what survives. */
 static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_len)
 {
-    void        **batch    = calloc(p->batch, sizeof *batch);
-    void        **spare    = calloc(p->batch, sizeof *spare);
-    size_t        held     = 0;  /* carriers drawn from the pool, not yet used */
-    refctx       *current  = NULL;
-    size_t        n        = 0;
-    size_t        rejected = 0;  /* filtered reads for the reference in hand */
+    loader        l;
     cm_bam_record rec;
-    int           status   = CM_ITER_EOF;
-    int           result   = 0;
+    int           status = CM_ITER_EOF;
+    int           result = 0;
 
-    if (!batch || !spare) {
+    if (loader_open(&l, p) < 0) {
         snprintf(error, error_len, "out of memory");
-        free(batch);
-        free(spare);
         return -1;
     }
 
@@ -240,68 +337,27 @@ static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_
             continue;
         }
 
-        /* The reference is opened before the filter is applied, so that reads
-         * rejected here can still be counted against it: a reference whose
-         * reads were all rejected is a different thing from one that received
-         * none at all. */
-        if (!current || rec.tid != current->tid) {
-            dispatch_batch(p, current, batch, &n);
-            close_reference(p, current, rejected);
-            rejected = 0;
+        if (!loader_on_reference(&l, rec.tid)) {
+            const char *cause = refseq_error(p->refs);
 
-            current = open_reference(p, rec.tid);
-            if (!current) {
-                const char *cause = refseq_error(p->refs);
-
-                snprintf(error, error_len, "%s", cause ? cause : "no context available");
-                result = -1;
-                break;
-            }
+            snprintf(error, error_len, "%s", cause ? cause : "no context available");
+            result = -1;
+            break;
         }
 
         if (!filter_accepts(&p->filter, &rec)) {
-            rejected++;
+            l.rejected++;
             continue;
         }
 
-        /* Carriers are drawn a batch at a time and spent one by one, so the
-         * pool's lock is taken once per batch rather than once per read. A
-         * carrier only ever moves from here into the dispatch batch, so the
-         * two together never hold more than a refill's worth. */
-        if (held == 0)
-            held = itempool_take_many(p->items, spare, p->batch);
-
-        if (held == 0) {
-            snprintf(error, error_len, "no carrier available for a read");
+        if (loader_take_read(&l) < 0) {
+            snprintf(error, error_len, "unable to take a copy of an alignment");
             result = -1;
             break;
         }
-
-        workitem *item = spare[--held];
-
-        if (!bam_copy1(item->rec, cm_bam_raw(p->bam))) {
-            spare[held++] = item;
-            snprintf(error, error_len, "unable to copy alignment record");
-            result = -1;
-            break;
-        }
-
-        item->ctx  = current;
-        batch[n++] = item;
-
-        if (n == p->batch)
-            dispatch_batch(p, current, batch, &n);
     }
 
-    dispatch_batch(p, current, batch, &n);
-    close_reference(p, current, rejected);
-
-    /* Whatever the reservoir still holds goes back, on every path out. */
-    if (held)
-        itempool_give_many(p->items, spare, held);
-
-    free(spare);
-    free(batch);
+    loader_finish(&l);
 
     if (result == 0 && status == CM_ITER_ERROR) {
         snprintf(error, error_len, "%s", cm_bam_error(p->bam));
