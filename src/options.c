@@ -35,6 +35,13 @@ static const cli_option OPTIONS[] = {
                 "that received no reads left as NaN.",
       .required = true },
 
+    { .group = "Input and output", .name = "overwrite", .type = OPT_FLAG,
+      .offset = offsetof(cli_args, pipeline.overwrite),
+      .help = "replace the output file if it already exists",
+      .detail = "Without this a run stops rather than destroying a result that "
+                "may have cost a great deal more to produce than the one being "
+                "started." },
+
     { .group = "Filtering", .name = "min-mapq", .key = 'q', .type = OPT_INT,
       .offset = offsetof(cli_args, pipeline.filter.min_mapq), .metavar = "N",
       .help = "discard alignments below this mapping quality",

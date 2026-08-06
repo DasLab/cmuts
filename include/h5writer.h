@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -23,7 +24,9 @@
  * one thread only. */
 typedef struct h5writer h5writer;
 
-h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap);
+/* Fails rather than replacing an existing file unless overwrite is set. */
+h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
+                          bool overwrite);
 void      h5writer_close(h5writer *w);
 
 /* Records the name of every reference, in header order. */

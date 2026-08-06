@@ -158,14 +158,27 @@ def read_summary(path) -> Summary:
         )
 
 
-def run_cmuts(data: Dataset, output, workers: int = 4, **filters) -> Summary:
+def _cmuts_command(data: Dataset, output, workers: int, options):
     command = [CMUTS, "-f", data.fasta, "-o", output, "-j", workers]
 
-    for key, value in filters.items():
-        command += [_option(key), value]
+    for key, value in options.items():
+        # A flag carries no value of its own.
+        command += [_option(key)] if value is True else [_option(key), value]
 
-    _run([*command, data.bam])
+    return [*command, data.bam]
+
+
+def run_cmuts(data: Dataset, output, workers: int = 4, **options) -> Summary:
+    _run(_cmuts_command(data, output, workers, options))
     return read_summary(output)
+
+
+def try_cmuts(data: Dataset, output, workers: int = 4, **options):
+    """Runs it whether or not it succeeds, for the paths that should fail."""
+    return subprocess.run(
+        [str(word) for word in _cmuts_command(data, output, workers, options)],
+        capture_output=True, text=True,
+    )
 
 
 def outputs_agree(first, second) -> bool:
