@@ -231,12 +231,25 @@ static int build_model(sim_model *model, layout_specs *layout, const gen_args *a
 /* References                                                                */
 /* ------------------------------------------------------------------------ */
 
-/* Each reference draws from its own stream, so what it looks like depends on
- * its index and the seed alone -- not on how many reads the references before
- * it happened to need. */
-static void seed_for_reference(rng *r, size_t seed, size_t tid)
+/* What each reference draws from.
+ *
+ * A stream per reference and per purpose, so that what a reference looks like
+ * depends on the seed and its index alone: not on how many reads the ones
+ * before it needed, and not on how many values another purpose happened to
+ * draw first. Sharing one stream between two purposes would mean the number of
+ * draws each makes had to agree in two places, and adding a draw to one would
+ * silently change what the other produced. */
+typedef enum {
+    STREAM_LENGTH,    /* how long a reference is */
+    STREAM_CONTENT,   /* its sequence, and the reads laid on it */
+    STREAM_UNMAPPED,  /* the reads that align nowhere */
+} stream;
+
+static void seed_stream(rng *r, size_t seed, size_t tid, stream purpose)
 {
-    rng_seed(r, (uint64_t)seed * 0x9e3779b97f4a7c15ULL + (uint64_t)tid);
+    rng_seed(r, ((uint64_t)seed * 0x9e3779b97f4a7c15ULL)
+              ^ ((uint64_t)tid * 0xd1342543de82ef95ULL)
+              ^ ((uint64_t)purpose * 0xa24baed4963ee407ULL));
 }
 
 static void reference_name(char *out, size_t size, size_t tid)
@@ -356,7 +369,7 @@ static size_t *draw_reference_lengths(const gen_args *args, const layout_specs *
     for (size_t tid = 0; tid < args->references; tid++) {
         long len;
 
-        seed_for_reference(&r, args->seed, tid);
+        seed_stream(&r, args->seed, tid, STREAM_LENGTH);
         len = spec_draw(&layout->ref_length, &r);
         lengths[tid] = len < 1 ? 1 : (size_t)len;
     }
@@ -414,9 +427,7 @@ static int generate(const gen_args *args, const sim_model *model,
         size_t reflen = lengths[tid];
         size_t reads;
 
-        seed_for_reference(&r, args->seed, tid);
-        (void)spec_draw(&layout->ref_length, &r);   /* the draw already spent */
-
+        seed_stream(&r, args->seed, tid, STREAM_CONTENT);
         reference_name(name, sizeof name, tid);
         sim_sequence(seq, reflen, &r);
         write_fasta_record(fasta, name, seq, reflen);
@@ -431,7 +442,7 @@ static int generate(const gen_args *args, const sim_model *model,
         }
     }
 
-    rng_seed(&r, (uint64_t)args->seed ^ 0xa5a5a5a5a5a5a5a5ULL);
+    seed_stream(&r, args->seed, 0, STREAM_UNMAPPED);
     if (write_unmapped(&w, model, &r, (size_t)spec_draw(&layout->unmapped, &r)) < 0) {
         snprintf(error, error_len, "unable to write an unmapped read");
         goto done;
