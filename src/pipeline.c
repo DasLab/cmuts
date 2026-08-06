@@ -308,15 +308,6 @@ typedef struct {
     pthread_t      thread;
 } consumer;
 
-/* Reduces a finished reference to totals that a run at any worker count must
- * reproduce exactly, which is what makes the output checkable against the
- * summary the program prints. */
-static void record_reference(pipeline_stats *stats, const refctx *ctx)
-{
-    accum_totals(&ctx->acc, ctx->len, stats->totals);
-    stats->refs_completed += 1;
-}
-
 static void *consumer_main(void *arg)
 {
     consumer *c = arg;
@@ -327,7 +318,7 @@ static void *consumer_main(void *arg)
         for (size_t i = 0; i < n; i++) {
             refctx *ctx = slots[i];
 
-            record_reference(&c->stats, ctx);
+            c->stats.refs_completed += 1;
 
             /* Keep draining after a failure: the loader and workers must not
              * be left blocked on a queue nobody is emptying. */

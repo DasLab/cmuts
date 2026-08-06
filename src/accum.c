@@ -81,14 +81,3 @@ void accum_add(accum *dst, const accum *src, size_t len)
             into[i] += from[i];
     }
 }
-
-void accum_totals(const accum *acc, size_t len, double *into)
-{
-    for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++) {
-        const double *values = acc->slot[id];
-        size_t        n      = field_extent(id, len);
-
-        for (size_t i = 0; i < n; i++)
-            into[id] += values[i];
-    }
-}

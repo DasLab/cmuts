@@ -5,7 +5,6 @@
 
 #include <stdio.h>
 
-#include "accum.h"
 #include "cli.h"
 #include "pipeline.h"
 
@@ -17,9 +16,6 @@ static void print_stats(const pipeline_stats *stats)
            stats->reads_total, stats->reads_unmapped, stats->reads_filtered,
            stats->reads_processed);
     printf("  references    %zu written\n", stats->refs_completed);
-
-    for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++)
-        printf("  %-13s %.0f\n", ACCUM_FIELDS[id].name, stats->totals[id]);
 }
 
 int main(int argc, char **argv)

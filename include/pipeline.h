@@ -7,7 +7,6 @@
 
 #include <stddef.h>
 
-#include "accum.h"
 #include "filter.h"
 
 typedef struct {
@@ -31,12 +30,6 @@ typedef struct {
     size_t reads_filtered;
     size_t reads_processed;
     size_t refs_completed;
-
-    /* One sum per accumulator field, over every reference written. Each is a
-     * total of integer counts held as double, so it is exact and independent
-     * of the order in which threads happened to merge: two runs at different
-     * worker counts must agree bit for bit. */
-    double totals[ACCUM_N_FIELDS];
 } pipeline_stats;
 
 /* Runs the file to completion. Returns 0, or -1 with a description in error. */
