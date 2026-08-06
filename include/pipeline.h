@@ -24,14 +24,6 @@ typedef struct {
 
 pipeline_config pipeline_defaults(void);
 
-typedef struct {
-    size_t reads_total;
-    size_t reads_unmapped;
-    size_t reads_filtered;
-    size_t reads_processed;
-    size_t refs_completed;
-} pipeline_stats;
-
-/* Runs the file to completion. Returns 0, or -1 with a description in error. */
-int pipeline_run(const pipeline_config *cfg, pipeline_stats *stats,
-                 char *error, size_t error_len);
+/* Runs the file to completion, leaving the results in the output file.
+ * Returns 0, or -1 with a description in error. */
+int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len);

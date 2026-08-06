@@ -62,7 +62,6 @@ typedef struct {
     refctx   *held;       /* reference the shadow holds a handle for, or NULL */
     accum     shadow;
     void    **slots;      /* batch buffer, allocated before the thread starts */
-    size_t    processed;
     pthread_t thread;
 } worker;
 
@@ -115,8 +114,6 @@ static void process_run(worker *w, void **slots, size_t n)
         itempool_give(w->pipe->items, item);
     }
 
-    w->processed += n;
-
     /* Cannot be the last handle: the shadow holds one on this reference. */
     if (refctx_release(ctx, (int)n))
         finish_reference(w->pipe, ctx);
@@ -166,12 +163,6 @@ static void *worker_main(void *arg)
 /* Loader                                                                    */
 /* ------------------------------------------------------------------------ */
 
-typedef struct {
-    size_t total;
-    size_t unmapped;
-    size_t filtered;
-} loader_counts;
-
 static void dispatch_batch(pipeline *p, refctx *ctx, void **batch, size_t *n)
 {
     if (*n == 0)
@@ -214,7 +205,7 @@ static refctx *open_reference(pipeline *p, int32_t tid)
  * dispatched and the reference in hand always has the loader's handle
  * released. Otherwise a failure part way through would leave a reference that
  * can never complete. */
-static int loader_main(pipeline *p, loader_counts *counts, char *error, size_t error_len)
+static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_len)
 {
     void        **batch    = calloc(p->batch, sizeof *batch);
     refctx       *current  = NULL;
@@ -230,12 +221,10 @@ static int loader_main(pipeline *p, loader_counts *counts, char *error, size_t e
     }
 
     while ((status = cm_bam_next(p->bam, &rec)) == CM_ITER_OK) {
-        counts->total++;
-
         /* Unmapped reads align to no reference, so they are counted for the
          * run as a whole and go no further. */
         if (rec.flag & BAM_FUNMAP) {
-            counts->unmapped++;
+            (*unmapped)++;
             continue;
         }
 
@@ -259,7 +248,6 @@ static int loader_main(pipeline *p, loader_counts *counts, char *error, size_t e
         }
 
         if (!filter_accepts(&p->filter, &rec)) {
-            counts->filtered++;
             rejected++;
             continue;
         }
@@ -302,10 +290,9 @@ static int loader_main(pipeline *p, loader_counts *counts, char *error, size_t e
 /* ------------------------------------------------------------------------ */
 
 typedef struct {
-    pipeline      *pipe;
-    pipeline_stats stats;
-    int            status;  /* first write failure, if any */
-    pthread_t      thread;
+    pipeline *pipe;
+    int       status;  /* first write failure, if any */
+    pthread_t thread;
 } consumer;
 
 static void *consumer_main(void *arg)
@@ -317,8 +304,6 @@ static void *consumer_main(void *arg)
     while ((n = queue_pop(c->pipe->completed, slots, COMPLETION_BATCH)) > 0)
         for (size_t i = 0; i < n; i++) {
             refctx *ctx = slots[i];
-
-            c->stats.refs_completed += 1;
 
             /* Keep draining after a failure: the loader and workers must not
              * be left blocked on a queue nobody is emptying. */
@@ -493,29 +478,14 @@ static int start_workers(worker *workers, size_t n, pipeline *p, size_t *started
     return 0;
 }
 
-static void collect_stats(pipeline_stats *stats, const consumer *cons,
-                          const loader_counts *counts, const worker *workers, size_t n)
+int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
 {
-    *stats = cons->stats;
-    stats->reads_total    = counts->total;
-    stats->reads_unmapped = counts->unmapped;
-    stats->reads_filtered = counts->filtered;
-
-    for (size_t i = 0; i < n; i++)
-        stats->reads_processed += workers[i].processed;
-}
-
-int pipeline_run(const pipeline_config *cfg, pipeline_stats *stats,
-                 char *error, size_t error_len)
-{
-    pipeline      p       = { 0 };
-    consumer      cons    = { 0 };
-    loader_counts counts  = { 0 };
-    worker       *workers = calloc(cfg->workers, sizeof *workers);
-    size_t        started = 0;
-    int           status  = -1;
-
-    *stats = (pipeline_stats){ 0 };
+    pipeline  p        = { 0 };
+    consumer  cons     = { 0 };
+    size_t    unmapped = 0;
+    worker   *workers  = calloc(cfg->workers, sizeof *workers);
+    size_t    started  = 0;
+    int       status   = -1;
 
     if (!workers) {
         snprintf(error, error_len, "out of memory");
@@ -534,7 +504,7 @@ int pipeline_run(const pipeline_config *cfg, pipeline_stats *stats,
     }
 
     if (start_workers(workers, cfg->workers, &p, &started, error, error_len) == 0)
-        status = loader_main(&p, &counts, error, error_len);
+        status = loader_main(&p, &unmapped, error, error_len);
 
     queue_close(p.work);
     for (size_t i = 0; i < started; i++)
@@ -543,11 +513,9 @@ int pipeline_run(const pipeline_config *cfg, pipeline_stats *stats,
     queue_close(p.completed);
     pthread_join(cons.thread, NULL);
 
-    collect_stats(stats, &cons, &counts, workers, cfg->workers);
-
     /* The consumer has been joined, so the writer is again reachable from one
      * thread only and the run totals can be attached. */
-    if (status == 0 && (cons.status < 0 || metadata_write_run(p.out, counts.unmapped) < 0)) {
+    if (status == 0 && (cons.status < 0 || metadata_write_run(p.out, unmapped) < 0)) {
         snprintf(error, error_len, "%s: %s", cfg->output_path, h5writer_error(p.out));
         status = -1;
     }
