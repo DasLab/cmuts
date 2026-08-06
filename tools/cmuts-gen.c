@@ -17,8 +17,8 @@
 #include "cli.h"
 #include "sample.h"
 #include "simulate.h"
+#include "version.h"
 
-#define CMUTS_GEN_VERSION "0.1.0"
 #define ERROR_MAX 512
 #define FASTA_LINE 60
 
@@ -462,7 +462,7 @@ int main(int argc, char **argv)
 
     cli_spec spec = {
         .program   = "cmuts-gen",
-        .version   = CMUTS_GEN_VERSION,
+        .version   = CMUTS_VERSION,
         .summary   = "generate alignments and the reference they came from",
         .options   = OPTIONS,
         .n_options = sizeof OPTIONS / sizeof *OPTIONS,

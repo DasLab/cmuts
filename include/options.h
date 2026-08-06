@@ -7,8 +7,7 @@
 
 #include "cli.h"
 #include "pipeline.h"
-
-#define CMUTS_VERSION "0.1.0"
+#include "version.h"
 
 /* Everything the command line can set.
  *
