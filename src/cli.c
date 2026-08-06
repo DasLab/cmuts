@@ -25,7 +25,15 @@ typedef enum {
     OPT_STRING,
     OPT_SIZE,
     OPT_INT,
+    OPT_ENUM,    /* one of a named set of values; stores an int */
 } opt_type;
+
+/* One accepted value of an OPT_ENUM option. A choice list is terminated by an
+ * entry with a NULL name. */
+typedef struct {
+    const char *name;
+    int         value;
+} cli_choice;
 
 typedef struct {
     const char *group;     /* heading this option appears under in the help */
@@ -41,6 +49,7 @@ typedef struct {
     long        minimum;   /* bounds for the numeric types */
     long        maximum;
     bool        hidden;    /* kept out of the help, still described by JSON */
+    const cli_choice *choices;  /* accepted values, for OPT_ENUM */
 } cli_option;
 
 typedef struct {
@@ -52,76 +61,94 @@ typedef struct {
     bool        required;
 } cli_positional;
 
+static const cli_choice STRAND_CHOICES[] = {
+    { "both",    FILTER_STRAND_BOTH    },
+    { "forward", FILTER_STRAND_FORWARD },
+    { "reverse", FILTER_STRAND_REVERSE },
+    { NULL,      0                     },
+};
+
+/* Rows use designated initializers so that a field added to cli_option
+ * defaults quietly rather than having to be spelled out in every one. */
 static const cli_option OPTIONS[] = {
-    { "Input and output", "fasta", 'f', OPT_STRING,
-      offsetof(cli_args, pipeline.fasta_path), "FASTA",
-      "reference sequences",
-      "Reference sequences, in the same order as the alignment file's header. "
-      "Read as a single forward pass and never indexed, so the file may be of "
-      "any size.",
-      true, 0, 0, false },
-    { "Input and output", "output", 'o', OPT_STRING,
-      offsetof(cli_args, pipeline.output_path), "HDF5",
-      "write results to this file",
-      "Results are written as one row per reference, with references that "
-      "received no reads left as NaN.",
-      true, 0, 0, false },
+    { .group = "Input and output", .name = "fasta", .key = 'f', .type = OPT_STRING,
+      .offset = offsetof(cli_args, pipeline.fasta_path), .metavar = "FASTA",
+      .help = "reference sequences",
+      .detail = "Reference sequences, in the same order as the alignment file's "
+                "header. Read as a single forward pass and never indexed, so the "
+                "file may be of any size.",
+      .required = true },
+    { .group = "Input and output", .name = "output", .key = 'o', .type = OPT_STRING,
+      .offset = offsetof(cli_args, pipeline.output_path), .metavar = "HDF5",
+      .help = "write results to this file",
+      .detail = "Results are written as one row per reference, with references "
+                "that received no reads left as NaN.",
+      .required = true },
 
-    { "Filtering", "min-mapq", 'q', OPT_INT,
-      offsetof(cli_args, pipeline.filter.min_mapq), "N",
-      "discard alignments below this mapping quality",
-      "Compared numerically, as samtools does. MAPQ 255 means \"unavailable\" "
-      "rather than \"perfect\", but is treated as passing any threshold, since "
-      "an aligner that emits it throughout would otherwise have all of its "
-      "output discarded. Unmapped reads are excluded regardless and counted "
-      "separately.",
-      false, 0, 255, false },
+    { .group = "Filtering", .name = "min-mapq", .key = 'q', .type = OPT_INT,
+      .offset = offsetof(cli_args, pipeline.filter.min_mapq), .metavar = "N",
+      .help = "discard alignments below this mapping quality",
+      .detail = "Compared numerically, as samtools does. MAPQ 255 means "
+                "\"unavailable\" rather than \"perfect\", but is treated as passing "
+                "any threshold, since an aligner that emits it throughout would "
+                "otherwise have all of its output discarded. Unmapped reads are "
+                "excluded regardless and counted separately.",
+      .minimum = 0, .maximum = 255 },
+    { .group = "Filtering", .name = "strand", .key = 's', .type = OPT_ENUM,
+      .offset = offsetof(cli_args, pipeline.filter.strand), .metavar = "STRAND",
+      .help = "keep alignments on this strand",
+      .detail = "Tests the alignment's own reverse bit, which for single-end "
+                "reads is the strand the read came from. It says nothing about "
+                "the fragment: with paired data, which strand a fragment belongs "
+                "to depends on the library protocol and on which mate is in hand.",
+      .choices = STRAND_CHOICES },
 
-    { "Performance", "workers", 'j', OPT_SIZE,
-      offsetof(cli_args, pipeline.workers), "N",
-      "threads running the processing step",
-      "Reads are taken from a shared pool, so a worker is free to cross "
-      "reference boundaries and no thread idles waiting for a reference of "
-      "its own.",
-      false, 1, 1024, false },
-    { "Performance", "decode-threads", 0, OPT_INT,
-      offsetof(cli_args, pipeline.decode_threads), "N",
-      "htslib threads for BGZF decompression",
-      "Parallelizes inflation only; reading and record parsing stay "
-      "sequential. Worth raising when the loader is the bottleneck, and "
-      "pointless on small files.",
-      false, 0, 64, false },
-    { "Performance", "queue-capacity", 0, OPT_SIZE,
-      offsetof(cli_args, pipeline.queue_capacity), "N",
-      "reads in transit at once",
-      "Bounds how far the loader may run ahead of the workers, and with it "
-      "how much memory reads in flight occupy.",
-      false, 1, 1 << 20, false },
-    { "Performance", "batch", 0, OPT_SIZE,
-      offsetof(cli_args, pipeline.batch), "N",
-      "reads transferred per queue operation",
-      "Larger batches amortize locking across more reads, at the cost of "
-      "holding that many reads behind a slow one.",
-      false, 1, 1 << 16, false },
-    { "Performance", "live-refs", 0, OPT_SIZE,
-      offsetof(cli_args, pipeline.live_refs), "N",
-      "references in flight; 0 derives it from memory",
-      "How far the loader may run ahead of a worker that stalls on one read. "
-      "Zero derives a count from the longest reference and a memory budget.",
-      false, 0, 1 << 16, false },
+    { .group = "Performance", .name = "workers", .key = 'j', .type = OPT_SIZE,
+      .offset = offsetof(cli_args, pipeline.workers), .metavar = "N",
+      .help = "threads running the processing step",
+      .detail = "Reads are taken from a shared pool, so a worker is free to cross "
+                "reference boundaries and no thread idles waiting for a reference "
+                "of its own.",
+      .minimum = 1, .maximum = 1024 },
+    { .group = "Performance", .name = "decode-threads", .type = OPT_INT,
+      .offset = offsetof(cli_args, pipeline.decode_threads), .metavar = "N",
+      .help = "htslib threads for BGZF decompression",
+      .detail = "Parallelizes inflation only; reading and record parsing stay "
+                "sequential. Worth raising when the loader is the bottleneck, and "
+                "pointless on small files.",
+      .minimum = 0, .maximum = 64 },
+    { .group = "Performance", .name = "queue-capacity", .type = OPT_SIZE,
+      .offset = offsetof(cli_args, pipeline.queue_capacity), .metavar = "N",
+      .help = "reads in transit at once",
+      .detail = "Bounds how far the loader may run ahead of the workers, and with "
+                "it how much memory reads in flight occupy.",
+      .minimum = 1, .maximum = 1 << 20 },
+    { .group = "Performance", .name = "batch", .type = OPT_SIZE,
+      .offset = offsetof(cli_args, pipeline.batch), .metavar = "N",
+      .help = "reads transferred per queue operation",
+      .detail = "Larger batches amortize locking across more reads, at the cost "
+                "of holding that many reads behind a slow one.",
+      .minimum = 1, .maximum = 1 << 16 },
+    { .group = "Performance", .name = "live-refs", .type = OPT_SIZE,
+      .offset = offsetof(cli_args, pipeline.live_refs), .metavar = "N",
+      .help = "references in flight; 0 derives it from memory",
+      .detail = "How far the loader may run ahead of a worker that stalls on one "
+                "read. Zero derives a count from the longest reference and a "
+                "memory budget.",
+      .minimum = 0, .maximum = 1 << 16 },
 
-    { "Information", "help", 'h', OPT_FLAG,
-      offsetof(cli_args, show_help), NULL,
-      "show this help and exit", NULL, false, 0, 0, false },
-    { "Information", "version", 'V', OPT_FLAG,
-      offsetof(cli_args, show_version), NULL,
-      "show the version and exit", NULL, false, 0, 0, false },
-    { "Information", "dump-options", 0, OPT_FLAG,
-      offsetof(cli_args, dump_options), NULL,
-      "describe every argument as JSON and exit",
-      "Intended for generating documentation and shell completions from the "
-      "binary rather than from a separate description of it.",
-      false, 0, 0, true },
+    { .group = "Information", .name = "help", .key = 'h', .type = OPT_FLAG,
+      .offset = offsetof(cli_args, show_help),
+      .help = "show this help and exit" },
+    { .group = "Information", .name = "version", .key = 'V', .type = OPT_FLAG,
+      .offset = offsetof(cli_args, show_version),
+      .help = "show the version and exit" },
+    { .group = "Information", .name = "dump-options", .type = OPT_FLAG,
+      .offset = offsetof(cli_args, dump_options),
+      .help = "describe every argument as JSON and exit",
+      .detail = "Intended for generating documentation and shell completions from "
+                "the binary rather than from a separate description of it.",
+      .hidden = true },
 };
 
 static const cli_positional POSITIONALS[] = {
@@ -220,12 +247,40 @@ static int parse_number(const cli_option *opt, const char *text, const char *pro
     return 0;
 }
 
+static void print_choices(FILE *out, const cli_option *opt)
+{
+    for (const cli_choice *choice = opt->choices; choice->name; choice++)
+        fprintf(out, "%s%s", choice == opt->choices ? "" : "|", choice->name);
+}
+
+static int parse_choice(const cli_option *opt, const char *text, const char *program, int *out)
+{
+    for (const cli_choice *choice = opt->choices; choice->name; choice++)
+        if (strcmp(choice->name, text) == 0) {
+            *out = choice->value;
+            return 0;
+        }
+
+    fprintf(stderr, "%s: --%s: \"%s\" is not one of ", program, opt->name, text);
+    print_choices(stderr, opt);
+    fputc('\n', stderr);
+
+    return -1;
+}
+
 static int assign(const cli_option *opt, cli_args *args, const char *value, const char *program)
 {
     char *field = (char *)args + opt->offset;
     long  number;
+    int   choice;
 
     switch (opt->type) {
+        case OPT_ENUM:
+            if (parse_choice(opt, value, program, &choice) < 0)
+                return -1;
+            *(int *)field = choice;
+            return 0;
+
         case OPT_FLAG:
             *(bool *)field = true;
             return 0;
@@ -268,6 +323,12 @@ static void format_default(const cli_option *opt, const cli_args *defaults,
         case OPT_INT:
             snprintf(out, size, " (default %d)", *(const int *)field);
             break;
+        case OPT_ENUM:
+            out[0] = '\0';
+            for (const cli_choice *choice = opt->choices; choice->name; choice++)
+                if (choice->value == *(const int *)field)
+                    snprintf(out, size, " (default %s)", choice->name);
+            break;
         default:
             out[0] = '\0';
             break;
@@ -288,8 +349,16 @@ static void print_option(FILE *out, const cli_option *opt, const cli_args *defau
     if (opt->metavar && n > 0 && (size_t)n < sizeof invocation)
         snprintf(invocation + n, sizeof invocation - (size_t)n, " %s", opt->metavar);
 
+    fprintf(out, "  %-28s %s", invocation, opt->help);
+
+    if (opt->choices) {
+        fputs(" (", out);
+        print_choices(out, opt);
+        fputc(')', out);
+    }
+
     format_default(opt, defaults, suffix, sizeof suffix);
-    fprintf(out, "  %-28s %s%s\n", invocation, opt->help, suffix);
+    fprintf(out, "%s\n", suffix);
 }
 
 /* Groups are collected by scanning rather than by assuming the table is sorted
@@ -388,9 +457,26 @@ static const char *type_name(opt_type type)
         case OPT_STRING: return "string";
         case OPT_SIZE:   return "size";
         case OPT_INT:    return "int";
+        case OPT_ENUM:   return "enum";
     }
 
     return "unknown";
+}
+
+static void print_json_choices(FILE *out, const cli_option *opt)
+{
+    if (!opt->choices) {
+        fputs("null", out);
+        return;
+    }
+
+    fputc('[', out);
+    for (const cli_choice *choice = opt->choices; choice->name; choice++) {
+        if (choice != opt->choices)
+            fputs(", ", out);
+        print_json_string(out, choice->name);
+    }
+    fputc(']', out);
 }
 
 static void print_json_default(FILE *out, const cli_option *opt, const cli_args *defaults)
@@ -402,6 +488,11 @@ static void print_json_default(FILE *out, const cli_option *opt, const cli_args 
         case OPT_STRING: print_json_string(out, *(const char *const *)field); break;
         case OPT_SIZE:   fprintf(out, "%zu", *(const size_t *)field);         break;
         case OPT_INT:    fprintf(out, "%d", *(const int *)field);             break;
+        case OPT_ENUM:
+            for (const cli_choice *choice = opt->choices; choice->name; choice++)
+                if (choice->value == *(const int *)field)
+                    print_json_string(out, choice->name);
+            break;
     }
 }
 
@@ -430,6 +521,7 @@ static void print_json_option(FILE *out, const cli_option *opt, const cli_args *
     fputs(",\n      \"detail\": ", out);    print_json_string(out, opt->detail);
     fprintf(out, ",\n      \"required\": %s", opt->required ? "true" : "false");
     fprintf(out, ",\n      \"hidden\": %s", opt->hidden ? "true" : "false");
+    fputs(",\n      \"choices\": ", out);   print_json_choices(out, opt);
     fputs(",\n      \"default\": ", out);   print_json_default(out, opt, defaults);
     fputs(",\n", out);                      print_json_bounds(out, opt);
     fprintf(out, "    }%s\n", last ? "" : ",");
