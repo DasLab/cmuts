@@ -42,6 +42,10 @@ bool refctx_release(refctx *ctx, int n);
  * merge itself; processing happens outside the lock. */
 void refctx_merge(refctx *ctx, const accum *src);
 
+/* Adds to one scalar field, for counts that arise outside the processing step
+ * and so have no accumulator of their own to be merged from. */
+void refctx_add_scalar(refctx *ctx, accum_field_id id, double value);
+
 /* Presents the reference sequence in the form the processing step expects. */
 void refctx_sequence(const refctx *ctx, cm_fasta_record *out);
 

@@ -23,6 +23,7 @@
 #include "bam.h"
 #include "h5writer.h"
 #include "itempool.h"
+#include "metadata.h"
 #include "process.h"
 #include "queue.h"
 #include "refctx.h"
@@ -181,9 +182,17 @@ static void dispatch_batch(pipeline *p, refctx *ctx, void **batch, size_t *n)
     *n = 0;
 }
 
-static void close_reference(pipeline *p, refctx *ctx)
+/* Deposits the reads rejected for this reference before the loader's handle
+ * goes, so the count cannot arrive after the reference has been written. */
+static void close_reference(pipeline *p, refctx *ctx, size_t filtered)
 {
-    if (ctx && refctx_release(ctx, 1))
+    if (!ctx)
+        return;
+
+    if (filtered)
+        refctx_add_scalar(ctx, ACCUM_FILTERED, (double)filtered);
+
+    if (refctx_release(ctx, 1))
         finish_reference(p, ctx);
 }
 
@@ -207,12 +216,13 @@ static refctx *open_reference(pipeline *p, int32_t tid)
  * can never complete. */
 static int loader_main(pipeline *p, loader_counts *counts, char *error, size_t error_len)
 {
-    void        **batch   = calloc(p->batch, sizeof *batch);
-    refctx       *current = NULL;
-    size_t        n       = 0;
+    void        **batch    = calloc(p->batch, sizeof *batch);
+    refctx       *current  = NULL;
+    size_t        n        = 0;
+    size_t        rejected = 0;  /* filtered reads for the reference in hand */
     cm_bam_record rec;
-    int           status  = CM_ITER_EOF;
-    int           result  = 0;
+    int           status   = CM_ITER_EOF;
+    int           result   = 0;
 
     if (!batch) {
         snprintf(error, error_len, "out of memory");
@@ -222,21 +232,21 @@ static int loader_main(pipeline *p, loader_counts *counts, char *error, size_t e
     while ((status = cm_bam_next(p->bam, &rec)) == CM_ITER_OK) {
         counts->total++;
 
-        /* Unmapped reads are counted apart from the filtered ones: they belong
-         * to no reference at all, rather than having failed a criterion. */
+        /* Unmapped reads align to no reference, so they are counted for the
+         * run as a whole and go no further. */
         if (rec.flag & BAM_FUNMAP) {
             counts->unmapped++;
             continue;
         }
 
-        if (!filter_accepts(&p->filter, &rec)) {
-            counts->filtered++;
-            continue;
-        }
-
+        /* The reference is opened before the filter is applied, so that reads
+         * rejected here can still be counted against it: a reference whose
+         * reads were all rejected is a different thing from one that received
+         * none at all. */
         if (!current || rec.tid != current->tid) {
             dispatch_batch(p, current, batch, &n);
-            close_reference(p, current);
+            close_reference(p, current, rejected);
+            rejected = 0;
 
             current = open_reference(p, rec.tid);
             if (!current) {
@@ -246,6 +256,12 @@ static int loader_main(pipeline *p, loader_counts *counts, char *error, size_t e
                 result = -1;
                 break;
             }
+        }
+
+        if (!filter_accepts(&p->filter, &rec)) {
+            counts->filtered++;
+            rejected++;
+            continue;
         }
 
         workitem *item = itempool_take(p->items);
@@ -270,7 +286,7 @@ static int loader_main(pipeline *p, loader_counts *counts, char *error, size_t e
     }
 
     dispatch_batch(p, current, batch, &n);
-    close_reference(p, current);
+    close_reference(p, current, rejected);
     free(batch);
 
     if (result == 0 && status == CM_ITER_ERROR) {
@@ -297,15 +313,7 @@ typedef struct {
  * summary the program prints. */
 static void record_reference(pipeline_stats *stats, const refctx *ctx)
 {
-    const double *coverage  = accum_data(&ctx->acc, ACCUM_COVERAGE);
-    const double *mutations = accum_data(&ctx->acc, ACCUM_MUTATIONS);
-
-    for (size_t i = 0; i < ctx->len; i++) {
-        stats->coverage_total  += coverage[i];
-        stats->mutations_total += mutations[i];
-    }
-
-    stats->reads_recorded += *accum_data(&ctx->acc, ACCUM_READS);
+    accum_totals(&ctx->acc, ctx->len, stats->totals);
     stats->refs_completed += 1;
 }
 
@@ -443,36 +451,23 @@ static int build_buffers(pipeline *p, const pipeline_config *cfg, char *error, s
     return 0;
 }
 
-/* Every reference gets a row whether or not any read reaches it, so the names
- * come from the header rather than from the references actually seen. */
 static int open_output(pipeline *p, const pipeline_config *cfg, char *error, size_t error_len)
 {
-    int32_t      n     = cm_bam_nref(p->bam);
-    const char **names = calloc((size_t)n, sizeof *names);
-    int          rc;
-
-    if (!names) {
-        snprintf(error, error_len, "out of memory");
-        return -1;
-    }
-
-    p->out = h5writer_create(cfg->output_path, n, p->ref_cap);
+    p->out = h5writer_create(cfg->output_path, cm_bam_nref(p->bam), p->ref_cap);
     if (!p->out) {
-        free(names);
         snprintf(error, error_len, "out of memory");
         return -1;
     }
 
-    for (int32_t tid = 0; tid < n; tid++)
-        names[tid] = cm_bam_refname(p->bam, tid);
+    if (h5writer_error(p->out) || metadata_write_names(p->out, p->bam) < 0) {
+        const char *cause = h5writer_error(p->out);
 
-    rc = h5writer_error(p->out) ? -1 : h5writer_names(p->out, names, n);
-    free(names);
+        snprintf(error, error_len, "%s: %s", cfg->output_path,
+                 cause ? cause : "unable to write the reference names");
+        return -1;
+    }
 
-    if (rc < 0)
-        snprintf(error, error_len, "%s: %s", cfg->output_path, h5writer_error(p->out));
-
-    return rc;
+    return 0;
 }
 
 /* Starts as many workers as it can, reporting through started how many are
@@ -503,19 +498,6 @@ static int start_workers(worker *workers, size_t n, pipeline *p, size_t *started
 
         *started += 1;
     }
-
-    return 0;
-}
-
-/* Totals for the run as a whole, which belong to no single reference. Every
- * read is accounted for by exactly one of them: total = unmapped + filtered +
- * whatever reached the accumulators. */
-static int write_run_counts(h5writer *out, const loader_counts *counts)
-{
-    if (h5writer_count(out, "reads_total", counts->total) < 0 ||
-        h5writer_count(out, "reads_unmapped", counts->unmapped) < 0 ||
-        h5writer_count(out, "reads_filtered", counts->filtered) < 0)
-        return -1;
 
     return 0;
 }
@@ -574,7 +556,7 @@ int pipeline_run(const pipeline_config *cfg, pipeline_stats *stats,
 
     /* The consumer has been joined, so the writer is again reachable from one
      * thread only and the run totals can be attached. */
-    if (status == 0 && (cons.status < 0 || write_run_counts(p.out, &counts) < 0)) {
+    if (status == 0 && (cons.status < 0 || metadata_write_run(p.out, counts.unmapped) < 0)) {
         snprintf(error, error_len, "%s: %s", cfg->output_path, h5writer_error(p.out));
         status = -1;
     }

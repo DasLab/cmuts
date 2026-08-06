@@ -42,6 +42,13 @@ void refctx_merge(refctx *ctx, const accum *src)
     pthread_mutex_unlock(&ctx->lock);
 }
 
+void refctx_add_scalar(refctx *ctx, accum_field_id id, double value)
+{
+    pthread_mutex_lock(&ctx->lock);
+    *accum_data(&ctx->acc, id) += value;
+    pthread_mutex_unlock(&ctx->lock);
+}
+
 void refctx_sequence(const refctx *ctx, cm_fasta_record *out)
 {
     out->name    = ctx->name;

@@ -9,9 +9,10 @@
 #include <string.h>
 
 const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS] = {
-    [ACCUM_COVERAGE]  = { "coverage",  ACCUM_PER_BASE },
-    [ACCUM_MUTATIONS] = { "mutations", ACCUM_PER_BASE },
-    [ACCUM_READS]     = { "reads",     ACCUM_SCALAR   },
+    [ACCUM_COVERAGE]  = { "coverage",       ACCUM_PER_BASE },
+    [ACCUM_MUTATIONS] = { "mutations",      ACCUM_PER_BASE },
+    [ACCUM_READS]     = { "reads",          ACCUM_SCALAR   },
+    [ACCUM_FILTERED]  = { "reads_filtered", ACCUM_SCALAR   },
 };
 
 /* Values a field occupies when the reference under consideration is len bases
@@ -78,5 +79,16 @@ void accum_add(accum *dst, const accum *src, size_t len)
 
         for (size_t i = 0; i < n; i++)
             into[i] += from[i];
+    }
+}
+
+void accum_totals(const accum *acc, size_t len, double *into)
+{
+    for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++) {
+        const double *values = acc->slot[id];
+        size_t        n      = field_extent(id, len);
+
+        for (size_t i = 0; i < n; i++)
+            into[id] += values[i];
     }
 }

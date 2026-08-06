@@ -17,6 +17,7 @@ typedef enum {
     ACCUM_COVERAGE,
     ACCUM_MUTATIONS,
     ACCUM_READS,
+    ACCUM_FILTERED,
     ACCUM_N_FIELDS,
 } accum_field_id;
 
@@ -56,6 +57,11 @@ void accum_zero(accum *acc, size_t len);
 /* dst += src over the first len values of every per-base field, and over every
  * scalar. Both accumulators must have the same capacity. */
 void accum_add(accum *dst, const accum *src, size_t len);
+
+/* Adds each field's values into the corresponding entry of into, which must
+ * hold ACCUM_N_FIELDS elements and is not cleared first. Driven by the field
+ * table, so a field added above is summed without touching the callers. */
+void accum_totals(const accum *acc, size_t len, double *into);
 
 /* Storage for one field: len values for ACCUM_PER_BASE, one for ACCUM_SCALAR. */
 static inline double *accum_data(const accum *acc, accum_field_id id)
