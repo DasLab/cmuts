@@ -14,8 +14,15 @@ HDF5_LIBS   := $(shell pkg-config --libs   hdf5   2>/dev/null || echo -lhdf5)
 CFLAGS   := -std=c11 -O2 $(WARNINGS) -pthread -Iinclude $(HTS_CFLAGS) $(HDF5_CFLAGS) -MMD -MP
 LDLIBS   := $(HTS_LIBS) $(HDF5_LIBS) -pthread
 
+# DESTDIR is prepended only at install time, so that a package can be staged
+# into a directory that is not where it will finally live.
+PREFIX  ?= /usr/local
+BINDIR  ?= $(PREFIX)/bin
+INSTALL ?= install
+
+NAME  := cmuts
 BUILD := build
-BIN   := $(BUILD)/cmuts
+BIN   := $(BUILD)/$(NAME)
 SRC   := $(wildcard src/*.c)
 OBJ   := $(SRC:src/%.c=$(BUILD)/%.o)
 DEP   := $(OBJ:.o=.d)
@@ -31,9 +38,16 @@ $(BUILD)/%.o: src/%.c | $(BUILD)
 $(BUILD):
 	mkdir -p $(BUILD)
 
+install: $(BIN)
+	$(INSTALL) -d $(DESTDIR)$(BINDIR)
+	$(INSTALL) -m 755 $(BIN) $(DESTDIR)$(BINDIR)/$(NAME)
+
+uninstall:
+	rm -f $(DESTDIR)$(BINDIR)/$(NAME)
+
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all clean
+.PHONY: all clean install uninstall
 
 -include $(DEP)
