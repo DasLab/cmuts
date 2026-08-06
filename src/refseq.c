@@ -9,14 +9,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define REFSEQ_ERROR_MAX 512
+#include "error.h"
 
 struct refseq_source {
     cm_fasta_reader     *fasta;
     const cm_bam_reader *bam;
     cm_fasta_record      record;   /* the record for ordinal loaded - 1 */
     int32_t              loaded;   /* number of records consumed so far */
-    char                 error[REFSEQ_ERROR_MAX];
+    char                 error[CM_ERROR_MAX];
 };
 
 refseq_source *refseq_open(const char *fasta_path, const cm_bam_reader *reader)

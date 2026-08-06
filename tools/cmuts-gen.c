@@ -15,11 +15,11 @@
 #include <htslib/sam.h>
 
 #include "cli.h"
+#include "error.h"
 #include "sample.h"
 #include "simulate.h"
 #include "version.h"
 
-#define ERROR_MAX 512
 #define FASTA_LINE 60
 
 enum { FORMAT_BAM, FORMAT_SAM };
@@ -464,7 +464,7 @@ int main(int argc, char **argv)
     gen_args     args;
     sim_model    model    = { 0 };
     layout_specs layout   = { 0 };
-    char         error[ERROR_MAX];
+    char         error[CM_ERROR_MAX];
 
     cli_spec spec = {
         .program   = "cmuts-gen",

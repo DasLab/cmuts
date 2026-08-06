@@ -355,7 +355,7 @@ pipeline_config pipeline_defaults(void)
         .queue_capacity = 4096,
         .batch          = 64,
         .live_refs      = 0,  /* derived from the longest reference */
-        .filter         = { .min_mapq = 0 },
+        .filter         = filter_defaults(),
     };
 }
 

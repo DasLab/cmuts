@@ -11,7 +11,7 @@
 
 #include <hdf5.h>
 
-#define H5WRITER_ERROR_MAX 512
+#include "error.h"
 
 #define DATASET_REFERENCE "reference"
 
@@ -32,7 +32,7 @@ struct h5writer {
     hid_t   dataset[ACCUM_N_FIELDS];
     int32_t n_refs;
     size_t  ref_cap;
-    char    error[H5WRITER_ERROR_MAX];
+    char    error[CM_ERROR_MAX];
 };
 
 static int fail(h5writer *w, const char *what)
