@@ -7,6 +7,11 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+
+#include <htslib/bgzf.h>
+#include <htslib/cram.h>
+#include <htslib/hfile.h>
 
 
 /* sam_read1() returns a non-negative value per record and this on a clean end
@@ -25,8 +30,39 @@ struct cm_bam_reader {
     samFile    *file;
     sam_hdr_t  *header;
     bam1_t     *record;
+    uint64_t    header_end;  /* where the alignments begin */
+    uint64_t    file_size;   /* 0 where the input is not a file of known size */
+    bool        at_end;
     const char *error;
 };
+
+/* ------------------------------------------------------------------------ */
+/* Position                                                                  */
+/* ------------------------------------------------------------------------ */
+
+/* How far into the file the reader has read, in compressed bytes. Every format
+ * keeps the figure somewhere else, and none of them keeps a record count. */
+static uint64_t raw_offset(const cm_bam_reader *reader)
+{
+    const htsFile *file = reader->file;
+
+    if (file->is_cram)
+        return (uint64_t)htell(cram_fd_get_fp(file->fp.cram));
+
+    /* A bgzipped SAM reads through BGZF as well, so the format alone does not
+     * settle which of these applies. */
+    if (file->is_bgzf)
+        return (uint64_t)(bgzf_tell(file->fp.bgzf) >> 16);
+
+    return file->fp.hfile ? (uint64_t)htell(file->fp.hfile) : 0;
+}
+
+static uint64_t size_of(const char *path)
+{
+    struct stat info;
+
+    return stat(path, &info) == 0 && info.st_size > 0 ? (uint64_t)info.st_size : 0;
+}
 
 /* ------------------------------------------------------------------------ */
 /* Lifetime                                                                  */
@@ -66,6 +102,9 @@ cm_bam_reader *cm_bam_open(const char *path)
         reader_free(reader);
         return NULL;
     }
+
+    reader->header_end = raw_offset(reader);
+    reader->file_size  = size_of(path);
 
     return reader;
 }
@@ -150,8 +189,10 @@ int cm_bam_next(cm_bam_reader *reader, cm_bam_record *out)
         return CM_ITER_OK;
     }
 
-    if (status == SAM_END_OF_FILE)
+    if (status == SAM_END_OF_FILE) {
+        reader->at_end = true;
         return CM_ITER_EOF;
+    }
 
     reader->error = "error reading alignment record";
     return CM_ITER_ERROR;
@@ -160,6 +201,27 @@ int cm_bam_next(cm_bam_reader *reader, cm_bam_record *out)
 const char *cm_bam_error(const cm_bam_reader *reader)
 {
     return reader->error;
+}
+
+/* An offset points at the block being read rather than past it, so it stops
+ * short of the end even once there is nothing left to read. */
+uint64_t cm_bam_position(const cm_bam_reader *reader)
+{
+    uint64_t at;
+
+    if (reader->at_end)
+        return cm_bam_span(reader);
+
+    at = raw_offset(reader);
+
+    return at > reader->header_end ? at - reader->header_end : 0;
+}
+
+uint64_t cm_bam_span(const cm_bam_reader *reader)
+{
+    return reader->file_size > reader->header_end
+         ? reader->file_size - reader->header_end
+         : 0;
 }
 
 /* ------------------------------------------------------------------------ */

@@ -27,6 +27,7 @@
 #include "itempool.h"
 #include "metadata.h"
 #include "process.h"
+#include "progress.h"
 #include "queue.h"
 #include "refctx.h"
 #include "refseq.h"
@@ -43,6 +44,7 @@ typedef struct {
     itempool      *items;
     ctxpool       *contexts;
     h5writer      *out;
+    progress      *bar;
     bool           may_replace;
     filter_config  filter;
     size_t         batch;
@@ -330,6 +332,8 @@ static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_
     }
 
     while ((status = cm_bam_next(p->bam, &rec)) == CM_ITER_OK) {
+        progress_follow(p->bar);
+
         /* Unmapped reads align to no reference, so they are counted for the
          * run as a whole and go no further. */
         if (rec.flag & BAM_FUNMAP) {
@@ -357,6 +361,7 @@ static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_
         }
     }
 
+    progress_follow(p->bar);
     loader_finish(&l);
 
     if (result == 0 && status == CM_ITER_ERROR) {
@@ -441,6 +446,7 @@ static size_t derive_live_refs(size_t ref_cap)
 
 static void pipeline_teardown(pipeline *p)
 {
+    progress_finish(p->bar);
     h5writer_close(p->out);
     ctxpool_destroy(p->contexts);
     itempool_destroy(p->items);
@@ -613,6 +619,9 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
         build_buffers(&p, cfg, error, error_len) < 0 ||
         open_output(&p, cfg, error, error_len) < 0)
         goto done;
+
+    /* Once nothing is left that could fail before a read is taken. */
+    p.bar = progress_start(p.bam);
 
     cons.pipe = &p;
     if (pthread_create(&cons.thread, NULL, consumer_main, &cons) != 0) {

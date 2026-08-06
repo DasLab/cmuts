@@ -64,6 +64,16 @@ void cm_bam_close(cm_bam_reader *reader);
 /* Description of the reader's failure, or NULL if it has not failed. */
 const char *cm_bam_error(const cm_bam_reader *reader);
 
+/* How far the reader has got, and how far it has to go, in compressed bytes of
+ * the alignments alone. The header is left out because it is read in one go
+ * before any record and can be most of a file.
+ *
+ * Compressed bytes are a proxy rather than an accounting: how many a read costs
+ * varies with how well it compresses, which for CRAM means with how far it
+ * differs from the reference. Span is 0 where the size is not known. */
+uint64_t cm_bam_position(const cm_bam_reader *reader);
+uint64_t cm_bam_span(const cm_bam_reader *reader);
+
 /* Adds worker threads for BGZF decompression, which parallelizes inflation
  * only: reading and record parsing stay sequential. Worth setting when the
  * loader is the bottleneck, and pointless on small files. */
