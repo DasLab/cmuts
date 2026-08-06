@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "bam.h"
@@ -42,6 +43,7 @@ typedef struct {
     itempool      *items;
     ctxpool       *contexts;
     h5writer      *out;
+    bool           may_replace;
     filter_config  filter;
     size_t         batch;
     size_t         ref_cap;    /* longest reference, sizing every accumulator */
@@ -392,18 +394,33 @@ static void pipeline_teardown(pipeline *p)
     cm_bam_close(p->bam);
 }
 
-/* Checked before anything is opened, so a mistyped path costs nothing and no
- * previous result is at risk while the inputs are still being read. The create
- * itself is exclusive, which is what actually enforces this; the check is here
- * to fail early and to say why. */
-static int check_output_free(const pipeline_config *cfg, char *error, size_t error_len)
+/* What is worth refusing is a file with something in it. A path that exists
+ * but is empty is what mktemp and shell redirection leave behind, and there is
+ * nothing there to lose. */
+static bool holds_data(const char *path)
 {
-    if (cfg->overwrite || access(cfg->output_path, F_OK) != 0)
-        return 0;
+    struct stat info;
 
-    snprintf(error, error_len, "%s already exists; pass --overwrite to replace it",
-             cfg->output_path);
-    return -1;
+    return stat(path, &info) == 0 && info.st_size > 0;
+}
+
+/* Checked before anything is opened, so a mistyped path costs nothing and no
+ * previous result is at risk while the inputs are still being read. */
+static int check_output(pipeline *p, const pipeline_config *cfg,
+                        char *error, size_t error_len)
+{
+    if (!cfg->overwrite && holds_data(cfg->output_path)) {
+        snprintf(error, error_len,
+                 "%s already holds data; pass --overwrite to replace it",
+                 cfg->output_path);
+        return -1;
+    }
+
+    /* Where nothing is at the path, the create stays exclusive, so a file
+     * appearing in between is not quietly replaced. Where an empty one is
+     * already there it has to be truncated instead. */
+    p->may_replace = cfg->overwrite || access(cfg->output_path, F_OK) == 0;
+    return 0;
 }
 
 static int open_inputs(pipeline *p, const pipeline_config *cfg, char *error, size_t error_len)
@@ -469,7 +486,7 @@ static int build_buffers(pipeline *p, const pipeline_config *cfg, char *error, s
 static int open_output(pipeline *p, const pipeline_config *cfg, char *error, size_t error_len)
 {
     p->out = h5writer_create(cfg->output_path, cm_bam_nref(p->bam), p->ref_cap,
-                             cfg->overwrite);
+                             p->may_replace);
     if (!p->out) {
         snprintf(error, error_len, "out of memory");
         return -1;
@@ -532,7 +549,7 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
         return -1;
     }
 
-    if (check_output_free(cfg, error, error_len) < 0 ||
+    if (check_output(&p, cfg, error, error_len) < 0 ||
         open_inputs(&p, cfg, error, error_len) < 0 ||
         build_buffers(&p, cfg, error, error_len) < 0 ||
         open_output(&p, cfg, error, error_len) < 0)

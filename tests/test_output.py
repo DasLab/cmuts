@@ -21,7 +21,7 @@ def test_refuses_to_replace_an_existing_file(data, tmp_path):
     attempt = try_cmuts(data, output)
 
     assert attempt.returncode != 0
-    assert "already exists" in attempt.stderr
+    assert "already holds data" in attempt.stderr
     assert read_summary(output) == first, "the first result is untouched"
 
 
@@ -42,6 +42,15 @@ def test_a_run_that_would_fail_destroys_nothing(data, datasets, tmp_path):
 
     assert attempt.returncode != 0
     assert read_summary(output) == first
+
+
+def test_an_empty_file_is_not_worth_protecting(data, tmp_path):
+    """mktemp and shell redirection both leave one behind, and there is nothing
+    in it to lose."""
+    output = tmp_path / "reserved.h5"
+    output.touch()
+
+    assert run_cmuts(data, output).kept > 0
 
 
 def test_a_file_that_is_not_ours_is_left_alone(data, tmp_path):
