@@ -18,7 +18,12 @@
  * of stream; anything lower is a read error. */
 #define SAM_END_OF_FILE (-1)
 
-static const char TAG_MD[2] = { 'M', 'D' };
+/* Everything a cm_bam_record is made of, and nothing else. CRAM keeps the rest
+ * -- names, mate fields, auxiliary tags -- in blocks of their own, so what is
+ * never read need not be decompressed. Adding a field to the record means
+ * adding it here, or it arrives empty. */
+#define REQUIRED_FIELDS (SAM_FLAG | SAM_RNAME | SAM_POS | SAM_MAPQ | \
+                         SAM_CIGAR | SAM_SEQ | SAM_QUAL)
 
 /* SAM spells "no qualities" as a QUAL field of "*", which BAM stores as a
  * leading 0xff in an otherwise full-length quality array. */
@@ -68,6 +73,15 @@ static uint64_t size_of(const char *path)
 /* Lifetime                                                                  */
 /* ------------------------------------------------------------------------ */
 
+/* Only CRAM stores fields separately enough to skip any, and only CRAM accepts
+ * the option. Failing to set it costs nothing but speed, so it is not a reason
+ * to refuse the file. */
+static void limit_decoding(cm_bam_reader *reader)
+{
+    if (reader->file->format.format == cram)
+        (void)hts_set_opt(reader->file, CRAM_OPT_REQUIRED_FIELDS, REQUIRED_FIELDS);
+}
+
 static void reader_free(cm_bam_reader *reader)
 {
     if (reader->record)
@@ -90,6 +104,8 @@ cm_bam_reader *cm_bam_open(const char *path)
         reader_free(reader);
         return NULL;
     }
+
+    limit_decoding(reader);
 
     reader->header = sam_hdr_read(reader->file);
     if (!reader->header) {
@@ -142,12 +158,6 @@ int cm_bam_set_threads(cm_bam_reader *reader, int threads)
 /* Field extraction                                                          */
 /* ------------------------------------------------------------------------ */
 
-static const char *md_tag(const bam1_t *record)
-{
-    const uint8_t *tag = bam_aux_get(record, TAG_MD);
-    return tag ? bam_aux2Z(tag) : NULL;
-}
-
 static const uint8_t *packed_sequence(const bam1_t *record)
 {
     return record->core.l_qseq > 0 ? bam_get_seq(record) : NULL;
@@ -171,7 +181,6 @@ void cm_bam_record_view(const bam1_t *record, cm_bam_record *out)
     out->mapq    = record->core.qual;
     out->cigar   = bam_get_cigar(record);
     out->n_cigar = record->core.n_cigar;
-    out->md      = md_tag(record);
     out->seq     = packed_sequence(record);
     out->qual    = quality_scores(record);
     out->l_qseq  = record->core.l_qseq;

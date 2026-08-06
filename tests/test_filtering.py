@@ -6,7 +6,7 @@ import os
 import pytest
 
 from conftest import SHAPES
-from support import Dataset, converted, run_cmuts, samtools_kept
+from support import Dataset, converted, outputs_agree, run_cmuts, samtools_kept
 
 
 @contextlib.contextmanager
@@ -78,13 +78,17 @@ def test_rejecting_everything_leaves_a_valid_file(datasets, tmp_path, shape):
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_every_format_gives_the_same_answer(datasets, tmp_path, fmt, filters):
     """Filtering is over what a record says, not how it was stored."""
-    data = converted(datasets("plain"), tmp_path, fmt)
+    plain = datasets("plain")
+    data = converted(plain, tmp_path, fmt)
     summary = run_cmuts(data, tmp_path / "out.h5", **filters)
 
     assert summary.kept == samtools_kept(data, **filters)
     assert summary.kept + summary.rejected == data.mapped
     assert summary.unmapped == data.unmapped
     assert summary.rows == data.touched
+
+    run_cmuts(plain, tmp_path / "bam.h5", **filters)
+    assert outputs_agree(tmp_path / "out.h5", tmp_path / "bam.h5")
 
 
 def test_cram_decodes_against_the_reference_it_was_given(datasets, tmp_path):

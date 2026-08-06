@@ -30,7 +30,6 @@ typedef struct {
     uint8_t         mapq;     /* mapping quality */
     const uint32_t *cigar;    /* raw ops; bam_cigar_op / bam_cigar_oplen decode */
     uint32_t        n_cigar;  /* number of ops in cigar */
-    const char     *md;       /* MD tag; NULL when the aligner omitted it */
     const uint8_t  *seq;      /* bases packed two to a byte; nuc_from_read reads
                                  one. NULL where the record stores no sequence */
     const uint8_t  *qual;     /* raw PHRED scores, no +33 offset; NULL if absent */
