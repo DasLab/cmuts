@@ -15,7 +15,7 @@ typedef struct {
     const char   *fasta_path;
     const char   *output_path;
     bool          overwrite;
-    filter_config filter;
+    filter_config filter_config;
     size_t      workers;         /* threads running the processing step */
     int         decode_threads;  /* htslib threads for BGZF inflation */
     size_t      queue_capacity;  /* reads that may be in transit at once */

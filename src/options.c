@@ -43,7 +43,7 @@ static const cli_option OPTIONS[] = {
                 "started." },
 
     { .group = "Filtering", .name = "min-mapq", .key = 'q', .type = OPT_INT,
-      .offset = offsetof(cli_args, pipeline.filter.min_mapq), .metavar = "N",
+      .offset = offsetof(cli_args, pipeline.filter_config.min_mapq), .metavar = "N",
       .help = "discard alignments below this mapping quality",
       .detail = "Compared numerically, as samtools does. MAPQ 255 means "
                 "\"unavailable\" rather than \"perfect\", but is treated as passing "
@@ -52,7 +52,7 @@ static const cli_option OPTIONS[] = {
                 "excluded regardless and counted separately.",
       .minimum = 0, .maximum = 255 },
     { .group = "Filtering", .name = "min-length", .type = OPT_INT,
-      .offset = offsetof(cli_args, pipeline.filter.min_length), .metavar = "N",
+      .offset = offsetof(cli_args, pipeline.filter_config.min_length), .metavar = "N",
       .help = "discard reads shorter than this",
       .detail = "Measured on the stored sequence, which is the length of the "
                 "molecule that was sequenced rather than the span it aligns to. "
@@ -61,7 +61,7 @@ static const cli_option OPTIONS[] = {
                 "applied.",
       .unset_label = "no limit", .minimum = 0, .maximum = INT32_MAX },
     { .group = "Filtering", .name = "max-length", .type = OPT_INT,
-      .offset = offsetof(cli_args, pipeline.filter.max_length), .metavar = "N",
+      .offset = offsetof(cli_args, pipeline.filter_config.max_length), .metavar = "N",
       .help = "discard reads longer than this",
       .detail = "Measured on the stored sequence, as with --min-length. Since "
                 "that counts insertions, an upper bound also removes reads far "
@@ -70,7 +70,7 @@ static const cli_option OPTIONS[] = {
                 "unset, no upper bound is applied.",
       .unset_label = "no limit", .minimum = 0, .maximum = INT32_MAX },
     { .group = "Filtering", .name = "strand", .key = 's', .type = OPT_ENUM,
-      .offset = offsetof(cli_args, pipeline.filter.strand), .metavar = "STRAND",
+      .offset = offsetof(cli_args, pipeline.filter_config.strand), .metavar = "STRAND",
       .help = "keep alignments on this strand",
       .detail = "Tests the alignment's own reverse bit, which for single-end "
                 "reads is the strand the read came from. It says nothing about "

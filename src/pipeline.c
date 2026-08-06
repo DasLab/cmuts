@@ -47,7 +47,7 @@ typedef struct {
     progress      *bar;
     tally_config   tally_config;
     bool           may_replace;
-    filter_config  filter;
+    filter_config  filter_config;
     size_t         batch;
     size_t         ref_cap;    /* longest reference, sizing every accumulator */
 } pipeline;
@@ -350,7 +350,7 @@ static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_
             break;
         }
 
-        if (!filter_accepts(&p->filter, &rec)) {
+        if (!filter_accepts(&p->filter_config, &rec)) {
             l.rejected++;
             continue;
         }
@@ -417,7 +417,7 @@ pipeline_config pipeline_defaults(void)
         .queue_capacity = 4096,
         .batch          = 64,
         .live_refs      = 0,  /* derived from the longest reference */
-        .filter         = filter_defaults(),
+        .filter_config  = filter_defaults(),
     };
 }
 
@@ -531,10 +531,10 @@ static int build_buffers(pipeline *p, const pipeline_config *cfg, char *error, s
     size_t carriers = cfg->queue_capacity + (cfg->workers + 2) * cfg->batch;
     size_t live;
 
-    p->batch   = cfg->batch;
-    p->filter  = cfg->filter;
-    p->ref_cap = (size_t)cm_bam_max_reflen(p->bam);
-    live       = cfg->live_refs ? cfg->live_refs : derive_live_refs(p->ref_cap);
+    p->batch         = cfg->batch;
+    p->filter_config = cfg->filter_config;
+    p->ref_cap       = (size_t)cm_bam_max_reflen(p->bam);
+    live             = cfg->live_refs ? cfg->live_refs : derive_live_refs(p->ref_cap);
 
     p->work      = queue_create(cfg->queue_capacity);
     p->completed = queue_create(live);
