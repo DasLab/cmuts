@@ -14,9 +14,11 @@ HDF5_LIBS   := $(shell pkg-config --libs   hdf5   2>/dev/null || echo -lhdf5)
 CFLAGS   := -std=c11 -O2 $(WARNINGS) -pthread -Iinclude $(HTS_CFLAGS) $(HDF5_CFLAGS) -MMD -MP
 LDLIBS   := $(HTS_LIBS) $(HDF5_LIBS) -pthread
 
-# DESTDIR is prepended only at install time, so that a package can be staged
-# into a directory that is not where it will finally live.
-PREFIX  ?= /usr/local
+# Defaults under the home directory so that installing needs no privileges and
+# works on machines where /usr/local is not writable. DESTDIR is prepended only
+# at install time, so that a package can be staged somewhere other than where
+# it will finally live.
+PREFIX  ?= $(HOME)/.local
 BINDIR  ?= $(PREFIX)/bin
 INSTALL ?= install
 
