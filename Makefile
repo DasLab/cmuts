@@ -81,13 +81,14 @@ $(BUILD)/tools/%.o: tools/%.c | $(BUILD)/tools
 $(BUILD)/src $(BUILD)/tools:
 	mkdir -p $@
 
-install: $(BIN) $(GEN_BIN)
+# cmuts alone. The generator writes test fixtures and benchmark inputs, which
+# is work done from the build tree; nothing looks for it on PATH.
+install: $(BIN)
 	$(INSTALL) -d $(DESTDIR)$(BINDIR)
 	$(INSTALL) -m 755 $(BIN) $(DESTDIR)$(BINDIR)/$(NAME)
-	$(INSTALL) -m 755 $(GEN_BIN) $(DESTDIR)$(BINDIR)/$(GEN_NAME)
 
 uninstall:
-	rm -f $(DESTDIR)$(BINDIR)/$(NAME) $(DESTDIR)$(BINDIR)/$(GEN_NAME)
+	rm -f $(DESTDIR)$(BINDIR)/$(NAME)
 
 # Prefers a virtual environment holding the test dependencies, which the
 # programs themselves do not need:
