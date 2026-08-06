@@ -65,9 +65,12 @@ install: $(BIN) $(GEN_BIN)
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(NAME) $(DESTDIR)$(BINDIR)/$(GEN_NAME)
 
+check: $(BIN) $(GEN_BIN)
+	tests/run.sh
+
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all clean install uninstall
+.PHONY: all check clean install uninstall
 
 -include $(DEP)
