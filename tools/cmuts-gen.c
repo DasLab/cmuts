@@ -191,13 +191,19 @@ typedef struct {
 static int parse_one(spec *out, const char *name, const char *text,
                      char *error, size_t error_len)
 {
-    char reason[ERROR_MAX];
+    /* The option's name goes in first and the reason is written after it, so
+     * there is no second buffer whose contents might not fit once the two are
+     * put together. */
+    int prefix = snprintf(error, error_len, "--%s: ", name);
 
-    if (spec_parse(out, text, reason, sizeof reason) == 0)
-        return 0;
+    if (prefix < 0 || (size_t)prefix >= error_len)
+        return -1;
 
-    snprintf(error, error_len, "--%s: %s", name, reason);
-    return -1;
+    if (spec_parse(out, text, error + prefix, error_len - (size_t)prefix) != 0)
+        return -1;
+
+    error[0] = '\0';
+    return 0;
 }
 
 static int build_model(sim_model *model, layout_specs *layout, const gen_args *args,
