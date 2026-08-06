@@ -40,6 +40,7 @@ typedef struct {
     itempool      *items;
     ctxpool       *contexts;
     h5writer      *out;
+    filter_config  filter;
     size_t         batch;
     size_t         ref_cap;    /* longest reference, sizing every accumulator */
 } pipeline;
@@ -167,6 +168,7 @@ static void *worker_main(void *arg)
 typedef struct {
     size_t total;
     size_t unmapped;
+    size_t filtered;
 } loader_counts;
 
 static void dispatch_batch(pipeline *p, refctx *ctx, void **batch, size_t *n)
@@ -220,8 +222,15 @@ static int loader_main(pipeline *p, loader_counts *counts, char *error, size_t e
     while ((status = cm_bam_next(p->bam, &rec)) == CM_ITER_OK) {
         counts->total++;
 
+        /* Unmapped reads are counted apart from the filtered ones: they belong
+         * to no reference at all, rather than having failed a criterion. */
         if (rec.flag & BAM_FUNMAP) {
             counts->unmapped++;
+            continue;
+        }
+
+        if (!filter_accepts(&p->filter, &rec)) {
+            counts->filtered++;
             continue;
         }
 
@@ -336,6 +345,7 @@ pipeline_config pipeline_defaults(void)
         .queue_capacity = 4096,
         .batch          = 64,
         .live_refs      = 0,  /* derived from the longest reference */
+        .filter         = { .min_mapq = 0 },
     };
 }
 
@@ -416,6 +426,7 @@ static int build_buffers(pipeline *p, const pipeline_config *cfg, char *error, s
     size_t live;
 
     p->batch   = cfg->batch;
+    p->filter  = cfg->filter;
     p->ref_cap = (size_t)cm_bam_max_reflen(p->bam);
     live       = cfg->live_refs ? cfg->live_refs : derive_live_refs(p->ref_cap);
 
@@ -496,12 +507,26 @@ static int start_workers(worker *workers, size_t n, pipeline *p, size_t *started
     return 0;
 }
 
+/* Totals for the run as a whole, which belong to no single reference. Every
+ * read is accounted for by exactly one of them: total = unmapped + filtered +
+ * whatever reached the accumulators. */
+static int write_run_counts(h5writer *out, const loader_counts *counts)
+{
+    if (h5writer_count(out, "reads_total", counts->total) < 0 ||
+        h5writer_count(out, "reads_unmapped", counts->unmapped) < 0 ||
+        h5writer_count(out, "reads_filtered", counts->filtered) < 0)
+        return -1;
+
+    return 0;
+}
+
 static void collect_stats(pipeline_stats *stats, const consumer *cons,
                           const loader_counts *counts, const worker *workers, size_t n)
 {
     *stats = cons->stats;
     stats->reads_total    = counts->total;
     stats->reads_unmapped = counts->unmapped;
+    stats->reads_filtered = counts->filtered;
 
     for (size_t i = 0; i < n; i++)
         stats->reads_processed += workers[i].processed;
@@ -549,8 +574,7 @@ int pipeline_run(const pipeline_config *cfg, pipeline_stats *stats,
 
     /* The consumer has been joined, so the writer is again reachable from one
      * thread only and the run totals can be attached. */
-    if (status == 0 && (cons.status < 0 ||
-                        h5writer_counts(p.out, counts.total, counts.unmapped) < 0)) {
+    if (status == 0 && (cons.status < 0 || write_run_counts(p.out, &counts) < 0)) {
         snprintf(error, error_len, "%s: %s", cfg->output_path, h5writer_error(p.out));
         status = -1;
     }

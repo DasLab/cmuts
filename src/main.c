@@ -12,8 +12,9 @@
 
 static void print_stats(const pipeline_stats *stats)
 {
-    printf("  reads         %zu read, %zu unmapped, %zu processed\n",
-           stats->reads_total, stats->reads_unmapped, stats->reads_processed);
+    printf("  reads         %zu read, %zu unmapped, %zu filtered, %zu processed\n",
+           stats->reads_total, stats->reads_unmapped, stats->reads_filtered,
+           stats->reads_processed);
     printf("  references    %zu written\n", stats->refs_completed);
     printf("  coverage      %.0f\n", stats->coverage_total);
     printf("  mutations     %.0f\n", stats->mutations_total);

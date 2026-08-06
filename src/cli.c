@@ -31,7 +31,8 @@ typedef struct {
     const char *group;     /* heading this option appears under in the help */
     const char *name;      /* long form */
     char        key;       /* short form, or 0 for none */
-    opt_type    type;
+    opt_type    type;      /* must match the destination field's C type: the
+                              value is written through a pointer of that type */
     size_t      offset;    /* destination within cli_args */
     const char *metavar;   /* argument placeholder; NULL when it takes none */
     const char *help;      /* one line, for the help output */
@@ -65,6 +66,16 @@ static const cli_option OPTIONS[] = {
       "Results are written as one row per reference, with references that "
       "received no reads left as NaN.",
       true, 0, 0, false },
+
+    { "Filtering", "min-mapq", 'q', OPT_INT,
+      offsetof(cli_args, pipeline.filter.min_mapq), "N",
+      "discard alignments below this mapping quality",
+      "Compared numerically, as samtools does. MAPQ 255 means \"unavailable\" "
+      "rather than \"perfect\", but is treated as passing any threshold, since "
+      "an aligner that emits it throughout would otherwise have all of its "
+      "output discarded. Unmapped reads are excluded regardless and counted "
+      "separately.",
+      false, 0, 255, false },
 
     { "Performance", "workers", 'j', OPT_SIZE,
       offsetof(cli_args, pipeline.workers), "N",

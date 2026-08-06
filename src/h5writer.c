@@ -15,9 +15,6 @@
 
 #define DATASET_REFERENCE "reference"
 
-#define ATTRIBUTE_READS_TOTAL    "reads_total"
-#define ATTRIBUTE_READS_UNMAPPED "reads_unmapped"
-
 /* Chunks are sized by bytes rather than rows so that a file of few long
  * references and one of many short references both land near this figure. */
 #define TARGET_CHUNK_BYTES (1u << 20)
@@ -309,7 +306,7 @@ int h5writer_names(h5writer *w, const char *const *names, int32_t n_refs)
     return status < 0 ? fail(w, "unable to write the reference names") : 0;
 }
 
-static int write_count(h5writer *w, const char *name, size_t value)
+int h5writer_count(h5writer *w, const char *name, size_t value)
 {
     uint64_t stored  = value;
     hid_t    space   = H5Screate(H5S_SCALAR);
@@ -329,12 +326,4 @@ static int write_count(h5writer *w, const char *name, size_t value)
         H5Sclose(space);
 
     return status < 0 ? fail(w, "unable to write a run total") : 0;
-}
-
-int h5writer_counts(h5writer *w, size_t reads_total, size_t reads_unmapped)
-{
-    if (write_count(w, ATTRIBUTE_READS_TOTAL, reads_total) < 0)
-        return -1;
-
-    return write_count(w, ATTRIBUTE_READS_UNMAPPED, reads_unmapped);
 }

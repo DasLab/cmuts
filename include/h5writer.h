@@ -33,8 +33,8 @@ int h5writer_names(h5writer *w, const char *const *names, int32_t n_refs);
  * Values past len are left at the fill value. */
 int h5writer_row(h5writer *w, int32_t tid, size_t len, const accum *acc);
 
-/* Run-level totals, attached to the file root. Unmapped reads belong to no
- * reference and so have no row of their own. */
-int h5writer_counts(h5writer *w, size_t reads_total, size_t reads_unmapped);
+/* Attaches a run-level total to the file root, for the counts that belong to
+ * no single reference and so have no row of their own. */
+int h5writer_count(h5writer *w, const char *name, size_t value);
 
 const char *h5writer_error(const h5writer *w);

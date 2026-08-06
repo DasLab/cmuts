@@ -7,10 +7,13 @@
 
 #include <stddef.h>
 
+#include "filter.h"
+
 typedef struct {
-    const char *bam_path;
-    const char *fasta_path;
-    const char *output_path;
+    const char   *bam_path;
+    const char   *fasta_path;
+    const char   *output_path;
+    filter_config filter;
     size_t      workers;         /* threads running the processing step */
     int         decode_threads;  /* htslib threads for BGZF inflation */
     size_t      queue_capacity;  /* reads that may be in transit at once */
@@ -24,6 +27,7 @@ pipeline_config pipeline_defaults(void);
 typedef struct {
     size_t reads_total;
     size_t reads_unmapped;
+    size_t reads_filtered;
     size_t reads_processed;
     size_t refs_completed;
 
