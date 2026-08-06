@@ -46,6 +46,10 @@ typedef struct {
     const char *help;      /* one line, for the help output */
     const char *detail;    /* paragraph for manual pages; NULL to reuse help */
     bool        required;
+    /* Options that need not be applied at all carry the word the help prints
+     * in place of their default, which is the value meaning "not applied".
+     * NULL where every value is a real setting. */
+    const char *unset_label;
     long        minimum;   /* bounds for the numeric types */
     long        maximum;
     bool        hidden;    /* kept out of the help, still described by JSON */
@@ -94,6 +98,19 @@ static const cli_option OPTIONS[] = {
                 "otherwise have all of its output discarded. Unmapped reads are "
                 "excluded regardless and counted separately.",
       .minimum = 0, .maximum = 255 },
+    { .group = "Filtering", .name = "min-length", .type = OPT_INT,
+      .offset = offsetof(cli_args, pipeline.filter.min_length), .metavar = "N",
+      .help = "discard reads shorter than this",
+      .detail = "Measured on the stored sequence, so a hard-clipped read counts "
+                "only the bases the aligner kept. Left unset, no lower bound is "
+                "applied.",
+      .unset_label = "no limit", .minimum = 0, .maximum = 1 << 24 },
+    { .group = "Filtering", .name = "max-length", .type = OPT_INT,
+      .offset = offsetof(cli_args, pipeline.filter.max_length), .metavar = "N",
+      .help = "discard reads longer than this",
+      .detail = "Measured on the stored sequence, as with --min-length. Left "
+                "unset, no upper bound is applied.",
+      .unset_label = "no limit", .minimum = 0, .maximum = 1 << 24 },
     { .group = "Filtering", .name = "strand", .key = 's', .type = OPT_ENUM,
       .offset = offsetof(cli_args, pipeline.filter.strand), .metavar = "STRAND",
       .help = "keep alignments on this strand",
@@ -131,11 +148,12 @@ static const cli_option OPTIONS[] = {
       .minimum = 1, .maximum = 1 << 16 },
     { .group = "Performance", .name = "live-refs", .type = OPT_SIZE,
       .offset = offsetof(cli_args, pipeline.live_refs), .metavar = "N",
-      .help = "references in flight; 0 derives it from memory",
+      .help = "references in flight",
       .detail = "How far the loader may run ahead of a worker that stalls on one "
-                "read. Zero derives a count from the longest reference and a "
-                "memory budget.",
-      .minimum = 0, .maximum = 1 << 16 },
+                "read. Left unset, a count is derived from the longest reference "
+                "and a memory budget, which keeps many short references generous "
+                "without letting a few very long ones exhaust memory.",
+      .unset_label = "derived from memory", .minimum = 0, .maximum = 1 << 16 },
 
     { .group = "Information", .name = "help", .key = 'h', .type = OPT_FLAG,
       .offset = offsetof(cli_args, show_help),
@@ -315,6 +333,13 @@ static void format_default(const cli_option *opt, const cli_args *defaults,
                            char *out, size_t size)
 {
     const char *field = (const char *)defaults + opt->offset;
+
+    /* An option that need not be applied says so rather than showing the value
+     * that stands for not applying it. */
+    if (opt->unset_label) {
+        snprintf(out, size, " (default: %s)", opt->unset_label);
+        return;
+    }
 
     switch (opt->type) {
         case OPT_SIZE:
@@ -521,6 +546,7 @@ static void print_json_option(FILE *out, const cli_option *opt, const cli_args *
     fputs(",\n      \"detail\": ", out);    print_json_string(out, opt->detail);
     fprintf(out, ",\n      \"required\": %s", opt->required ? "true" : "false");
     fprintf(out, ",\n      \"hidden\": %s", opt->hidden ? "true" : "false");
+    fputs(",\n      \"unset_label\": ", out); print_json_string(out, opt->unset_label);
     fputs(",\n      \"choices\": ", out);   print_json_choices(out, opt);
     fputs(",\n      \"default\": ", out);   print_json_default(out, opt, defaults);
     fputs(",\n", out);                      print_json_bounds(out, opt);

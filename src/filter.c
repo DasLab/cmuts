@@ -8,8 +8,10 @@
 filter_config filter_defaults(void)
 {
     return (filter_config){
-        .min_mapq = 0,
-        .strand   = FILTER_STRAND_BOTH,
+        .min_mapq   = 0,
+        .strand     = FILTER_STRAND_BOTH,
+        .min_length = FILTER_LENGTH_UNBOUNDED,
+        .max_length = FILTER_LENGTH_UNBOUNDED,
     };
 }
 
@@ -33,7 +35,22 @@ static bool strand_accepted(const filter_config *filter, const cm_bam_record *re
     }
 }
 
+/* Length is that of the stored sequence, so a hard-clipped read counts only the
+ * bases the aligner kept, not those it trimmed away. */
+static bool length_accepted(const filter_config *filter, const cm_bam_record *read)
+{
+    if (filter->min_length != FILTER_LENGTH_UNBOUNDED && read->l_qseq < filter->min_length)
+        return false;
+
+    if (filter->max_length != FILTER_LENGTH_UNBOUNDED && read->l_qseq > filter->max_length)
+        return false;
+
+    return true;
+}
+
 bool filter_accepts(const filter_config *filter, const cm_bam_record *read)
 {
-    return mapping_quality_accepted(filter, read) && strand_accepted(filter, read);
+    return mapping_quality_accepted(filter, read) &&
+           strand_accepted(filter, read) &&
+           length_accepted(filter, read);
 }

@@ -28,9 +28,16 @@ typedef enum {
  *
  * The fields are int rather than narrower or enumerated types because the
  * command line writes them directly, through a pointer of the declared type. */
+/* A length bound of this is not applied at all. It doubles as the identity for
+ * either bound: no read is shorter than zero, and an absent upper bound is not
+ * a length. */
+#define FILTER_LENGTH_UNBOUNDED 0
+
 typedef struct {
-    int min_mapq;  /* 0 to 255; alignments scoring below it are discarded */
-    int strand;    /* a filter_strand */
+    int min_mapq;    /* 0 to 255; alignments scoring below it are discarded */
+    int strand;      /* a filter_strand */
+    int min_length;  /* FILTER_LENGTH_UNBOUNDED for no lower bound */
+    int max_length;  /* FILTER_LENGTH_UNBOUNDED for no upper bound */
 } filter_config;
 
 filter_config filter_defaults(void);
