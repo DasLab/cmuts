@@ -239,7 +239,7 @@ static int write_field(h5writer *w, accum_field_id id, int32_t tid, size_t len,
         return fail(w, "unable to select an output row");
 
     status = H5Dwrite(w->dataset[id], H5T_NATIVE_DOUBLE, memspace, filespace,
-                      H5P_DEFAULT, accum_data(acc, id));
+                      H5P_DEFAULT, accum_const_data(acc, id));
 
     H5Sclose(memspace);
     H5Sclose(filespace);

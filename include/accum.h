@@ -58,8 +58,17 @@ void accum_zero(accum *acc, size_t len);
  * scalar. Both accumulators must have the same capacity. */
 void accum_add(accum *dst, const accum *src, size_t len);
 
-/* Storage for one field: len values for ACCUM_PER_BASE, one for ACCUM_SCALAR. */
-static inline double *accum_data(const accum *acc, accum_field_id id)
+/* Storage for one field: len values for ACCUM_PER_BASE, one for ACCUM_SCALAR.
+ *
+ * Two forms rather than one taking a const accumulator and handing back a
+ * writable pointer, which would let anything holding a finished reference
+ * quietly alter it. */
+static inline double *accum_data(accum *acc, accum_field_id id)
+{
+    return acc->slot[id];
+}
+
+static inline const double *accum_const_data(const accum *acc, accum_field_id id)
 {
     return acc->slot[id];
 }

@@ -7,6 +7,7 @@
 
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 struct queue {
@@ -115,6 +116,15 @@ size_t queue_push(queue *q, void *const *items, size_t n)
     pthread_mutex_unlock(&q->lock);
 
     return pushed;
+}
+
+void queue_push_all(queue *q, void *const *items, size_t n)
+{
+    if (queue_push(q, items, n) == n)
+        return;
+
+    fputs("cmuts: a closed queue refused work that had nowhere else to go\n", stderr);
+    abort();
 }
 
 size_t queue_pop(queue *q, void **items, size_t n)

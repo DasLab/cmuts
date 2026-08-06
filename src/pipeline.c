@@ -50,7 +50,7 @@ static void finish_reference(pipeline *p, refctx *ctx)
 {
     void *handle = ctx;
 
-    queue_push(p->completed, &handle, 1);
+    queue_push_all(p->completed, &handle, 1);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -174,7 +174,7 @@ static void dispatch_batch(pipeline *p, refctx *ctx, void **batch, size_t *n)
         return;
 
     refctx_acquire(ctx, (int)*n);
-    queue_push(p->work, batch, *n);
+    queue_push_all(p->work, batch, *n);
     *n = 0;
 }
 

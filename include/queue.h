@@ -22,6 +22,16 @@ void   queue_destroy(queue *q);
  * accepted, which is short of n only when the queue is closed. */
 size_t queue_push(queue *q, void *const *items, size_t n);
 
+/* Appends every item, and stops the program if the queue refuses any.
+ *
+ * For most callers a refusal cannot happen and could not be handled if it did:
+ * a queue refuses only once closed, and every queue here is closed strictly
+ * after the producers feeding it have finished. What a short push would drop
+ * is a unit of work or a pooled object, so the result would be an output
+ * quietly missing rows, or a wait for something that is never coming. Neither
+ * is worth continuing from, and neither announces itself. */
+void queue_push_all(queue *q, void *const *items, size_t n);
+
 /* Removes up to n items, blocking until at least one arrives. Returns 0 only
  * once the queue is both closed and drained. */
 size_t queue_pop(queue *q, void **items, size_t n);

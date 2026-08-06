@@ -171,5 +171,5 @@ void ctxpool_give(ctxpool *p, refctx *ctx)
 {
     accum_zero(&ctx->acc, ctx->len);
     ctx->len = 0;
-    queue_push(p->available, (void *const *)&ctx, 1);
+    queue_push_all(p->available, (void *const *)&ctx, 1);
 }

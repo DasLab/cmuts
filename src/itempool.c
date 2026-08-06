@@ -92,5 +92,5 @@ void itempool_give_many(itempool *p, void **items, size_t n)
     for (size_t i = 0; i < n; i++)
         ((workitem *)items[i])->ctx = NULL;
 
-    queue_push(p->available, items, n);
+    queue_push_all(p->available, items, n);
 }
