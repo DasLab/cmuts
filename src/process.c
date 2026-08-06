@@ -73,9 +73,18 @@ static void apply_operation(uint32_t op, uint32_t len, hts_pos_t pos,
     }
 }
 
-void process(const cm_bam_record *read, const cm_fasta_record *ref, accum *target)
+void process_config_build(process_config *config)
+{
+    phred_build(&config->quality);
+}
+
+void process(const cm_bam_record *read, const cm_fasta_record *ref,
+             const process_config *config, accum *target)
 {
     hts_pos_t pos = read->pos;
+
+    /* Nothing consults it until there is a policy to consult it about. */
+    (void)config;
 
     for (uint32_t i = 0; i < read->n_cigar; i++) {
         uint32_t op  = bam_cigar_op(read->cigar[i]);
