@@ -81,9 +81,8 @@ static const cli_option OPTIONS[] = {
     { .group = "Performance", .name = "decode-threads", .type = OPT_INT,
       .offset = offsetof(cli_args, pipeline.decode_threads), .metavar = "N",
       .help = "htslib threads for BGZF decompression",
-      .detail = "Parallelizes inflation only; reading and record parsing stay "
-                "sequential. Worth raising when the loader is the bottleneck, and "
-                "pointless on small files.",
+      .detail = "Throughput is flat above the default, so this is a cap rather "
+                "than a dial: lower it when the cores are not there to spare.",
       .minimum = 0, .maximum = 64 },
     { .group = "Performance", .name = "queue-capacity", .type = OPT_SIZE,
       .offset = offsetof(cli_args, pipeline.queue_capacity), .metavar = "N",

@@ -348,7 +348,7 @@ pipeline_config pipeline_defaults(void)
 {
     return (pipeline_config){
         .workers        = 4,
-        .decode_threads = 2,
+        .decode_threads = 4,
         .queue_capacity = 4096,
         .batch          = 64,
         .live_refs      = 0,  /* derived from the longest reference */
