@@ -7,6 +7,9 @@ build/
 # an SDK path, so it describes one machine rather than the project.
 compile_commands.json
 
+# Indexes an editor builds from the above, and rebuilds as readily.
+.cache/
+
 # Program output
 *.h5
 
