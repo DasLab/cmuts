@@ -588,6 +588,10 @@ cli_status cli_parse(const cli_spec *spec, int argc, char **argv, void *args)
     opterr = 0;
     optind = 1;
 
+    /* getopt keeps its state in globals, which is what makes it unsafe to call
+     * from more than one thread. Arguments are parsed before any thread exists,
+     * and optind is reset above so that a second parse starts afresh.
+     * NOLINTNEXTLINE(concurrency-mt-unsafe) */
     while ((found = getopt_long(argc, argv, shortopts, longopts, NULL)) != -1) {
         const cli_option *opt = found < OPTION_ID_BASE
                               ? option_by_key(spec, (char)found)
