@@ -25,7 +25,7 @@
 #define CACHED_CHUNKS 4
 #define CACHE_SLOTS   521
 
-#define DEFLATE_LEVEL 4
+#define DEFLATE_LEVEL 3
 
 struct h5writer {
     hid_t   file;
