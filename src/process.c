@@ -23,6 +23,7 @@
  * thread-independent: the accumulators never see it. */
 static void burn(hts_pos_t seed)
 {
+#if SYNTHETIC_LOAD > 0
     volatile double sink;
     double          x = (double)(seed | 1);
 
@@ -31,6 +32,9 @@ static void burn(hts_pos_t seed)
 
     sink = x;
     (void)sink;
+#else
+    (void)seed;
+#endif
 }
 
 static void add_span(double *field, hts_pos_t from, uint32_t len, size_t limit)
