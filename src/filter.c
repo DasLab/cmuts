@@ -48,9 +48,19 @@ static bool length_accepted(const filter_config *filter, const cm_bam_record *re
     return true;
 }
 
+/* A record may store no sequence at all, which SAM spells as a QUAL and SEQ of
+ * "*". There is nothing to compare against the reference, so such a read is
+ * turned away here rather than reaching a step that would have to invent an
+ * answer for it. */
+static bool sequence_present(const cm_bam_record *read)
+{
+    return read->seq != NULL;
+}
+
 bool filter_accepts(const filter_config *filter, const cm_bam_record *read)
 {
-    return mapping_quality_accepted(filter, read) &&
+    return sequence_present(read) &&
+           mapping_quality_accepted(filter, read) &&
            strand_accepted(filter, read) &&
            length_accepted(filter, read);
 }
