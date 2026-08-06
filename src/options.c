@@ -47,14 +47,19 @@ static const cli_option OPTIONS[] = {
     { .group = "Filtering", .name = "min-length", .type = OPT_INT,
       .offset = offsetof(cli_args, pipeline.filter.min_length), .metavar = "N",
       .help = "discard reads shorter than this",
-      .detail = "Measured on the stored sequence, so a hard-clipped read counts "
-                "only the bases the aligner kept. Left unset, no lower bound is "
+      .detail = "Measured on the stored sequence, which is the length of the "
+                "molecule that was sequenced rather than the span it aligns to. "
+                "Inserted and soft-clipped bases count; hard-clipped ones cannot, "
+                "being absent from the record. Left unset, no lower bound is "
                 "applied.",
       .unset_label = "no limit", .minimum = 0, .maximum = INT32_MAX },
     { .group = "Filtering", .name = "max-length", .type = OPT_INT,
       .offset = offsetof(cli_args, pipeline.filter.max_length), .metavar = "N",
       .help = "discard reads longer than this",
-      .detail = "Measured on the stored sequence, as with --min-length. Left "
+      .detail = "Measured on the stored sequence, as with --min-length. Since "
+                "that counts insertions, an upper bound also removes reads far "
+                "longer than the reference they align to: a read carrying a large "
+                "insertion is long even where its aligned span is ordinary. Left "
                 "unset, no upper bound is applied.",
       .unset_label = "no limit", .minimum = 0, .maximum = INT32_MAX },
     { .group = "Filtering", .name = "strand", .key = 's', .type = OPT_ENUM,
