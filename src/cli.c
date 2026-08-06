@@ -13,6 +13,7 @@
 
 #include <getopt.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -104,13 +105,13 @@ static const cli_option OPTIONS[] = {
       .detail = "Measured on the stored sequence, so a hard-clipped read counts "
                 "only the bases the aligner kept. Left unset, no lower bound is "
                 "applied.",
-      .unset_label = "no limit", .minimum = 0, .maximum = 1 << 24 },
+      .unset_label = "no limit", .minimum = 0, .maximum = INT32_MAX },
     { .group = "Filtering", .name = "max-length", .type = OPT_INT,
       .offset = offsetof(cli_args, pipeline.filter.max_length), .metavar = "N",
       .help = "discard reads longer than this",
       .detail = "Measured on the stored sequence, as with --min-length. Left "
                 "unset, no upper bound is applied.",
-      .unset_label = "no limit", .minimum = 0, .maximum = 1 << 24 },
+      .unset_label = "no limit", .minimum = 0, .maximum = INT32_MAX },
     { .group = "Filtering", .name = "strand", .key = 's', .type = OPT_ENUM,
       .offset = offsetof(cli_args, pipeline.filter.strand), .metavar = "STRAND",
       .help = "keep alignments on this strand",
