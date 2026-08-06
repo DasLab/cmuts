@@ -26,7 +26,12 @@ typedef struct itempool itempool;
 itempool *itempool_create(size_t capacity);
 void      itempool_destroy(itempool *p);
 
-/* Blocks while every item is checked out. This is what bounds the number of
- * reads resident in memory, whatever the size of the file. */
-workitem *itempool_take(itempool *p);
-void      itempool_give(itempool *p, workitem *item);
+/* Carriers move in groups for the same reason reads do: taken one at a time,
+ * the free list's lock is acquired twice per read, which costs more than the
+ * processing it protects and caps the pipeline well short of its throughput.
+ *
+ * Takes up to n, blocking only while the pool is completely exhausted, and
+ * returns how many were obtained. That may be fewer than asked for, which is
+ * not an error; it is what bounds the reads resident in memory. */
+size_t itempool_take_many(itempool *p, void **items, size_t n);
+void   itempool_give_many(itempool *p, void **items, size_t n);

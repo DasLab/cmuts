@@ -106,13 +106,18 @@ static void process_run(worker *w, void **slots, size_t n)
     refctx_sequence(ctx, &ref);
 
     for (size_t i = 0; i < n; i++) {
-        workitem     *item = slots[i];
-        cm_bam_record read;
+        const workitem *item = slots[i];
+        cm_bam_record   read;
 
         cm_bam_record_view(item->rec, &read);
         process(&read, &ref, &w->shadow);
-        itempool_give(w->pipe->items, item);
     }
+
+    /* The whole run is finished at the same moment, so it goes back in one
+     * piece. Nothing reads these carriers afterwards: process_batch scans for
+     * runs only at or beyond the current head, and every item before it has
+     * already been processed. */
+    itempool_give_many(w->pipe->items, slots, n);
 
     /* Cannot be the last handle: the shadow holds one on this reference. */
     if (refctx_release(ctx, (int)n))
@@ -208,6 +213,8 @@ static refctx *open_reference(pipeline *p, int32_t tid)
 static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_len)
 {
     void        **batch    = calloc(p->batch, sizeof *batch);
+    void        **spare    = calloc(p->batch, sizeof *spare);
+    size_t        held     = 0;  /* carriers drawn from the pool, not yet used */
     refctx       *current  = NULL;
     size_t        n        = 0;
     size_t        rejected = 0;  /* filtered reads for the reference in hand */
@@ -215,8 +222,10 @@ static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_
     int           status   = CM_ITER_EOF;
     int           result   = 0;
 
-    if (!batch) {
+    if (!batch || !spare) {
         snprintf(error, error_len, "out of memory");
+        free(batch);
+        free(spare);
         return -1;
     }
 
@@ -252,15 +261,23 @@ static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_
             continue;
         }
 
-        workitem *item = itempool_take(p->items);
-        if (!item) {
+        /* Carriers are drawn a batch at a time and spent one by one, so the
+         * pool's lock is taken once per batch rather than once per read. A
+         * carrier only ever moves from here into the dispatch batch, so the
+         * two together never hold more than a refill's worth. */
+        if (held == 0)
+            held = itempool_take_many(p->items, spare, p->batch);
+
+        if (held == 0) {
             snprintf(error, error_len, "no carrier available for a read");
             result = -1;
             break;
         }
 
+        workitem *item = spare[--held];
+
         if (!bam_copy1(item->rec, cm_bam_raw(p->bam))) {
-            itempool_give(p->items, item);
+            spare[held++] = item;
             snprintf(error, error_len, "unable to copy alignment record");
             result = -1;
             break;
@@ -275,6 +292,12 @@ static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_
 
     dispatch_batch(p, current, batch, &n);
     close_reference(p, current, rejected);
+
+    /* Whatever the reservoir still holds goes back, on every path out. */
+    if (held)
+        itempool_give_many(p->items, spare, held);
+
+    free(spare);
     free(batch);
 
     if (result == 0 && status == CM_ITER_ERROR) {
@@ -404,9 +427,10 @@ static int open_inputs(pipeline *p, const pipeline_config *cfg, char *error, siz
 
 static int build_buffers(pipeline *p, const pipeline_config *cfg, char *error, size_t error_len)
 {
-    /* Enough carriers for a full queue plus a batch in the hands of every
-     * worker, so the loader only ever waits on the queue itself. */
-    size_t carriers = cfg->queue_capacity + (cfg->workers + 1) * cfg->batch;
+    /* Enough carriers for a full queue, a batch in the hands of every worker,
+     * and two for the loader: one being filled and one held in reserve, since
+     * a short refill can leave it holding part of each. */
+    size_t carriers = cfg->queue_capacity + (cfg->workers + 2) * cfg->batch;
     size_t live;
 
     p->batch   = cfg->batch;

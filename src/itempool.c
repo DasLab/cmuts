@@ -82,15 +82,15 @@ void itempool_destroy(itempool *p)
     free(p);
 }
 
-workitem *itempool_take(itempool *p)
+size_t itempool_take_many(itempool *p, void **items, size_t n)
 {
-    workitem *item = NULL;
-
-    return queue_pop(p->available, (void **)&item, 1) == 1 ? item : NULL;
+    return queue_pop(p->available, items, n);
 }
 
-void itempool_give(itempool *p, workitem *item)
+void itempool_give_many(itempool *p, void **items, size_t n)
 {
-    item->ctx = NULL;
-    queue_push(p->available, (void *const *)&item, 1);
+    for (size_t i = 0; i < n; i++)
+        ((workitem *)items[i])->ctx = NULL;
+
+    queue_push(p->available, items, n);
 }
