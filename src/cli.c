@@ -42,10 +42,9 @@ static void report_rejected_option(const cli_spec *spec, int argc, char **argv,
         snprintf(rejected, sizeof rejected, "an option");
 
     if (needs_value)
-        fprintf(stderr, "%s: %s needs a value; try --help\n", spec->program, rejected);
+        fprintf(stderr, "%s: %s needs a value\n", spec->program, rejected);
     else
-        fprintf(stderr, "%s: unrecognized option %s; try --help\n",
-                spec->program, rejected);
+        fprintf(stderr, "%s: unrecognized option %s\n", spec->program, rejected);
 }
 
 static bool takes_argument(const cli_option *opt)
