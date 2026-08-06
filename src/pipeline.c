@@ -499,7 +499,10 @@ static int open_inputs(pipeline *p, const pipeline_config *cfg, char *error, siz
         return -1;
     }
 
-    if (cm_bam_set_threads(p->bam, cfg->decode_threads) < 0) {
+    /* Before any record is read, so that a CRAM decodes against the same
+     * reference its reads are compared to. */
+    if (cm_bam_set_reference(p->bam, cfg->fasta_path) < 0 ||
+        cm_bam_set_threads(p->bam, cfg->decode_threads) < 0) {
         snprintf(error, error_len, "%s", cm_bam_error(p->bam));
         return -1;
     }

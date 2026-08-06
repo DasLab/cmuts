@@ -1,9 +1,27 @@
 """Filtering agrees with samtools, and every read is accounted for."""
 
+import contextlib
+import os
+
 import pytest
 
 from conftest import SHAPES
-from support import run_cmuts, samtools_kept
+from support import Dataset, converted, run_cmuts, samtools_kept
+
+
+@contextlib.contextmanager
+def unreachable(path):
+    """Hides a file for the duration, so nothing can quietly fall back to it."""
+    aside = path.with_suffix(path.suffix + ".aside")
+    os.rename(path, aside)
+    try:
+        yield
+    finally:
+        os.rename(aside, path)
+
+# htslib reads all three, and which one a file is in cannot change what
+# survives a filter.
+FORMATS = ["bam", "sam", "cram"]
 
 # Combinations chosen so that each criterion is exercised alone, at a boundary,
 # and alongside the others.
@@ -54,3 +72,34 @@ def test_rejecting_everything_leaves_a_valid_file(datasets, tmp_path, shape):
     assert summary.kept == 0
     assert summary.rejected == data.mapped
     assert summary.rows == data.touched
+
+
+@pytest.mark.parametrize("filters", FILTERS, ids=describe)
+@pytest.mark.parametrize("fmt", FORMATS)
+def test_every_format_gives_the_same_answer(datasets, tmp_path, fmt, filters):
+    """Filtering is over what a record says, not how it was stored."""
+    data = converted(datasets("plain"), tmp_path, fmt)
+    summary = run_cmuts(data, tmp_path / "out.h5", **filters)
+
+    assert summary.kept == samtools_kept(data, **filters)
+    assert summary.kept + summary.rejected == data.mapped
+    assert summary.unmapped == data.unmapped
+    assert summary.rows == data.touched
+
+
+def test_cram_decodes_against_the_reference_it_was_given(datasets, tmp_path):
+    """A CRAM names its reference in its own header, by a path recorded when it
+    was written and a checksum that may be looked up remotely. Neither need be
+    the reference asked for. Here the recorded path is made unreachable, so
+    only --fasta can answer."""
+    data = converted(datasets("plain"), tmp_path, "cram")
+
+    moved = tmp_path / "elsewhere.fasta"
+    moved.write_bytes(data.fasta.read_bytes())
+    hidden = Dataset(bam=data.bam, fasta=moved, mapped=data.mapped,
+                     unmapped=data.unmapped, touched=data.touched)
+
+    expected = run_cmuts(datasets("plain"), tmp_path / "bam.h5")
+
+    with unreachable(data.fasta):
+        assert run_cmuts(hidden, tmp_path / "cram.h5") == expected

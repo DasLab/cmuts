@@ -76,6 +76,16 @@ void cm_bam_close(cm_bam_reader *reader)
         reader_free(reader);
 }
 
+int cm_bam_set_reference(cm_bam_reader *reader, const char *fasta_path)
+{
+    if (hts_set_opt(reader->file, CRAM_OPT_REFERENCE, fasta_path) < 0) {
+        reader->error = "unable to point the reader at the reference";
+        return -1;
+    }
+
+    return 0;
+}
+
 int cm_bam_set_threads(cm_bam_reader *reader, int threads)
 {
     if (threads < 1)

@@ -72,6 +72,24 @@ def generate(directory, name: str, **parameters) -> Dataset:
     )
 
 
+def converted(data: Dataset, directory, fmt: str) -> Dataset:
+    """The same alignments in another format.
+
+    CRAM stores sequence as differences from a reference, so it needs one to be
+    written as well as read; the totals are unchanged by the conversion.
+    """
+    if fmt == "bam":
+        return data
+
+    output = Path(directory) / f"converted.{fmt}"
+    flags = ("-T", str(data.fasta)) if fmt == "cram" else ()
+
+    _run(["samtools", "view", "-h", "-O", fmt.upper(), *flags, "-o", output, data.bam])
+
+    return Dataset(bam=output, fasta=data.fasta, mapped=data.mapped,
+                   unmapped=data.unmapped, touched=data.touched)
+
+
 # ---------------------------------------------------------------------------
 # What samtools says
 # ---------------------------------------------------------------------------

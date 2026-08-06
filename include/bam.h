@@ -44,6 +44,16 @@ typedef struct cm_bam_reader cm_bam_reader;
  * errno set by the underlying open. */
 cm_bam_reader *cm_bam_open(const char *path);
 
+/* Points CRAM decoding at the given reference.
+ *
+ * CRAM stores sequence as differences from a reference, and htslib finds that
+ * reference on its own: from the UR path written into the header when the file
+ * was made, or from an M5 checksum, which may reach a remote server. Neither
+ * need be the reference the caller means to work against, and nothing would
+ * say so. Setting it makes the file decoded from and the file compared against
+ * the same one. Harmless for SAM and BAM, which carry their own sequence. */
+int cm_bam_set_reference(cm_bam_reader *reader, const char *fasta_path);
+
 /* Fills out with the next alignment. Returns a cm_iter_status; on
  * CM_ITER_ERROR the cause is available from cm_bam_error(). */
 int cm_bam_next(cm_bam_reader *reader, cm_bam_record *out);
