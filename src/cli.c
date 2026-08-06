@@ -20,6 +20,34 @@
  * anything above the character range will do. */
 #define OPTION_ID_BASE 256
 
+/* What getopt returns for an option given without the value it needs. */
+#define MISSING_VALUE ':'
+
+/* Enough for a long option as anyone would write one. */
+#define REJECTED_MAX 64
+
+/* getopt records a short option in optopt, and for a long one leaves the
+ * identifier it was given instead, which names nothing a reader would know. A
+ * long one is read back from the word getopt stopped on. */
+static void report_rejected_option(const cli_spec *spec, int argc, char **argv,
+                                   bool needs_value)
+{
+    char rejected[REJECTED_MAX];
+
+    if (optopt > 0 && optopt < OPTION_ID_BASE)
+        snprintf(rejected, sizeof rejected, "-%c", optopt);
+    else if (optind >= 1 && optind <= argc)
+        snprintf(rejected, sizeof rejected, "%s", argv[optind - 1]);
+    else
+        snprintf(rejected, sizeof rejected, "an option");
+
+    if (needs_value)
+        fprintf(stderr, "%s: %s needs a value; try --help\n", spec->program, rejected);
+    else
+        fprintf(stderr, "%s: unrecognized option %s; try --help\n",
+                spec->program, rejected);
+}
+
 static bool takes_argument(const cli_option *opt)
 {
     return opt->type != OPT_FLAG;
@@ -56,9 +84,13 @@ static const cli_option *option_by_id(const cli_spec *spec, int id)
 /* getopt_long inputs, built from the table                                  */
 /* ------------------------------------------------------------------------ */
 
+/* The leading colon has getopt report a missing value apart from an option it
+ * does not know, which are different mistakes and want different words. */
 static void build_short_options(const cli_spec *spec, char *out, size_t size)
 {
     size_t n = 0;
+
+    out[n++] = ':';
 
     for (size_t i = 0; i < spec->n_options && n + 3 < size; i++) {
         if (!spec->options[i].key)
@@ -537,8 +569,9 @@ static bool answer(const cli_spec *spec, cli_action action)
 
 cli_status cli_parse(const cli_spec *spec, int argc, char **argv, void *args)
 {
+    size_t         shortopts_size = 2 * spec->n_options + 3;
     struct option *longopts  = calloc(spec->n_options + 1, sizeof *longopts);
-    char          *shortopts = calloc(2 * spec->n_options + 1, sizeof *shortopts);
+    char          *shortopts = calloc(shortopts_size, sizeof *shortopts);
     bool          *seen      = calloc(spec->n_options, sizeof *seen);
     cli_action     requested = CLI_STORE;
     cli_status     status    = CLI_ERROR;
@@ -550,7 +583,7 @@ cli_status cli_parse(const cli_spec *spec, int argc, char **argv, void *args)
     }
 
     memcpy(args, spec->defaults, spec->args_size);
-    build_short_options(spec, shortopts, 2 * spec->n_options + 1);
+    build_short_options(spec, shortopts, shortopts_size);
     build_long_options(spec, longopts);
 
     opterr = 0;
@@ -561,8 +594,8 @@ cli_status cli_parse(const cli_spec *spec, int argc, char **argv, void *args)
                               ? option_by_key(spec, (char)found)
                               : option_by_id(spec, found);
 
-        if (!opt) {
-            fprintf(stderr, "%s: unrecognized option; try --help\n", spec->program);
+        if (found == MISSING_VALUE || !opt) {
+            report_rejected_option(spec, argc, argv, found == MISSING_VALUE);
             goto done;
         }
 
