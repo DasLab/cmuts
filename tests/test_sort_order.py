@@ -8,24 +8,7 @@ import subprocess
 
 import pytest
 
-from support import try_cmuts, Dataset
-
-
-def reheadered(data, tmp_path, transform):
-    """The same alignments behind a header the transform has rewritten."""
-    header = subprocess.run(["samtools", "view", "-H", str(data.bam)],
-                            check=True, capture_output=True, text=True).stdout
-
-    path = tmp_path / "header.sam"
-    path.write_text(transform(header))
-
-    bam = tmp_path / "reheadered.bam"
-    with open(bam, "wb") as handle:
-        subprocess.run(["samtools", "reheader", str(path), str(data.bam)],
-                       check=True, stdout=handle, stderr=subprocess.DEVNULL)
-
-    return Dataset(bam=bam, fasta=data.fasta, mapped=data.mapped,
-                   unmapped=data.unmapped, touched=data.touched)
+from support import Dataset, reheadered, try_cmuts
 
 
 @pytest.fixture

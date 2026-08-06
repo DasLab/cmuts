@@ -8,14 +8,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
+#include "checksum.h"
 #include "error.h"
 
 struct refseq_source {
     cm_fasta_reader     *fasta;
     const cm_bam_reader *bam;
-    cm_fasta_record      record;   /* the record for ordinal loaded - 1 */
-    int32_t              loaded;   /* number of records consumed so far */
+    cm_fasta_record      record;        /* the record for ordinal loaded - 1 */
+    int32_t              loaded;        /* number of records consumed so far */
+    cm_bam_sq_cursor     declarations;  /* the header's @SQ lines, in step */
     char                 error[CM_ERROR_MAX];
 };
 
@@ -32,6 +35,8 @@ refseq_source *refseq_open(const char *fasta_path, const cm_bam_reader *reader)
     }
 
     src->bam = reader;
+    cm_bam_sq_open(&src->declarations, reader);
+
     return src;
 }
 
@@ -48,28 +53,84 @@ void refseq_close(refseq_source *src)
 /* Validation                                                                */
 /* ------------------------------------------------------------------------ */
 
+static bool name_matches(refseq_source *src, int32_t tid)
+{
+    const char *expected = cm_bam_refname(src->bam, tid);
+
+    if (expected && strcmp(src->record.name, expected) == 0)
+        return true;
+
+    snprintf(src->error, sizeof src->error,
+             "reference %d is \"%s\" in the BAM header but \"%s\" in the FASTA; "
+             "the two must be in the same order",
+             tid, expected ? expected : "(absent)", src->record.name);
+    return false;
+}
+
+static bool length_matches(refseq_source *src, int32_t tid)
+{
+    hts_pos_t expected = cm_bam_reflen(src->bam, tid);
+
+    if ((hts_pos_t)src->record.len == expected)
+        return true;
+
+    snprintf(src->error, sizeof src->error,
+             "reference \"%s\" is %" PRIhts_pos " bases in the BAM header "
+             "but %zu in the FASTA",
+             src->record.name, expected, src->record.len);
+    return false;
+}
+
+/* Whether the sequence is the one the alignments were made against, where the
+ * header says what that was.
+ *
+ * A name and a length are a description of a reference rather than the
+ * reference itself: another sequence answering to both passes them and is
+ * scored against regardless. M5 is what settles it, being taken over the bases.
+ * It is optional and frequently absent, though, so a reference declaring none
+ * is taken on trust -- refusing those would refuse most files that exist. One
+ * declaring something that is not an MD5 is a different matter: the header is
+ * wrong, and going on would mean passing a check that was never made. */
+static bool checksum_matches(refseq_source *src, int32_t tid)
+{
+    size_t      declared_len = 0;
+    const char *declared     = cm_bam_sq_checksum(&src->declarations, tid, &declared_len);
+    char        computed[CHECKSUM_LEN + 1];
+
+    if (!declared)
+        return true;
+
+    if (declared_len != CHECKSUM_LEN) {
+        snprintf(src->error, sizeof src->error,
+                 "reference \"%s\" declares an M5 of %zu characters, which is "
+                 "not an MD5 checksum",
+                 src->record.name, declared_len);
+        return false;
+    }
+
+    if (!checksum_sequence(src->record.seq, src->record.len, computed)) {
+        snprintf(src->error, sizeof src->error,
+                 "unable to compute a checksum for reference \"%s\"",
+                 src->record.name);
+        return false;
+    }
+
+    if (strncasecmp(declared, computed, CHECKSUM_LEN) == 0)
+        return true;
+
+    snprintf(src->error, sizeof src->error,
+             "reference \"%s\" in the FASTA is not the sequence the alignments "
+             "were made against: the BAM header declares MD5 %.*s, the FASTA "
+             "holds %s",
+             src->record.name, (int)CHECKSUM_LEN, declared, computed);
+    return false;
+}
+
 static bool matches_header(refseq_source *src, int32_t tid)
 {
-    const char *expected_name = cm_bam_refname(src->bam, tid);
-    hts_pos_t   expected_len  = cm_bam_reflen(src->bam, tid);
-
-    if (!expected_name || strcmp(src->record.name, expected_name) != 0) {
-        snprintf(src->error, sizeof src->error,
-                 "reference %d is \"%s\" in the BAM header but \"%s\" in the FASTA; "
-                 "the two must be in the same order",
-                 tid, expected_name ? expected_name : "(absent)", src->record.name);
-        return false;
-    }
-
-    if ((hts_pos_t)src->record.len != expected_len) {
-        snprintf(src->error, sizeof src->error,
-                 "reference \"%s\" is %" PRIhts_pos " bases in the BAM header "
-                 "but %zu in the FASTA",
-                 src->record.name, expected_len, src->record.len);
-        return false;
-    }
-
-    return true;
+    return name_matches(src, tid) &&
+           length_matches(src, tid) &&
+           checksum_matches(src, tid);
 }
 
 /* ------------------------------------------------------------------------ */

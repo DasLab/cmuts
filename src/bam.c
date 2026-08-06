@@ -163,6 +163,50 @@ const char *cm_bam_error(const cm_bam_reader *reader)
 }
 
 /* ------------------------------------------------------------------------ */
+/* Header text                                                               */
+/* ------------------------------------------------------------------------ */
+
+/* The header is read as the text it arrived as. Asking htslib for a tag would
+ * have it parse the whole header into records first, and on a file with
+ * millions of references that costs gigabytes to answer a question about a few
+ * characters -- 3.85 GB against a header text of 0.50 GB, measured on a file of
+ * 24 million. The text is already in memory and holds the same information. */
+
+static const char *line_end(const char *line)
+{
+    const char *newline = strchr(line, '\n');
+
+    return newline ? newline : line + strlen(line);
+}
+
+static const char *next_line(const char *line)
+{
+    const char *newline = strchr(line, '\n');
+
+    return (newline && newline[1]) ? newline + 1 : NULL;
+}
+
+/* Where a tab-separated field with the given prefix begins, within one line. */
+static const char *find_tag(const char *line, const char *end, const char *tag)
+{
+    size_t len = strlen(tag);
+
+    for (const char *p = line; p + len <= end; p++)
+        if (*p == '\t' && strncmp(p + 1, tag, len) == 0)
+            return p + 1 + len;
+
+    return NULL;
+}
+
+/* Where the field a value belongs to ends. */
+static const char *field_end(const char *value, const char *end)
+{
+    const char *tab = memchr(value, '\t', (size_t)(end - value));
+
+    return tab ? tab : end;
+}
+
+/* ------------------------------------------------------------------------ */
 /* Header queries                                                            */
 /* ------------------------------------------------------------------------ */
 
@@ -195,27 +239,9 @@ int32_t cm_bam_nref(const cm_bam_reader *reader)
     return sam_hdr_nref(reader->header);
 }
 
-/* Where a tab-separated field with the given prefix begins, within one line. */
-static const char *find_tag(const char *line, const char *end, const char *tag)
-{
-    size_t len = strlen(tag);
-
-    for (const char *p = line; p + len <= end; p++)
-        if (*p == '\t' && strncmp(p + 1, tag, len) == 0)
-            return p + 1 + len;
-
-    return NULL;
-}
-
-/* Asking htslib for the tag would have it parse the whole header into records
- * first, and on a file with millions of references that costs gigabytes to
- * answer a question about ten characters -- 3.85 GB against a header text of
- * 0.50 GB, measured on a file of 24 million. The text is already in memory and
- * holds the same information, so it is read directly.
- *
- * @HD is the first line where it appears at all, so only the first line is
- * examined. A header carrying it elsewhere violates the specification and is
- * treated as not saying anything about sort order. */
+/* @HD is the first line where a sort order appears at all, so only the first
+ * line is examined. A header carrying one elsewhere violates the specification
+ * and is treated as saying nothing about sort order. */
 bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader)
 {
     const char *text = sam_hdr_str(reader->header);
@@ -226,15 +252,62 @@ bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader)
     if (!text || strncmp(text, "@HD", 3) != 0)
         return false;
 
-    end   = strchr(text, '\n');
-    end   = end ? end : text + strlen(text);
+    end   = line_end(text);
     order = find_tag(text, end, "SO:");
 
-    if (!order || order + len > end)
+    if (!order)
         return false;
 
-    /* The value runs to the end of the field, so a longer word starting with
+    /* The value runs to the end of its field, so a longer word beginning with
      * "coordinate" is not one. */
-    return strncmp(order, SORT_ORDER_COORDINATE, len) == 0 &&
-           (order + len == end || order[len] == '\t');
+    return (size_t)(field_end(order, end) - order) == len &&
+           strncmp(order, SORT_ORDER_COORDINATE, len) == 0;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Reference declarations                                                    */
+/* ------------------------------------------------------------------------ */
+
+/* The first @SQ line at or after the given one, or NULL where there is none. */
+static const char *next_declaration(const char *line)
+{
+    for (; line; line = next_line(line))
+        if (strncmp(line, "@SQ", 3) == 0)
+            return line;
+
+    return NULL;
+}
+
+void cm_bam_sq_open(cm_bam_sq_cursor *cursor, const cm_bam_reader *reader)
+{
+    const char *text = sam_hdr_str(reader->header);
+
+    cursor->line = text ? next_declaration(text) : NULL;
+    cursor->tid  = 0;
+}
+
+/* The lines appear in the order the references are numbered, so reaching one
+ * is a matter of walking forward over those before it. The cursor is left on
+ * the line it reached rather than past it, so that asking twice for the same
+ * reference answers the same both times. */
+const char *cm_bam_sq_checksum(cm_bam_sq_cursor *cursor, int32_t tid, size_t *len)
+{
+    const char *end;
+    const char *checksum;
+
+    while (cursor->line && cursor->tid < tid) {
+        cursor->line = next_declaration(next_line(cursor->line));
+        cursor->tid++;
+    }
+
+    if (!cursor->line || cursor->tid != tid)
+        return NULL;
+
+    end      = line_end(cursor->line);
+    checksum = find_tag(cursor->line, end, "M5:");
+
+    if (checksum)
+        *len = (size_t)(field_end(checksum, end) - checksum);
+
+    return checksum;
 }

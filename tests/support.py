@@ -9,7 +9,7 @@ that changes.
 from __future__ import annotations
 
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import h5py
@@ -86,8 +86,24 @@ def converted(data: Dataset, directory, fmt: str) -> Dataset:
 
     _run(["samtools", "view", "-h", "-O", fmt.upper(), *flags, "-o", output, data.bam])
 
-    return Dataset(bam=output, fasta=data.fasta, mapped=data.mapped,
-                   unmapped=data.unmapped, touched=data.touched)
+    return replace(data, bam=output)
+
+
+def reheadered(data: Dataset, directory, transform) -> Dataset:
+    """The same alignments behind a header the transform has rewritten.
+
+    Only the header changes, so the totals carry over and any difference in
+    what cmuts does is down to what the header says.
+    """
+    header = Path(directory) / "header.sam"
+    header.write_text(transform(_run(["samtools", "view", "-H", data.bam]).stdout))
+
+    bam = Path(directory) / "reheadered.bam"
+    with open(bam, "wb") as handle:
+        subprocess.run(["samtools", "reheader", str(header), str(data.bam)],
+                       check=True, stdout=handle, stderr=subprocess.DEVNULL)
+
+    return replace(data, bam=bam)
 
 
 # ---------------------------------------------------------------------------

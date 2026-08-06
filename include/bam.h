@@ -6,6 +6,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include <htslib/sam.h>
@@ -102,3 +103,28 @@ int32_t cm_bam_nref(const cm_bam_reader *reader);
  * lets a reference be finished the moment the reader moves past it; without
  * it, every reference stays live to the end of the file. */
 bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader);
+
+/* ------------------------------------------------------------------------ */
+/* Reference declarations                                                    */
+/* ------------------------------------------------------------------------ */
+
+/* A forward-only walk over the header's @SQ lines.
+ *
+ * State of the walk rather than of the file, so it is the caller's: two walks
+ * may run at once, and the reader is unchanged by either. */
+typedef struct {
+    const char *line;  /* the @SQ line describing tid, or NULL past the last */
+    int32_t     tid;
+} cm_bam_sq_cursor;
+
+void cm_bam_sq_open(cm_bam_sq_cursor *cursor, const cm_bam_reader *reader);
+
+/* The M5 checksum declared for a reference, its length in len, or NULL where
+ * the header declares none -- which is the common case, since many aligners
+ * omit it. The result points into the header text and lives as long as the
+ * reader does.
+ *
+ * References must be asked for in non-decreasing order, which is what the
+ * cursor buys: one walk of the text answers a whole run of them, where asking
+ * htslib for the tag would first have it parse the header into records. */
+const char *cm_bam_sq_checksum(cm_bam_sq_cursor *cursor, int32_t tid, size_t *len);

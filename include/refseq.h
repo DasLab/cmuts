@@ -14,9 +14,11 @@
  * reference of any size costs one forward pass and no index.
  *
  * Correctness rests on the two orders agreeing, which every advance checks by
- * comparing the record's name and length against the header. A re-ordered or
- * substituted FASTA fails immediately rather than silently scoring reads
- * against the wrong sequence. */
+ * comparing the record against the header: its name and length always, and its
+ * MD5 wherever the header declares one. A re-ordered FASTA fails immediately. A
+ * substituted one fails wherever there is a checksum to catch it -- and where
+ * there is none, nothing short of the alignments themselves could tell it from
+ * the sequence they were made against. */
 typedef struct refseq_source refseq_source;
 
 refseq_source *refseq_open(const char *fasta_path, const cm_bam_reader *reader);
