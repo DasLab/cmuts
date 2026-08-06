@@ -17,8 +17,11 @@ data/
 # macOS
 .DS_Store
 
-# Test dependencies
+# Test dependencies. The lockfile is ignored rather than pinned because
+# `uv pip install` does not read one, and Python here is the test harness
+# rather than anything the program ships.
 .venv/
 .pytest_cache/
 __pycache__/
 .hypothesis/
+uv.lock
