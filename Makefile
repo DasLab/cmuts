@@ -65,8 +65,12 @@ install: $(BIN) $(GEN_BIN)
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(NAME) $(DESTDIR)$(BINDIR)/$(GEN_NAME)
 
+# Prefers a virtual environment holding the test dependencies, which the
+# programs themselves do not need. See requirements-dev.txt.
+PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+
 check: $(BIN) $(GEN_BIN)
-	tests/run.sh
+	$(PYTHON) -m pytest
 
 clean:
 	rm -rf $(BUILD)

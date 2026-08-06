@@ -1,0 +1,5 @@
+# Running the test suite. The programs themselves need none of this.
+pytest
+hypothesis
+h5py
+numpy

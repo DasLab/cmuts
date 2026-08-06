@@ -12,3 +12,9 @@ data/
 
 # macOS
 .DS_Store
+
+# Test dependencies
+.venv/
+.pytest_cache/
+__pycache__/
+.hypothesis/
