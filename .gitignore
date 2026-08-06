@@ -1,0 +1,14 @@
+# Build output
+build/
+*.o
+*.d
+
+# Program output
+*.h5
+
+# Test data. The alignments alone are over 100 MB, which does not belong in
+# git history; keep them alongside the checkout or fetch them separately.
+data/
+
+# macOS
+.DS_Store
