@@ -15,6 +15,18 @@ def test_worker_count_does_not_change_the_result(datasets, tmp_path, shape):
     assert outputs_agree(tmp_path / "one.h5", tmp_path / "many.h5")
 
 
+@pytest.mark.parametrize("threads", [0, 1, 8])
+def test_decode_threads_do_not_change_the_result(datasets, tmp_path, threads):
+    """htslib inflates on however many threads it is given. What it hands back
+    cannot depend on how many did it."""
+    data = datasets("plain")
+
+    run_cmuts(data, tmp_path / "default.h5", workers=4)
+    run_cmuts(data, tmp_path / "threaded.h5", workers=4, decode_threads=threads)
+
+    assert outputs_agree(tmp_path / "default.h5", tmp_path / "threaded.h5")
+
+
 @pytest.mark.parametrize("batch", [1, 7, 4096])
 def test_batch_size_does_not_change_the_result(datasets, tmp_path, batch):
     """Reads and the carriers holding them move in batches; at a batch of one
