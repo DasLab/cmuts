@@ -21,6 +21,7 @@ typedef enum {
     OPT_STRING,
     OPT_SIZE,
     OPT_INT,
+    OPT_DOUBLE,  /* bounds are still written as whole numbers */
     OPT_ENUM,    /* one of a named set of values; stores an int */
 } cli_type;
 

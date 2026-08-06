@@ -132,14 +132,42 @@ static int parse_number(const cli_option *opt, const char *text, const char *pro
     return 0;
 }
 
+static int parse_double(const cli_option *opt, const char *text, const char *program,
+                        double *out)
+{
+    char  *end = NULL;
+    double n   = strtod(text, &end);
+
+    if (*text == '\0' || *end != '\0') {
+        fprintf(stderr, "%s: --%s: \"%s\" is not a number\n", program, opt->name, text);
+        return -1;
+    }
+
+    if (n < (double)opt->minimum || n > (double)opt->maximum) {
+        fprintf(stderr, "%s: --%s: %g is outside %ld..%ld\n",
+                program, opt->name, n, opt->minimum, opt->maximum);
+        return -1;
+    }
+
+    *out = n;
+    return 0;
+}
+
 static int assign(const cli_option *opt, void *args, const char *value,
                   const char *program)
 {
-    char *field = (char *)args + opt->offset;
-    long  number;
-    int   choice;
+    char  *field = (char *)args + opt->offset;
+    long   number;
+    double real;
+    int    choice;
 
     switch (opt->type) {
+        case OPT_DOUBLE:
+            if (parse_double(opt, value, program, &real) < 0)
+                return -1;
+            *(double *)field = real;
+            return 0;
+
         case OPT_ENUM:
             if (parse_choice(opt, value, program, &choice) < 0)
                 return -1;
@@ -199,6 +227,13 @@ static void format_default(const cli_option *opt, const void *defaults,
             break;
         case OPT_INT:
             snprintf(out, size, " (default %d)", *(const int *)field);
+            break;
+        case OPT_DOUBLE:
+            snprintf(out, size, " (default %g)", *(const double *)field);
+            break;
+        case OPT_STRING:
+            if (*(const char *const *)field)
+                snprintf(out, size, " (default %s)", *(const char *const *)field);
             break;
         case OPT_ENUM:
             for (const cli_choice *choice = opt->choices; choice->name; choice++)
@@ -337,6 +372,7 @@ static const char *type_name(cli_type type)
         case OPT_STRING: return "string";
         case OPT_SIZE:   return "size";
         case OPT_INT:    return "int";
+        case OPT_DOUBLE: return "double";
         case OPT_ENUM:   return "enum";
     }
 
@@ -373,6 +409,7 @@ static void print_json_default(FILE *out, const cli_option *opt, const void *def
         case OPT_STRING: print_json_string(out, *(const char *const *)field); break;
         case OPT_SIZE:   fprintf(out, "%zu", *(const size_t *)field);         break;
         case OPT_INT:    fprintf(out, "%d", *(const int *)field);             break;
+        case OPT_DOUBLE: fprintf(out, "%g", *(const double *)field);          break;
         case OPT_ENUM:
             for (const cli_choice *choice = opt->choices; choice->name; choice++)
                 if (choice->value == *(const int *)field)
@@ -383,7 +420,7 @@ static void print_json_default(FILE *out, const cli_option *opt, const void *def
 
 static void print_json_bounds(FILE *out, const cli_option *opt)
 {
-    if (opt->type != OPT_SIZE && opt->type != OPT_INT) {
+    if (opt->type != OPT_SIZE && opt->type != OPT_INT && opt->type != OPT_DOUBLE) {
         fputs("      \"minimum\": null, \"maximum\": null\n", out);
         return;
     }
