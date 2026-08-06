@@ -1,0 +1,19 @@
+# cmuts is a C program, not a Python package: there is no [project] table here
+# and nothing to build or install. The file exists so that the test
+# dependencies and the test runner's configuration sit together rather than in
+# two files of their own, which PEP 735 dependency groups allow without
+# declaring a package.
+#
+#     uv pip install --group dev
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "hypothesis",
+    "h5py",
+    "numpy",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
