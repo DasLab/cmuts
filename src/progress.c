@@ -18,8 +18,10 @@
 #define BAR_MAX_CELLS   60
 #define ASSUMED_COLUMNS 80
 
-#define CELL_FILLED '#'
-#define CELL_EMPTY  ' '
+/* Cells are UTF-8, so a cell occupies one column but more than one byte. */
+#define CELL_FILLED "█"
+#define CELL_EMPTY  " "
+#define CELL_MAX_BYTES 4
 
 struct progress {
     const cm_bam_reader *reader;
@@ -82,12 +84,19 @@ static uint64_t redraw_at(const progress *bar, int percent)
 
 static void draw(const progress *bar, int percent)
 {
-    char cells[BAR_MAX_CELLS + 1];
-    int  filled = bar->width * percent / 100;
+    char   cells[BAR_MAX_CELLS * CELL_MAX_BYTES + 1];
+    int    filled = bar->width * percent / 100;
+    size_t at     = 0;
 
-    memset(cells, CELL_FILLED, (size_t)filled);
-    memset(cells + filled, CELL_EMPTY, (size_t)(bar->width - filled));
-    cells[bar->width] = '\0';
+    for (int cell = 0; cell < bar->width; cell++) {
+        const char *glyph = cell < filled ? CELL_FILLED : CELL_EMPTY;
+        size_t      bytes = strlen(glyph);
+
+        memcpy(cells + at, glyph, bytes);
+        at += bytes;
+    }
+
+    cells[at] = '\0';
 
     printf("\r[%s] %3d%%", cells, percent);
     fflush(stdout);
