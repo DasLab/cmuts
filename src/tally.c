@@ -13,30 +13,6 @@
 /* Bit set by bam_cigar_type for operations that advance along the reference. */
 #define CIGAR_CONSUMES_REFERENCE 2
 
-/* Arithmetic burned per read, standing in for the cost of real processing.
- * Zero for ordinary runs; raise it to put the worker pool under load and
- * measure how it scales. Goes away with the placeholder. */
-#define SYNTHETIC_LOAD 0
-
-/* The result is deposited in a local volatile so the compiler cannot discard
- * the loop, and depends only on the seed, so it stays deterministic and
- * thread-independent: the accumulators never see it. */
-static void burn(hts_pos_t seed)
-{
-#if SYNTHETIC_LOAD > 0
-    volatile double sink;
-    double          x = (double)(seed | 1);
-
-    for (unsigned i = 0; i < SYNTHETIC_LOAD; i++)
-        x = x * 1.0000001 + 1.0;
-
-    sink = x;
-    (void)sink;
-#else
-    (void)seed;
-#endif
-}
-
 static void add_span(double *field, hts_pos_t from, uint32_t len, size_t limit)
 {
     for (uint32_t i = 0; i < len; i++) {
@@ -97,6 +73,4 @@ void tally(const cm_bam_record *read, const cm_fasta_record *ref,
     }
 
     *accum_data(target, ACCUM_READS) += 1.0;
-
-    burn(read->pos);
 }
