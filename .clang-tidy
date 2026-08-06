@@ -1,0 +1,43 @@
+# Checks that find bugs, rather than checks that hold opinions about style.
+# The list is clean on the tree as it stands, so anything it reports is new.
+#
+#     make lint
+#
+# Left off deliberately, each because it fires constantly on code that is
+# written the way it is on purpose:
+#
+#   readability-*           the house style is brace-less single statements,
+#                           short names, and aligned declarations; these checks
+#                           disagree with all three and would report ~240 times
+#   misc-include-cleaner    would require an explicit include for every
+#                           transitively used symbol, htslib's included
+#   cert-err33-c            77 unchecked snprintf and fprintf returns, nearly
+#                           all of them deliberate
+#   bugprone-easily-swappable-parameters
+#                           fires on any function taking two arguments of a
+#                           type, which here is most of them
+#   bugprone-multi-level-implicit-pointer-conversion
+#                           inherent to the void ** the queue and the pools are
+#                           built on
+#   clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+#                           wants the C11 Annex K printf_s family, which is
+#                           optional, absent from every libc this builds
+#                           against, and would not be portable if used; 34 hits
+#                           on the printf calls in cli.c alone
+#
+# clang-analyzer-* is the one worth keeping whatever else changes: it is the
+# family that reasons about paths through the code rather than about spelling,
+# and it is what would catch a leak or a use-after-free in the pools.
+
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  concurrency-*,
+  portability-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+
+# Diagnostics for our own headers, not for htslib's or HDF5's.
+HeaderFilterRegex: '.*/(src|include)/.*'

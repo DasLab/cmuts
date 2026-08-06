@@ -3,6 +3,10 @@ build/
 *.o
 *.d
 
+# Generated for clang-tidy by `make lint`. Holds absolute paths and, on macOS,
+# an SDK path, so it describes one machine rather than the project.
+compile_commands.json
+
 # Program output
 *.h5
 
