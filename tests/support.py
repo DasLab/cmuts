@@ -118,6 +118,35 @@ def dealt_out(data: Dataset, directory, parts: int) -> Dataset:
     return replace(data, bams=tuple(written))
 
 
+def with_secondary(data: Dataset, directory, every: int):
+    """The same alignments with a share of the mapped ones marked secondary.
+
+    Only the flag changes, so the totals and the sort order carry over. Returns
+    the count marked, that being what the filter is expected to remove.
+    """
+    header = _run(["samtools", "view", "-H", data.bam]).stdout
+    marked = 0
+    lines = []
+
+    for i, record in enumerate(_records(data.bam)):
+        columns = record.split("\t")
+        flag = int(columns[1])
+
+        if not flag & 0x4 and i % every == 0:
+            columns[1] = str(flag | 0x100)
+            marked += 1
+
+        lines.append("\t".join(columns))
+
+    sam = Path(directory) / "secondary.sam"
+    sam.write_text(header + "".join(line + "\n" for line in lines))
+
+    bam = Path(directory) / "secondary.bam"
+    _run(["samtools", "view", "-b", "-o", bam, sam])
+
+    return replace(data, bams=(bam,)), marked
+
+
 def reheadered(data: Dataset, directory, transform) -> Dataset:
     """The same alignments behind a header the transform has rewritten.
 
@@ -160,9 +189,10 @@ def samtools_kept(
 
     Strand and mapping quality are flags samtools knows; length it does not, so
     the sequence column is measured directly. A bound of zero is not applied,
-    which is what cmuts does with one left unset.
+    which is what cmuts does with one left unset. Unmapped and secondary reads
+    are excluded here as cmuts excludes them, whatever the criteria.
     """
-    flags = ("-F", "4", "-q", str(min_mapq), *STRAND_FLAGS[strand])
+    flags = ("-F", "0x104", "-q", str(min_mapq), *STRAND_FLAGS[strand])
     lengths = (len(line.split("\t")[9]) for line in _records(data.bam, *flags))
 
     return sum(

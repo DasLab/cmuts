@@ -6,7 +6,14 @@ import os
 import pytest
 
 from conftest import SHAPES
-from support import Dataset, converted, outputs_agree, run_cmuts, samtools_kept
+from support import (
+    Dataset,
+    converted,
+    outputs_agree,
+    run_cmuts,
+    samtools_kept,
+    with_secondary,
+)
 
 
 @contextlib.contextmanager
@@ -72,6 +79,21 @@ def test_rejecting_everything_leaves_a_valid_file(datasets, tmp_path, shape):
     assert summary.kept == 0
     assert summary.rejected == data.mapped
     assert summary.rows == data.touched
+
+
+def test_secondary_alignments_are_refused(datasets, tmp_path):
+    """A secondary alignment is another placement of a read already counted at
+    its primary, so accepting one would count a single molecule twice."""
+    data, marked = with_secondary(datasets("plain"), tmp_path, every=3)
+    assert marked > 0, "the case being tested has to appear in the data"
+
+    summary = run_cmuts(data, tmp_path / "out.h5")
+
+    assert summary.kept == data.mapped - marked, "surviving reads"
+    assert summary.kept == samtools_kept(data), "agreement with samtools"
+
+    # They are refused rather than overlooked, so they show up as rejected.
+    assert summary.kept + summary.rejected == data.mapped, "reads accounted for"
 
 
 @pytest.mark.parametrize("filters", FILTERS, ids=describe)

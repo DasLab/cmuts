@@ -57,9 +57,18 @@ static bool sequence_present(const cm_bam_record *read)
     return read->seq != NULL;
 }
 
+/* A secondary alignment places a read already counted at its primary, so
+ * accepting one would count a single molecule twice. Supplementary alignments
+ * carry distinct pieces of a split read, and are not refused here. */
+static bool is_primary(const cm_bam_record *read)
+{
+    return (read->flag & BAM_FSECONDARY) == 0;
+}
+
 bool filter_accepts(const filter_config *filter, const cm_bam_record *read)
 {
     return sequence_present(read) &&
+           is_primary(read) &&
            mapping_quality_accepted(filter, read) &&
            strand_accepted(filter, read) &&
            length_accepted(filter, read);

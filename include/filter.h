@@ -24,7 +24,8 @@ typedef enum {
 /* Criteria an alignment must meet to be processed.
  *
  * Unmapped reads are excluded before any of this and counted separately, since
- * they belong to no reference and so have nowhere to be accumulated.
+ * they belong to no reference and so have nowhere to be accumulated. Secondary
+ * alignments and records storing no sequence are refused whatever is set here.
  *
  * The fields are int rather than narrower or enumerated types because the
  * command line writes them directly, through a pointer of the declared type. */
