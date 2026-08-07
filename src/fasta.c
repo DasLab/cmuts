@@ -5,7 +5,9 @@
 
 #include "fasta.h"
 
+#include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <htslib/bgzf.h>
 #include <htslib/kseq.h>
@@ -40,20 +42,26 @@ static void reader_free(cm_fasta_reader *reader)
     free(reader);
 }
 
-cm_fasta_reader *cm_fasta_open(const char *path)
+cm_fasta_reader *cm_fasta_open(const char *path, const char **why)
 {
     cm_fasta_reader *reader = calloc(1, sizeof *reader);
-    if (!reader)
+    if (!reader) {
+        *why = "out of memory";
         return NULL;
+    }
 
     reader->file = bgzf_open(path, "r");
     if (!reader->file) {
+        /* Single-threaded, this being reached before any thread is started.
+         * NOLINTNEXTLINE(concurrency-mt-unsafe) */
+        *why = strerror(errno);
         reader_free(reader);
         return NULL;
     }
 
     reader->seq = kseq_init(reader->file);
     if (!reader->seq) {
+        *why = "out of memory";
         reader_free(reader);
         return NULL;
     }

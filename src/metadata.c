@@ -9,9 +9,9 @@
 
 #define ATTRIBUTE_READS_UNMAPPED "reads_unmapped"
 
-int metadata_write_names(h5writer *out, const cm_bam_reader *bam)
+int metadata_write_names(h5writer *out, const cm_bam_stream *bam)
 {
-    int32_t      n     = cm_bam_nref(bam);
+    int32_t      n     = cm_bam_stream_nref(bam);
     const char **names = calloc((size_t)n, sizeof *names);
     int          status;
 
@@ -20,7 +20,7 @@ int metadata_write_names(h5writer *out, const cm_bam_reader *bam)
 
     /* Borrowed from the header, which outlives the write. */
     for (int32_t tid = 0; tid < n; tid++)
-        names[tid] = cm_bam_refname(bam, tid);
+        names[tid] = cm_bam_stream_refname(bam, tid);
 
     status = h5writer_names(out, names, n);
     free(names);

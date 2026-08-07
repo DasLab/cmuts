@@ -70,6 +70,10 @@ typedef struct {
     const char *detail;
     size_t      offset;
     bool        required;
+    /* Takes every argument left rather than one, so it must come last: the
+     * array goes to offset and its length to count_offset. */
+    bool        variadic;
+    size_t      count_offset;
 } cli_positional;
 
 /* Everything one program's command line consists of. */

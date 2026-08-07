@@ -27,7 +27,7 @@ def test_a_name_sorted_file_is_refused(data, tmp_path):
                        check=True, stdout=handle, stderr=subprocess.DEVNULL)
 
     attempt = try_cmuts(
-        Dataset(bam=bam, fasta=data.fasta, mapped=0, unmapped=0, touched=0),
+        Dataset(bams=(bam,), fasta=data.fasta, mapped=0, unmapped=0, touched=0),
         tmp_path / "out.h5",
     )
 

@@ -11,11 +11,14 @@
 #include "filter.h"
 
 typedef struct {
-    const char   *bam_path;
-    const char   *fasta_path;
-    const char   *output_path;
-    bool          overwrite;
-    filter_config filter_config;
+    /* Read as though they were one file: every reference is counted across all
+     * of them, into the single row it has in the output. */
+    const char *const *bam_paths;
+    size_t             n_bams;
+    const char        *fasta_path;
+    const char        *output_path;
+    bool               overwrite;
+    filter_config      filter_config;
     size_t      workers;         /* threads running the processing step */
     int         decode_threads;  /* htslib threads for BGZF inflation */
     size_t      queue_capacity;  /* reads that may be in transit at once */

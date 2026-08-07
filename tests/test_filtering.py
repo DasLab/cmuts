@@ -100,10 +100,14 @@ def test_cram_decodes_against_the_reference_it_was_given(datasets, tmp_path):
 
     moved = tmp_path / "elsewhere.fasta"
     moved.write_bytes(data.fasta.read_bytes())
-    hidden = Dataset(bam=data.bam, fasta=moved, mapped=data.mapped,
+    hidden = Dataset(bams=data.bams, fasta=moved, mapped=data.mapped,
                      unmapped=data.unmapped, touched=data.touched)
 
-    expected = run_cmuts(datasets("plain"), tmp_path / "bam.h5")
+    run_cmuts(datasets("plain"), tmp_path / "bam.h5")
 
     with unreachable(data.fasta):
-        assert run_cmuts(hidden, tmp_path / "cram.h5") == expected
+        run_cmuts(hidden, tmp_path / "cram.h5")
+
+    # Read counts would agree whichever reference it decoded against; what it
+    # was compared to shows in the per-base fields alone.
+    assert outputs_agree(tmp_path / "cram.h5", tmp_path / "bam.h5")

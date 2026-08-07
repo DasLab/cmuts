@@ -26,6 +26,9 @@
 /* Enough for a long option as anyone would write one. */
 #define REJECTED_MAX 64
 
+/* Enough for a placeholder and the ellipsis a variadic one carries. */
+#define METAVAR_MAX 32
+
 /* getopt records a short option in optopt, and for a long one leaves the
  * identifier it was given instead, which names nothing a reader would know. A
  * long one is read back from the word getopt stopped on. */
@@ -316,6 +319,14 @@ static bool group_seen_before(const cli_spec *spec, size_t index)
     return false;
 }
 
+/* A placeholder, with an ellipsis where it stands for any number of arguments. */
+static const char *positional_form(const cli_positional *pos, char *out, size_t len)
+{
+    snprintf(out, len, "%s%s", pos->metavar, pos->variadic ? "..." : "");
+
+    return out;
+}
+
 static void print_usage_line(const cli_spec *spec, FILE *out)
 {
     fprintf(out, "usage: %s [options]", spec->program);
@@ -330,9 +341,12 @@ static void print_usage_line(const cli_spec *spec, FILE *out)
             fprintf(out, " --%s %s", spec->options[i].name, spec->options[i].metavar);
     }
 
-    for (size_t i = 0; i < spec->n_positionals; i++)
+    for (size_t i = 0; i < spec->n_positionals; i++) {
+        char form[METAVAR_MAX];
+
         fprintf(out, spec->positionals[i].required ? " %s" : " [%s]",
-                spec->positionals[i].metavar);
+                positional_form(&spec->positionals[i], form, sizeof form));
+    }
 
     fputc('\n', out);
 }
@@ -344,9 +358,13 @@ static void print_positionals(const cli_spec *spec, FILE *out)
 
     fprintf(out, "\nArguments\n");
 
-    for (size_t i = 0; i < spec->n_positionals; i++)
-        fprintf(out, "  %-28s %s\n", spec->positionals[i].metavar,
+    for (size_t i = 0; i < spec->n_positionals; i++) {
+        char form[METAVAR_MAX];
+
+        fprintf(out, "  %-28s %s\n",
+                positional_form(&spec->positionals[i], form, sizeof form),
                 spec->positionals[i].help);
+    }
 }
 
 void cli_usage(const cli_spec *spec, FILE *out)
@@ -488,7 +506,8 @@ static void print_json_positional(FILE *out, const cli_positional *pos, bool las
     fputs(",\n      \"metavar\": ", out); print_json_string(out, pos->metavar);
     fputs(",\n      \"help\": ", out);    print_json_string(out, pos->help);
     fputs(",\n      \"detail\": ", out);  print_json_string(out, pos->detail);
-    fprintf(out, ",\n      \"required\": %s\n", pos->required ? "true" : "false");
+    fprintf(out, ",\n      \"required\": %s", pos->required ? "true" : "false");
+    fprintf(out, ",\n      \"variadic\": %s\n", pos->variadic ? "true" : "false");
     fprintf(out, "    }%s\n", last ? "" : ",");
 }
 
@@ -529,23 +548,65 @@ static cli_status check_required_options(const cli_spec *spec, const bool *seen)
     return CLI_OK;
 }
 
+/* A variadic positional takes any number of arguments, but demands one where it
+ * is required. */
+static int fewest_arguments(const cli_spec *spec)
+{
+    int fewest = 0;
+
+    for (size_t i = 0; i < spec->n_positionals; i++)
+        if (!spec->positionals[i].variadic || spec->positionals[i].required)
+            fewest++;
+
+    return fewest;
+}
+
+static bool takes_any_number(const cli_spec *spec)
+{
+    return spec->n_positionals > 0 && spec->positionals[spec->n_positionals - 1].variadic;
+}
+
+static void report_positionals(const cli_spec *spec, int given)
+{
+    fprintf(stderr, "%s: expected ", spec->program);
+
+    for (size_t i = 0; i < spec->n_positionals; i++) {
+        char form[METAVAR_MAX];
+
+        fprintf(stderr, "%s%s", i ? " " : "",
+                positional_form(&spec->positionals[i], form, sizeof form));
+    }
+
+    fprintf(stderr, ", got %d argument%s\n", given, given == 1 ? "" : "s");
+}
+
+static void store_positional(const cli_positional *pos, void *args, char **argv,
+                             int at, int argc)
+{
+    if (!pos->variadic) {
+        *(const char **)((char *)args + pos->offset) = argv[at];
+        return;
+    }
+
+    *(const char *const **)((char *)args + pos->offset)  = (const char *const *)(argv + at);
+    *(size_t *)((char *)args + pos->count_offset)        = (size_t)(argc - at);
+}
+
 static cli_status take_positionals(const cli_spec *spec, int argc, char **argv,
                                    void *args)
 {
     int given = argc - optind;
+    int at    = optind;
 
-    if (given != (int)spec->n_positionals) {
-        fprintf(stderr, "%s: expected ", spec->program);
-        for (size_t i = 0; i < spec->n_positionals; i++)
-            fprintf(stderr, "%s%s", i ? " " : "", spec->positionals[i].metavar);
-        fprintf(stderr, ", got %d argument%s\n", given, given == 1 ? "" : "s");
+    if (given < fewest_arguments(spec) ||
+        (given > (int)spec->n_positionals && !takes_any_number(spec))) {
+        report_positionals(spec, given);
         return CLI_ERROR;
     }
 
     for (size_t i = 0; i < spec->n_positionals; i++) {
-        const char **field = (const char **)((char *)args + spec->positionals[i].offset);
-
-        *field = argv[optind + (int)i];
+        store_positional(&spec->positionals[i], args, argv, at, argc);
+        at = spec->positionals[i].variadic ? argc : at + 1;
     }
 
     return CLI_OK;

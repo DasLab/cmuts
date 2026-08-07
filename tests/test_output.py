@@ -16,13 +16,14 @@ def data(datasets):
 
 def test_refuses_to_replace_an_existing_file(data, tmp_path):
     output = tmp_path / "out.h5"
-    first = run_cmuts(data, output)
+    run_cmuts(data, output)
+    before = output.read_bytes()
 
     attempt = try_cmuts(data, output)
 
     assert attempt.returncode != 0
     assert "already holds data" in attempt.stderr
-    assert read_summary(output) == first, "the first result is untouched"
+    assert output.read_bytes() == before, "the first result is untouched"
 
 
 def test_overwrite_replaces_it(data, tmp_path):
@@ -36,12 +37,13 @@ def test_a_run_that_would_fail_destroys_nothing(data, datasets, tmp_path):
     """The mistake the reference check exists to catch used to truncate the
     output before the check ever ran."""
     output = tmp_path / "out.h5"
-    first = run_cmuts(data, output)
+    run_cmuts(data, output)
+    before = output.read_bytes()
 
     attempt = try_cmuts(datasets("sparse"), output)
 
     assert attempt.returncode != 0
-    assert read_summary(output) == first
+    assert output.read_bytes() == before
 
 
 def test_an_empty_file_is_not_worth_protecting(data, tmp_path):

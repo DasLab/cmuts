@@ -19,10 +19,6 @@ ROOT = Path(__file__).resolve().parent.parent
 CMUTS = ROOT / "build" / "cmuts"
 CMUTS_GEN = ROOT / "build" / "cmuts-gen"
 
-# Datasets carrying one value per reference, which every comparison between two
-# runs covers.
-FIELDS = ("coverage", "mutations", "reads", "reads_filtered")
-
 STRAND_FLAGS = {"both": (), "forward": ("-F", "16"), "reverse": ("-f", "16")}
 
 
@@ -44,13 +40,24 @@ def _option(name: str) -> str:
 @dataclass(frozen=True)
 class Dataset:
     """Alignments and the reference they came from, with the totals that hold
-    whatever filter is applied afterwards."""
+    whatever filter is applied afterwards.
 
-    bam: Path
+    The alignments may be spread over several files, which cmuts reads as one.
+    The totals are of them all, so they carry over a split.
+    """
+
+    bams: tuple
     fasta: Path
     mapped: int
     unmapped: int
     touched: int
+
+    @property
+    def bam(self) -> Path:
+        """The one file, for the oracles that read a single one. Raises where
+        the alignments are spread over several."""
+        (bam,) = self.bams
+        return bam
 
 
 def generate(directory, name: str, **parameters) -> Dataset:
@@ -64,7 +71,7 @@ def generate(directory, name: str, **parameters) -> Dataset:
 
     bam = Path(f"{prefix}.bam")
     return Dataset(
-        bam=bam,
+        bams=(bam,),
         fasta=Path(f"{prefix}.fasta"),
         mapped=_count(bam, "-F", 4),
         unmapped=_count(bam, "-f", 4),
@@ -86,7 +93,29 @@ def converted(data: Dataset, directory, fmt: str) -> Dataset:
 
     _run(["samtools", "view", "-h", "-O", fmt.upper(), *flags, "-o", output, data.bam])
 
-    return replace(data, bam=output)
+    return replace(data, bams=(output,))
+
+
+def dealt_out(data: Dataset, directory, parts: int) -> Dataset:
+    """The same alignments dealt between several files.
+
+    Records keep their relative order, so every part is coordinate sorted and
+    holds an interleaved share of the references rather than a run of them.
+    Nothing is added or lost, so the totals carry over.
+    """
+    header = _run(["samtools", "view", "-H", data.bam]).stdout
+    records = _records(data.bam)
+    written = []
+
+    for i in range(parts):
+        sam = Path(directory) / f"part{i}.sam"
+        sam.write_text(header + "".join(line + "\n" for line in records[i::parts]))
+
+        bam = Path(directory) / f"part{i}.bam"
+        _run(["samtools", "view", "-b", "-o", bam, sam])
+        written.append(bam)
+
+    return replace(data, bams=tuple(written))
 
 
 def reheadered(data: Dataset, directory, transform) -> Dataset:
@@ -103,7 +132,7 @@ def reheadered(data: Dataset, directory, transform) -> Dataset:
         subprocess.run(["samtools", "reheader", str(header), str(data.bam)],
                        check=True, stdout=handle, stderr=subprocess.DEVNULL)
 
-    return replace(data, bam=bam)
+    return replace(data, bams=(bam,))
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +228,7 @@ def _cmuts_command(data: Dataset, output, workers: int, options):
         # A flag carries no value of its own.
         command += [_option(key)] if value is True else [_option(key), value]
 
-    return [*command, data.bam]
+    return [*command, *data.bams]
 
 
 def run_cmuts(data: Dataset, output, workers: int = 4, **options) -> Summary:
@@ -215,6 +244,24 @@ def try_cmuts(data: Dataset, output, workers: int = 4, **options):
     )
 
 
+def _datasets_agree(a, b) -> bool:
+    # NaN marks a reference no read reached, so two outputs agree where both
+    # hold one. Only the counting datasets can carry it; the names cannot.
+    return np.array_equal(a[:], b[:], equal_nan=np.issubdtype(a.dtype, np.floating))
+
+
 def outputs_agree(first, second) -> bool:
+    """Whether two outputs hold the same thing.
+
+    Over every dataset they carry, rather than a list of them kept here: a
+    quantity added to the accumulator would otherwise be written by the code and
+    checked by nothing.
+    """
     with h5py.File(first, "r") as a, h5py.File(second, "r") as b:
-        return all(np.array_equal(a[k][:], b[k][:], equal_nan=True) for k in FIELDS)
+        return set(a) == set(b) and all(_datasets_agree(a[k], b[k]) for k in a)
+
+
+def counted_fields(path):
+    """The datasets holding counts, which are the ones arithmetic applies to."""
+    with h5py.File(path, "r") as output:
+        return [k for k in output if np.issubdtype(output[k].dtype, np.floating)]

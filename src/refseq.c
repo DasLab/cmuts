@@ -15,27 +15,52 @@
 
 struct refseq_source {
     cm_fasta_reader     *fasta;
-    const cm_bam_reader *bam;
+    const cm_bam_stream *bams;
     cm_fasta_record      record;        /* the record for ordinal loaded - 1 */
     int32_t              loaded;        /* number of records consumed so far */
-    cm_bam_sq_cursor     declarations;  /* the header's @SQ lines, in step */
+    cm_bam_sq_cursor    *declarations;  /* each file's @SQ lines, in step */
     char                 error[CM_ERROR_MAX];
 };
 
-refseq_source *refseq_open(const char *fasta_path, const cm_bam_reader *reader)
+static const cm_bam_reader *header_of(const refseq_source *src, size_t file)
 {
-    refseq_source *src = calloc(1, sizeof *src);
-    if (!src)
-        return NULL;
+    return cm_bam_stream_reader(src->bams, file);
+}
 
-    src->fasta = cm_fasta_open(fasta_path);
-    if (!src->fasta) {
-        free(src);
+static const char *path_of(const refseq_source *src, size_t file)
+{
+    return cm_bam_stream_path(src->bams, file);
+}
+
+refseq_source *refseq_open(const char *fasta_path, const cm_bam_stream *bams,
+                           const char **why)
+{
+    size_t         files = cm_bam_stream_count(bams);
+    refseq_source *src   = calloc(1, sizeof *src);
+
+    if (!src) {
+        *why = "out of memory";
         return NULL;
     }
 
-    src->bam = reader;
-    cm_bam_sq_open(&src->declarations, reader);
+    src->bams  = bams;
+    src->fasta = cm_fasta_open(fasta_path, why);
+
+    if (!src->fasta) {
+        refseq_close(src);
+        return NULL;
+    }
+
+    src->declarations = calloc(files, sizeof *src->declarations);
+
+    if (!src->declarations) {
+        *why = "out of memory";
+        refseq_close(src);
+        return NULL;
+    }
+
+    for (size_t file = 0; file < files; file++)
+        cm_bam_sq_open(&src->declarations[file], header_of(src, file));
 
     return src;
 }
@@ -46,6 +71,7 @@ void refseq_close(refseq_source *src)
         return;
 
     cm_fasta_close(src->fasta);
+    free(src->declarations);
     free(src);
 }
 
@@ -53,32 +79,52 @@ void refseq_close(refseq_source *src)
 /* Validation                                                                */
 /* ------------------------------------------------------------------------ */
 
-static bool name_matches(refseq_source *src, int32_t tid)
+static bool name_matches(refseq_source *src, size_t file, int32_t tid)
 {
-    const char *expected = cm_bam_refname(src->bam, tid);
+    const char *expected = cm_bam_refname(header_of(src, file), tid);
 
     if (expected && strcmp(src->record.name, expected) == 0)
         return true;
 
     snprintf(src->error, sizeof src->error,
-             "reference %d is \"%s\" in the BAM header but \"%s\" in the FASTA; "
+             "reference %d is \"%s\" in the header of %s but \"%s\" in the FASTA; "
              "the two must be in the same order",
-             tid, expected ? expected : "(absent)", src->record.name);
+             tid, expected ? expected : "(absent)", path_of(src, file),
+             src->record.name);
     return false;
 }
 
-static bool length_matches(refseq_source *src, int32_t tid)
+static bool length_matches(refseq_source *src, size_t file, int32_t tid)
 {
-    hts_pos_t expected = cm_bam_reflen(src->bam, tid);
+    hts_pos_t expected = cm_bam_reflen(header_of(src, file), tid);
 
     if ((hts_pos_t)src->record.len == expected)
         return true;
 
     snprintf(src->error, sizeof src->error,
-             "reference \"%s\" is %" PRIhts_pos " bases in the BAM header "
+             "reference \"%s\" is %" PRIhts_pos " bases in the header of %s "
              "but %zu in the FASTA",
-             src->record.name, expected, src->record.len);
+             src->record.name, expected, path_of(src, file), src->record.len);
     return false;
+}
+
+/* The MD5 of the record in hand, taken once however many files ask for it, and
+ * not at all where none does. */
+typedef struct {
+    char value[CHECKSUM_LEN + 1];
+    bool taken;
+} digest;
+
+static const char *digest_of(digest *md5, const cm_fasta_record *record)
+{
+    if (!md5->taken) {
+        if (!checksum_sequence(record->seq, record->len, md5->value))
+            return NULL;
+
+        md5->taken = true;
+    }
+
+    return md5->value;
 }
 
 /* Whether the sequence is the one the alignments were made against, where the
@@ -91,24 +137,27 @@ static bool length_matches(refseq_source *src, int32_t tid)
  * is taken on trust -- refusing those would refuse most files that exist. One
  * declaring something that is not an MD5 is a different matter: the header is
  * wrong, and going on would mean passing a check that was never made. */
-static bool checksum_matches(refseq_source *src, int32_t tid)
+static bool checksum_matches(refseq_source *src, size_t file, int32_t tid, digest *md5)
 {
     size_t      declared_len = 0;
-    const char *declared     = cm_bam_sq_checksum(&src->declarations, tid, &declared_len);
-    char        computed[CHECKSUM_LEN + 1];
+    const char *declared     = cm_bam_sq_checksum(&src->declarations[file], tid,
+                                                  &declared_len);
+    const char *computed;
 
     if (!declared)
         return true;
 
     if (declared_len != CHECKSUM_LEN) {
         snprintf(src->error, sizeof src->error,
-                 "reference \"%s\" declares an M5 of %zu characters, which is "
-                 "not an MD5 checksum",
-                 src->record.name, declared_len);
+                 "%s declares an M5 of %zu characters for reference \"%s\", "
+                 "which is not an MD5 checksum",
+                 path_of(src, file), declared_len, src->record.name);
         return false;
     }
 
-    if (!checksum_sequence(src->record.seq, src->record.len, computed)) {
+    computed = digest_of(md5, &src->record);
+
+    if (!computed) {
         snprintf(src->error, sizeof src->error,
                  "unable to compute a checksum for reference \"%s\"",
                  src->record.name);
@@ -120,17 +169,28 @@ static bool checksum_matches(refseq_source *src, int32_t tid)
 
     snprintf(src->error, sizeof src->error,
              "reference \"%s\" in the FASTA is not the sequence the alignments "
-             "were made against: the BAM header declares MD5 %.*s, the FASTA "
-             "holds %s",
-             src->record.name, (int)CHECKSUM_LEN, declared, computed);
+             "were made against: %s declares MD5 %.*s, the FASTA holds %s",
+             src->record.name, path_of(src, file), (int)CHECKSUM_LEN, declared,
+             computed);
     return false;
 }
 
-static bool matches_header(refseq_source *src, int32_t tid)
+static bool matches_header(refseq_source *src, size_t file, int32_t tid, digest *md5)
 {
-    return name_matches(src, tid) &&
-           length_matches(src, tid) &&
-           checksum_matches(src, tid);
+    return name_matches(src, file, tid) &&
+           length_matches(src, file, tid) &&
+           checksum_matches(src, file, tid, md5);
+}
+
+static bool matches_headers(refseq_source *src, int32_t tid)
+{
+    digest md5 = { 0 };
+
+    for (size_t file = 0; file < cm_bam_stream_count(src->bams); file++)
+        if (!matches_header(src, file, tid, &md5))
+            return false;
+
+    return true;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -145,7 +205,7 @@ static bool consume_through(refseq_source *src, int32_t tid)
         if (status == CM_ITER_EOF) {
             snprintf(src->error, sizeof src->error,
                      "FASTA ended after %d records, but the BAM header declares %d",
-                     src->loaded, cm_bam_nref(src->bam));
+                     src->loaded, cm_bam_stream_nref(src->bams));
             return false;
         }
 
@@ -173,7 +233,7 @@ const cm_fasta_record *refseq_advance(refseq_source *src, int32_t tid)
     if (!consume_through(src, tid))
         return NULL;
 
-    return matches_header(src, tid) ? &src->record : NULL;
+    return matches_headers(src, tid) ? &src->record : NULL;
 }
 
 const char *refseq_error(const refseq_source *src)

@@ -24,9 +24,9 @@ typedef struct {
 typedef struct cm_fasta_reader cm_fasta_reader;
 
 /* Opens path for reading; plain, gzip and bgzf inputs are all accepted. No
- * .fai index is required, consulted or created. Returns NULL on failure, with
- * errno set by the underlying open. */
-cm_fasta_reader *cm_fasta_open(const char *path);
+ * .fai index is required, consulted or created. Returns NULL on failure,
+ * leaving the reason in why. */
+cm_fasta_reader *cm_fasta_open(const char *path, const char **why);
 
 /* Fills out with the next record. Returns a cm_iter_status; on CM_ITER_ERROR
  * the cause is available from cm_fasta_error(). */

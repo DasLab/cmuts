@@ -5,6 +5,7 @@
 
 #include "bam.h"
 
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -93,28 +94,37 @@ static void reader_free(cm_bam_reader *reader)
     free(reader);
 }
 
-cm_bam_reader *cm_bam_open(const char *path)
+cm_bam_reader *cm_bam_open(const char *path, const char **why)
 {
     cm_bam_reader *reader = calloc(1, sizeof *reader);
-    if (!reader)
+    if (!reader) {
+        *why = "out of memory";
         return NULL;
+    }
 
     reader->file = sam_open(path, "r");
     if (!reader->file) {
+        /* Single-threaded, this being reached before any thread is started.
+         * NOLINTNEXTLINE(concurrency-mt-unsafe) */
+        *why = strerror(errno);
         reader_free(reader);
         return NULL;
     }
 
     limit_decoding(reader);
 
+    /* Where the file is not one htslib recognises, this is what says so: the
+     * open itself succeeds on anything readable. */
     reader->header = sam_hdr_read(reader->file);
     if (!reader->header) {
+        *why = "unable to read the header";
         reader_free(reader);
         return NULL;
     }
 
     reader->record = bam_init1();
     if (!reader->record) {
+        *why = "out of memory";
         reader_free(reader);
         return NULL;
     }
@@ -141,13 +151,10 @@ int cm_bam_set_reference(cm_bam_reader *reader, const char *fasta_path)
     return 0;
 }
 
-int cm_bam_set_threads(cm_bam_reader *reader, int threads)
+int cm_bam_use_pool(cm_bam_reader *reader, htsThreadPool *pool)
 {
-    if (threads < 1)
-        return 0;
-
-    if (hts_set_threads(reader->file, threads) < 0) {
-        reader->error = "unable to start decompression threads";
+    if (hts_set_thread_pool(reader->file, pool) < 0) {
+        reader->error = "unable to share the decompression threads";
         return -1;
     }
 

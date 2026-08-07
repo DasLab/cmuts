@@ -89,7 +89,9 @@ static const cli_option OPTIONS[] = {
       .offset = offsetof(cli_args, pipeline.decode_threads), .metavar = "N",
       .help = "htslib threads for BGZF decompression",
       .detail = "Throughput is flat above the default, so this is a cap rather "
-                "than a dial: lower it when the cores are not there to spare.",
+                "than a dial: lower it when the cores are not there to spare. A "
+                "total however many files are given, which share the threads "
+                "between them.",
       .minimum = 0, .maximum = 64 },
     { .group = "Performance", .name = "queue-capacity", .type = OPT_SIZE,
       .offset = offsetof(cli_args, pipeline.queue_capacity), .metavar = "N",
@@ -126,8 +128,13 @@ static const cli_option OPTIONS[] = {
 static const cli_positional POSITIONALS[] = {
     { .name = "alignment", .metavar = "BAM", .help = "coordinate-sorted alignments",
       .detail = "Read once, sequentially. Must be coordinate sorted, so that a "
-                "reference is finished as soon as the reader moves past it.",
-      .offset = offsetof(cli_args, pipeline.bam_path), .required = true },
+                "reference is finished as soon as the reader moves past it. "
+                "Several files are read as though they were one: each reference "
+                "is counted across all of them into the single row it has in the "
+                "output, which requires that they declare the same references in "
+                "the same order.",
+      .offset = offsetof(cli_args, pipeline.bam_paths), .required = true,
+      .variadic = true, .count_offset = offsetof(cli_args, pipeline.n_bams) },
 };
 
 cli_args cmuts_defaults(void)

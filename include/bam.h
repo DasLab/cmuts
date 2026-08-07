@@ -42,9 +42,9 @@ typedef struct {
 typedef struct cm_bam_reader cm_bam_reader;
 
 /* Opens path and reads its header. No .bai index is required or consulted:
- * iteration is a linear pass, in file order. Returns NULL on failure, with
- * errno set by the underlying open. */
-cm_bam_reader *cm_bam_open(const char *path);
+ * iteration is a linear pass, in file order. Returns NULL on failure, leaving
+ * the reason in why. */
+cm_bam_reader *cm_bam_open(const char *path, const char **why);
 
 /* Points CRAM decoding at the given reference.
  *
@@ -75,10 +75,14 @@ const char *cm_bam_error(const cm_bam_reader *reader);
 uint64_t cm_bam_position(const cm_bam_reader *reader);
 uint64_t cm_bam_span(const cm_bam_reader *reader);
 
-/* Adds worker threads for BGZF decompression, which parallelizes inflation
- * only: reading and record parsing stay sequential. Worth setting when the
- * loader is the bottleneck, and pointless on small files. */
-int cm_bam_set_threads(cm_bam_reader *reader, int threads);
+/* Draws the reader's decompression threads from a pool, which parallelizes
+ * inflation only: reading and record parsing stay sequential.
+ *
+ * A pool rather than threads of the reader's own, because several readers may
+ * share one: threads then follow whichever of them is being read from, instead
+ * of each reader holding a set that idles whenever it is not. The pool must
+ * outlive every reader given it. */
+int cm_bam_use_pool(cm_bam_reader *reader, htsThreadPool *pool);
 
 /* ------------------------------------------------------------------------ */
 /* The record underlying a view                                              */

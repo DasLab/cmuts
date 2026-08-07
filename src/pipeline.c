@@ -1,6 +1,6 @@
 /* pipeline.c -- the loader, the worker pool, and the completion consumer.
  *
- * The file is read once, sequentially, by a single loader. Each read is copied
+ * The input is read once, sequentially, by a single loader. Each read is copied
  * into a pooled carrier and queued; workers take them in batches, accumulate
  * into a private shadow, and merge into the shared per-reference accumulator
  * only when they move to another reference. A reference is finished when its
@@ -22,7 +22,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "bam.h"
+#include "bamstream.h"
 #include "h5writer.h"
 #include "itempool.h"
 #include "metadata.h"
@@ -37,7 +37,7 @@
 #define COMPLETION_BATCH 16
 
 typedef struct {
-    cm_bam_reader *bam;
+    cm_bam_stream *bam;
     refseq_source *refs;
     queue         *work;       /* loader -> workers */
     queue         *completed;  /* last handle dropped -> consumer */
@@ -253,7 +253,7 @@ static refctx *open_reference(pipeline *p, int32_t tid)
     if (!ctx)
         return NULL;
 
-    refctx_open(ctx, tid, cm_bam_refname(p->bam, tid), seq);
+    refctx_open(ctx, tid, cm_bam_stream_refname(p->bam, tid), seq);
     return ctx;
 }
 
@@ -293,7 +293,7 @@ static int loader_take_read(loader *l)
     if (!item)
         return -1;
 
-    if (!bam_copy1(item->rec, cm_bam_raw(l->pipe->bam))) {
+    if (!bam_copy1(item->rec, cm_bam_stream_raw(l->pipe->bam))) {
         l->spare[l->held++] = item;
         return -1;
     }
@@ -332,7 +332,7 @@ static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_
         return -1;
     }
 
-    while ((status = cm_bam_next(p->bam, &rec)) == CM_ITER_OK) {
+    while ((status = cm_bam_stream_next(p->bam, &rec)) == CM_ITER_OK) {
         progress_follow(p->bar);
 
         /* Unmapped reads align to no reference, so they are counted for the
@@ -366,7 +366,7 @@ static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_
     loader_finish(&l);
 
     if (result == 0 && status == CM_ITER_ERROR) {
-        snprintf(error, error_len, "%s", cm_bam_error(p->bam));
+        snprintf(error, error_len, "%s", cm_bam_stream_error(p->bam));
         result = -1;
     }
 
@@ -454,7 +454,7 @@ static void pipeline_teardown(pipeline *p)
     queue_destroy(p->completed);
     queue_destroy(p->work);
     refseq_close(p->refs);
-    cm_bam_close(p->bam);
+    cm_bam_stream_close(p->bam);
 }
 
 /* What is worth refusing is a file with something in it. A path that exists
@@ -488,35 +488,23 @@ static int check_output(pipeline *p, const pipeline_config *cfg,
 
 static int open_inputs(pipeline *p, const pipeline_config *cfg, char *error, size_t error_len)
 {
-    p->bam = cm_bam_open(cfg->bam_path);
+    const char *why;
+
+    p->bam = cm_bam_stream_open(cfg->bam_paths, cfg->n_bams, cfg->fasta_path,
+                                cfg->decode_threads);
     if (!p->bam) {
-        snprintf(error, error_len, "%s: unable to open", cfg->bam_path);
+        snprintf(error, error_len, "out of memory");
         return -1;
     }
 
-    if (!cm_bam_is_coordinate_sorted(p->bam)) {
-        snprintf(error, error_len,
-                 "%s is not coordinate sorted; references would stay live to the "
-                 "end of the file", cfg->bam_path);
+    if (cm_bam_stream_error(p->bam)) {
+        snprintf(error, error_len, "%s", cm_bam_stream_error(p->bam));
         return -1;
     }
 
-    if (cm_bam_nref(p->bam) < 1) {
-        snprintf(error, error_len, "%s declares no references", cfg->bam_path);
-        return -1;
-    }
-
-    /* Before any record is read, so that a CRAM decodes against the same
-     * reference its reads are compared to. */
-    if (cm_bam_set_reference(p->bam, cfg->fasta_path) < 0 ||
-        cm_bam_set_threads(p->bam, cfg->decode_threads) < 0) {
-        snprintf(error, error_len, "%s", cm_bam_error(p->bam));
-        return -1;
-    }
-
-    p->refs = refseq_open(cfg->fasta_path, p->bam);
+    p->refs = refseq_open(cfg->fasta_path, p->bam, &why);
     if (!p->refs) {
-        snprintf(error, error_len, "%s: unable to open", cfg->fasta_path);
+        snprintf(error, error_len, "%s: %s", cfg->fasta_path, why);
         return -1;
     }
 
@@ -533,7 +521,7 @@ static int build_buffers(pipeline *p, const pipeline_config *cfg, char *error, s
 
     p->batch         = cfg->batch;
     p->filter_config = cfg->filter_config;
-    p->ref_cap       = (size_t)cm_bam_max_reflen(p->bam);
+    p->ref_cap       = (size_t)cm_bam_stream_max_reflen(p->bam);
     live             = cfg->live_refs ? cfg->live_refs : derive_live_refs(p->ref_cap);
 
     p->work      = queue_create(cfg->queue_capacity);
@@ -551,7 +539,7 @@ static int build_buffers(pipeline *p, const pipeline_config *cfg, char *error, s
 
 static int open_output(pipeline *p, const pipeline_config *cfg, char *error, size_t error_len)
 {
-    p->out = h5writer_create(cfg->output_path, cm_bam_nref(p->bam), p->ref_cap,
+    p->out = h5writer_create(cfg->output_path, cm_bam_stream_nref(p->bam), p->ref_cap,
                              p->may_replace);
     if (!p->out) {
         snprintf(error, error_len, "out of memory");

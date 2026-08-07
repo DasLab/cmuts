@@ -24,7 +24,7 @@
 #define CELL_MAX_BYTES 4
 
 struct progress {
-    const cm_bam_reader *reader;
+    const cm_bam_stream *stream;
     uint64_t             span;
     uint64_t             next;   /* position at which the bar would change */
     int                  width;  /* cells, not columns */
@@ -50,9 +50,9 @@ static int terminal_cells(void)
     return cells;
 }
 
-progress *progress_start(const cm_bam_reader *reader)
+progress *progress_start(const cm_bam_stream *stream)
 {
-    uint64_t  span = cm_bam_span(reader);
+    uint64_t  span = cm_bam_stream_span(stream);
     progress *bar;
 
     if (span == 0 || !isatty(STDOUT_FILENO))
@@ -62,7 +62,7 @@ progress *progress_start(const cm_bam_reader *reader)
     if (!bar)
         return NULL;
 
-    bar->reader = reader;
+    bar->stream = stream;
     bar->span   = span;
     bar->width  = terminal_cells();
     bar->shown  = -1;
@@ -112,7 +112,7 @@ void progress_follow(progress *bar)
     if (!bar)
         return;
 
-    position = cm_bam_position(bar->reader);
+    position = cm_bam_stream_position(bar->stream);
 
     if (position < bar->next)
         return;

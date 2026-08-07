@@ -5,6 +5,8 @@
 
 #include <stdio.h>
 
+#include <htslib/hts_log.h>
+
 #include "cli.h"
 #include "error.h"
 #include "options.h"
@@ -16,6 +18,11 @@ int main(int argc, char **argv)
     cli_spec spec     = cmuts_spec(&defaults);
     cli_args args;
     char     error[CM_ERROR_MAX];
+
+    /* htslib writes its own account of a failure to stderr, which would arrive
+     * beside ours saying the same thing in another voice. What it reports it
+     * also returns, so nothing is lost by keeping it quiet. */
+    hts_set_log_level(HTS_LOG_OFF);
 
     switch (cli_parse(&spec, argc, argv, &args)) {
         case CLI_DONE:  return 0;
