@@ -22,15 +22,14 @@
  * A row covers what the CIGAR path crosses on it before the band widens it at
  * all, so no band is ever too narrow to hold a read's own gaps and none is
  * refused for want of room. Nothing is the CIGAR path and nothing else, which
- * is the alignment as written and marginalized over alone. The maximum bounds a
- * worker's matrix for the longest read it takes. */
+ * is the alignment as written and marginalized over alone.
+ *
+ * The maximum is what a command line will accept, the cost of a read being
+ * linear in the band and nothing stopping a caller from asking for more than it
+ * meant to. The model itself takes whatever it is given and asks for the memory
+ * that implies. */
 #define PHMM_DEFAULT_BAND 16
 #define PHMM_MAX_BAND     256
-
-/* Reads longer than this are left to the walk. The matrix a read needs is its
- * length times the band times the three states, and a read long enough for that
- * to matter is long enough that its alignment is a different problem. */
-#define PHMM_MAX_QUERY 20000
 
 /* What the model believes before it has seen a read.
  *
@@ -161,9 +160,14 @@ typedef struct {
  * read can have, and only those the span reaches are read. Constant throughout
  * is a band of one width; nothing here decides the shape.
  *
- * Returns false where the read cannot be marginalized -- no sequence, nothing
- * placed, a read, a band or a span too wide, or a pass that came to nothing --
- * and the caller is to fall back on the alignment as it was written. */
+ * The read must store a sequence and place at least one of its bases, the
+ * filter having turned away any that does neither.
+ *
+ * Returns false where the read cannot be marginalized -- no room for the matrix
+ * it asks for, or a pass that came to nothing -- and the caller is to fall back
+ * on the alignment as it was written. Nothing is turned away for being large:
+ * what a read costs is what it costs, and it is the memory running out that
+ * says so rather than a number chosen here. */
 bool phmm_run(const phmm *model, const phred *quality,
               const cm_bam_record *read, const cm_fasta_record *ref,
               const int *half, phmm_scratch *scratch, phmm_window *out);

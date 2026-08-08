@@ -133,7 +133,7 @@ static int32_t soft_clipped(uint32_t cigar)
          : 0;
 }
 
-static aln_span placed_span(const cm_bam_record *read)
+aln_span aln_placed_span(const cm_bam_record *read)
 {
     aln_span span  = { .begin = 0, .end = read->l_qseq };
     uint32_t first = 0;
@@ -155,7 +155,7 @@ static aln_span placed_span(const cm_bam_record *read)
 
 aln_span aln_places(const cm_bam_record *read, aln_place *places)
 {
-    aln_span  span      = placed_span(read);
+    aln_span  span      = aln_placed_span(read);
     hts_pos_t reference = read->pos;
     size_t    placed    = 0;
 

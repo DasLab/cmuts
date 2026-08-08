@@ -206,11 +206,7 @@ static bool marginalize(const context *ctx, tally_scratch *scratch)
     phmm_window window;
     const int  *half;
 
-    /* The length is asked about here and not only by the marginal, the band
-     * being sized from it: a read the marginal would refuse should not be
-     * allocated for first. */
-    if (!scratch || !has_indel(ctx->read)
-        || ctx->read->l_qseq <= 0 || ctx->read->l_qseq > PHMM_MAX_QUERY)
+    if (!scratch || !has_indel(ctx->read))
         return false;
 
     half = uniform_band(scratch, ctx->read, ctx->tables->band);

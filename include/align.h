@@ -75,6 +75,12 @@ typedef struct {
     int32_t end;    /* one past the last */
 } aln_span;
 
+/* What the alignment places, which is empty where it places nothing: a record
+ * carrying no CIGAR, or one whose every operation is a clip, or one naming only
+ * reference the read never reads. Costs a look at either end and no more, both
+ * ends stopping at the first operation that is not a clip. */
+aln_span aln_placed_span(const cm_bam_record *read);
+
 /* How far into the reference the CIGAR has reached at one point of the placed
  * span: first once that base has been taken, last once whatever is skipped
  * straight after has been too.
