@@ -59,3 +59,30 @@ void aln_open(aln_walk *walk, const cm_bam_record *read, const cm_fasta_record *
 
 /* Fills run with the next one, or returns false at the end of the read. */
 bool aln_next(aln_walk *walk, aln_run *run);
+
+/* ------------------------------------------------------------------------ */
+/* The path as a band                                                        */
+/* ------------------------------------------------------------------------ */
+
+/* The stretch of a read the alignment places somewhere.
+ *
+ * Clipped bases are placed nowhere, and anything free to move a base has to be
+ * told which bases it may move: left to itself it would align the clipped ends
+ * too, and manufacture a placement for the very bases the aligner declined to
+ * give one. */
+typedef struct {
+    int32_t begin;  /* first query offset the alignment places */
+    int32_t end;    /* one past the last */
+} aln_span;
+
+/* Fills centers with how far into the reference the CIGAR has reached at each
+ * point of the placed span, and returns the span itself: centers[i] is the
+ * reference consumed once i bases have been taken from span.begin, so
+ * centers[0] is where the read starts and one value follows for every base it
+ * places.
+ *
+ * Prefix lengths rather than coordinates, because that is the indexing a
+ * dynamic program over two sequences runs on, and because it leaves a deletion
+ * as a step along one of them rather than a hole in the other. centers must
+ * hold read->l_qseq + 1 values, which is always enough. */
+aln_span aln_centers(const cm_bam_record *read, hts_pos_t *centers);
