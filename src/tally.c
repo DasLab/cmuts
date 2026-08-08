@@ -37,6 +37,8 @@ typedef struct {
 
 struct tally_scratch {
     phmm_scratch *phmm;
+    int          *half;   /* the band handed to the marginal, row by row */
+    size_t        rows;   /* rows it is sized for */
 };
 
 static void add_at(const context *ctx, accum_field_id field, hts_pos_t pos,
@@ -168,17 +170,56 @@ static void add_window(const context *ctx, const phmm_window *window)
     }
 }
 
+/* One band, the same width at every row, which is the shape the marginal was
+ * built around and the only one asked for yet. It is grown to the longest read
+ * seen and filled once, the width being settled before any read arrives.
+ *
+ * Returns NULL where it cannot be grown, which costs the marginal and nothing
+ * else. */
+static const int *uniform_band(tally_scratch *scratch, const cm_bam_record *read,
+                               int band)
+{
+    size_t rows = (size_t)read->l_qseq + 1;
+    int   *half;
+
+    if (rows <= scratch->rows)
+        return scratch->half;
+
+    half = realloc(scratch->half, rows * sizeof *half);
+
+    if (!half)
+        return NULL;
+
+    for (size_t i = 0; i < rows; i++)
+        half[i] = band;
+
+    scratch->half = half;
+    scratch->rows = rows;
+
+    return half;
+}
+
 /* Only a read the aligner had a choice about is worth marginalizing, and only
  * an indel gives it one. */
 static bool marginalize(const context *ctx, tally_scratch *scratch)
 {
     phmm_window window;
+    const int  *half;
 
-    if (!scratch || !has_indel(ctx->read))
+    /* The length is asked about here and not only by the marginal, the band
+     * being sized from it: a read the marginal would refuse should not be
+     * allocated for first. */
+    if (!scratch || !has_indel(ctx->read)
+        || ctx->read->l_qseq <= 0 || ctx->read->l_qseq > PHMM_MAX_QUERY)
+        return false;
+
+    half = uniform_band(scratch, ctx->read, ctx->tables->band);
+
+    if (!half)
         return false;
 
     if (!phmm_run(&ctx->tables->model, &ctx->tables->quality,
-                  ctx->read, ctx->ref, scratch->phmm, &window))
+                  ctx->read, ctx->ref, half, scratch->phmm, &window))
         return false;
 
     add_window(ctx, &window);
@@ -201,7 +242,8 @@ void tally_tables_build(tally_tables *tables, const tally_config *config)
     phmm_weights weights = phmm_default_weights();
 
     phred_build(&tables->quality);
-    phmm_build(&tables->model, &params, &weights, config->band);
+    phmm_build(&tables->model, &params, &weights);
+    tables->band = config->band;
 }
 
 tally_scratch *tally_scratch_create(void)
@@ -227,6 +269,7 @@ void tally_scratch_destroy(tally_scratch *scratch)
         return;
 
     phmm_scratch_destroy(scratch->phmm);
+    free(scratch->half);
     free(scratch);
 }
 

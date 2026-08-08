@@ -28,6 +28,7 @@ tally_config tally_defaults(void);
 typedef struct {
     phred quality;
     phmm  model;
+    int   band;   /* the half-width every row of the marginal is given */
 } tally_tables;
 
 void tally_tables_build(tally_tables *tables, const tally_config *config);

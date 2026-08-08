@@ -92,7 +92,6 @@ phmm_weights phmm_default_weights(void);
 typedef struct {
     phmm_params  params;
     phmm_weights weights;
-    int          band;   /* reference positions either side of the CIGAR */
     double       match_to_match;
     double       match_to_insertion;
     double       match_to_deletion;
@@ -103,7 +102,7 @@ typedef struct {
 } phmm;
 
 void phmm_build(phmm *model, const phmm_params *params,
-                const phmm_weights *weights, int band);
+                const phmm_weights *weights);
 
 /* Having read what was read, the chance the template really differed from the
  * reference here.
@@ -154,9 +153,15 @@ typedef struct {
 /* Marginalizes one read over the alignments its band admits, leaving the result
  * in out, which borrows from scratch and lasts until the next call on it.
  *
+ * The band is given row by row: half[i] is how far either side of the CIGAR row
+ * i may look, a row being one base of the placed span and one before them all.
+ * It must hold at least read->l_qseq + 1 entries, that being the most rows a
+ * read can have, and only those the span reaches are read. Constant throughout
+ * is a band of one width; nothing here decides the shape.
+ *
  * Returns false where the read cannot be marginalized -- no sequence, nothing
- * placed, a read or a span too long, or a pass that came to nothing -- and the
- * caller is to fall back on the alignment as it was written. */
+ * placed, a read, a band or a span too wide, or a pass that came to nothing --
+ * and the caller is to fall back on the alignment as it was written. */
 bool phmm_run(const phmm *model, const phred *quality,
               const cm_bam_record *read, const cm_fasta_record *ref,
-              phmm_scratch *scratch, phmm_window *out);
+              const int *half, phmm_scratch *scratch, phmm_window *out);
