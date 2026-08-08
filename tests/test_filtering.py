@@ -47,6 +47,14 @@ FILTERS = [
 ]
 
 
+# Criteria are given in full at every call, so no default is relied on here.
+UNFILTERED = {"min_mapq": 0, "strand": "both", "min_length": 0, "max_length": 0}
+
+
+def criteria(filters):
+    return {**UNFILTERED, **filters}
+
+
 def describe(filters):
     return ",".join(f"{k}={v}" for k, v in filters.items()) or "unfiltered"
 
@@ -55,9 +63,9 @@ def describe(filters):
 @pytest.mark.parametrize("shape", sorted(SHAPES))
 def test_matches_samtools(datasets, tmp_path, shape, filters):
     data = datasets(shape)
-    summary = run_cmuts(data, tmp_path / "out.h5", **filters)
+    summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))
 
-    assert summary.kept == samtools_kept(data, **filters), "surviving reads"
+    assert summary.kept == samtools_kept(data, **criteria(filters)), "surviving reads"
 
     # Every mapped read is either kept or rejected; nothing goes missing and
     # nothing is counted twice.
@@ -87,10 +95,10 @@ def test_secondary_alignments_are_refused(datasets, tmp_path):
     data, marked = with_secondary(datasets("plain"), tmp_path, every=3)
     assert marked > 0, "the case being tested has to appear in the data"
 
-    summary = run_cmuts(data, tmp_path / "out.h5")
+    summary = run_cmuts(data, tmp_path / "out.h5", **UNFILTERED)
 
     assert summary.kept == data.mapped - marked, "surviving reads"
-    assert summary.kept == samtools_kept(data), "agreement with samtools"
+    assert summary.kept == samtools_kept(data, **UNFILTERED), "agreement with samtools"
 
     # They are refused rather than overlooked, so they show up as rejected.
     assert summary.kept + summary.rejected == data.mapped, "reads accounted for"
@@ -102,14 +110,14 @@ def test_every_format_gives_the_same_answer(datasets, tmp_path, fmt, filters):
     """Filtering is over what a record says, not how it was stored."""
     plain = datasets("plain")
     data = converted(plain, tmp_path, fmt)
-    summary = run_cmuts(data, tmp_path / "out.h5", **filters)
+    summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))
 
-    assert summary.kept == samtools_kept(data, **filters)
+    assert summary.kept == samtools_kept(data, **criteria(filters))
     assert summary.kept + summary.rejected == data.mapped
     assert summary.unmapped == data.unmapped
     assert summary.rows == data.touched
 
-    run_cmuts(plain, tmp_path / "bam.h5", **filters)
+    run_cmuts(plain, tmp_path / "bam.h5", **criteria(filters))
     assert outputs_agree(tmp_path / "out.h5", tmp_path / "bam.h5")
 
 

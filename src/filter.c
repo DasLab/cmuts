@@ -8,7 +8,7 @@
 filter_config filter_defaults(void)
 {
     return (filter_config){
-        .min_mapq   = 0,
+        .min_mapq   = 20,
         .strand     = FILTER_STRAND_BOTH,
         .min_length = FILTER_LENGTH_UNBOUNDED,
         .max_length = FILTER_LENGTH_UNBOUNDED,
