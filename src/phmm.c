@@ -7,11 +7,12 @@
  * of the reference, and the state says what the last operation was. A cell in
  * M or I therefore reads reference base j - 1 and read base i - 1.
  *
- * Only a band of reference positions is carried for each read base, centered on
- * where the CIGAR put it. Everything below is thus a probability conditioned on
- * the alignment staying inside that band, which is the approximation the whole
- * thing rests on: local ambiguity is marginalized away, and a grossly misplaced
- * read is not rescued.
+ * Only a band of reference positions is carried for each read base: what the
+ * CIGAR path crosses on that base's row, and a half-width either side of it.
+ * Everything below is thus a probability conditioned on the alignment staying
+ * inside that band, which is the approximation the whole thing rests on: local
+ * ambiguity is marginalized away, and a grossly misplaced read is not rescued.
+ * A band of nothing leaves the CIGAR path alone and marginalizes over it.
  *
  * Rows are divided by their own totals as the forward pass goes and the
  * backward pass divides by the same numbers again, which is what lets a
@@ -36,11 +37,12 @@ enum { STATE_MATCH, STATE_INSERTION, STATE_DELETION, N_STATES };
 /* One cell of a band row, named so that a row of them can be returned. */
 typedef double band_cell[N_STATES];
 
-/* Reference positions a row carrying this half-width either side holds. */
-static int band_width(int half)
-{
-    return 2 * half + 1;
-}
+/* Cells one row may hold. A row covers the reference its own base accounts
+ * for -- which a deletion after it makes as long as the deletion -- and the
+ * band either side, so this is what bounds the matrix where the band alone no
+ * longer does. A read whose skip runs past it is left to the walk, a gap that
+ * long being structural rather than anything an adduct did. */
+#define MAX_ROW_WIDTH 512
 
 /* A base drawn from nothing in particular, and a comparison that settles
  * nothing: an inserted base answers to no reference position, and a base
@@ -64,7 +66,7 @@ static size_t max_span(int widest)
  * that a row is found by multiplication and no table of offsets is needed. It
  * is the loops that are ragged, and they are what the cost follows. */
 struct phmm_scratch {
-    hts_pos_t *centers;    /* one per placed read base, and one before them */
+    aln_place *places;     /* one per placed read base, and one before them */
     double    *scale;      /* what each forward row was divided by */
     double    *forward;    /* rows, each of widest cells of N_STATES */
     /* Only the row in hand and the one below it are ever wanted, so two are
@@ -73,7 +75,7 @@ struct phmm_scratch {
     double    *coverage;   /* the window handed back */
     double    *spanned;
     double    *mutations;
-    size_t     rows;         /* rows centers and scale are sized for */
+    size_t     rows;         /* rows places and scale are sized for */
     size_t     matrix_rows;  /* rows the forward matrix is sized for */
     size_t     widest;       /* cells a row of it holds */
     size_t     window;       /* positions the last three are sized for */
@@ -253,18 +255,28 @@ static band_cell *backward_row_of(const context *ctx, size_t i)
     return ctx->scratch->backward + (i & 1) * (size_t)ctx->widest;
 }
 
-/* A row is centered on where the CIGAR put its base and reaches its own
- * half-width either side, so it holds that base's own cell however narrow it
- * is: a read is never denied the alignment it arrived with. */
+/* The reference a row's own base accounts for beyond the one it pairs with,
+ * which is however much a deletion after it passes over. */
+static hts_pos_t skip_at(const context *ctx, size_t i)
+{
+    return ctx->scratch->places[i].last - ctx->scratch->places[i].first;
+}
+
+/* A row covers everything the CIGAR path crosses on it and its half-width
+ * either side of that, rather than a half-width either side of a point. The
+ * distinction is the deletion: the path runs along a row to cross one, so a row
+ * with a deletion after it is a stretch that a band of nothing still holds
+ * whole. A read is never denied the alignment it arrived with, and the band
+ * means room to depart from it and nothing else. */
 static int width_at(const context *ctx, size_t i)
 {
-    return band_width(ctx->half[i]);
+    return (int)(skip_at(ctx, i) + 2 * (hts_pos_t)ctx->half[i] + 1);
 }
 
 /* The reference prefix length a row's first cell stands for. */
 static hts_pos_t origin_of(const context *ctx, size_t i)
 {
-    return ctx->scratch->centers[i] - ctx->half[i];
+    return ctx->scratch->places[i].first - ctx->half[i];
 }
 
 /* The reference prefix length a cell of a row stands for. */
@@ -275,8 +287,7 @@ static hts_pos_t position_of(const context *ctx, size_t i, int k)
 
 /* What to add to a cell index to name the same position on another row. Rows
  * move with the CIGAR and may widen or narrow as they go, so what separates two
- * of them is the distance between their first cells and not between their
- * centers. */
+ * of them is the distance between their first cells. */
 static hts_pos_t shift_between(const context *ctx, size_t from, size_t to)
 {
     return origin_of(ctx, to) - origin_of(ctx, from);
@@ -660,7 +671,7 @@ void phmm_scratch_destroy(phmm_scratch *scratch)
     if (!scratch)
         return;
 
-    free(scratch->centers);
+    free(scratch->places);
     free(scratch->forward);
     free(scratch->scale);
     free(scratch->backward);
@@ -676,25 +687,25 @@ void phmm_scratch_destroy(phmm_scratch *scratch)
  * every read one worker sees.
  *
  * The rows come first and alone, because how many there are is read off the
- * CIGAR, and the centers must be somewhere to be written before they can say
+ * CIGAR, and the places must be somewhere to be written before they can say
  * how wide the widest row is. */
 static int grow_rows(phmm_scratch *scratch, size_t rows)
 {
-    hts_pos_t *centers;
+    aln_place *places;
     double    *scale;
 
     if (rows <= scratch->rows)
         return 0;
 
-    centers = realloc(scratch->centers, rows * sizeof *centers);
-    scale   = realloc(scratch->scale, rows * sizeof *scale);
+    places = realloc(scratch->places, rows * sizeof *places);
+    scale  = realloc(scratch->scale, rows * sizeof *scale);
 
-    if (centers)
-        scratch->centers = centers;
+    if (places)
+        scratch->places = places;
     if (scale)
         scratch->scale = scale;
 
-    if (!centers || !scale)
+    if (!places || !scale)
         return -1;
 
     scratch->rows = rows;
@@ -765,17 +776,34 @@ static int grow_window(phmm_scratch *scratch, size_t window)
 /* One read                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* The widest row, which is the stride every row is stored at and the only
- * half-width the buffers have to answer for. */
+/* The widest row, which is the stride every row is stored at and the only width
+ * the buffers have to answer for, or zero where no matrix should be built: a
+ * half-width past what the model will look across, or a row made wider than one
+ * ought to be by the skip it carries.
+ *
+ * Widths are worked out here in the reference's own arithmetic and only then
+ * settled as cells, so that a skip of any length a CIGAR can name is turned
+ * away rather than wrapped. */
 static int widest_row(const context *ctx)
 {
-    int widest = 1;
+    hts_pos_t widest = 1;
 
-    for (size_t i = 0; i < ctx->rows; i++)
-        if (width_at(ctx, i) > widest)
-            widest = width_at(ctx, i);
+    for (size_t i = 0; i < ctx->rows; i++) {
+        hts_pos_t width;
 
-    return widest;
+        if (ctx->half[i] < 0 || ctx->half[i] > PHMM_MAX_BAND)
+            return 0;
+
+        width = skip_at(ctx, i) + 2 * (hts_pos_t)ctx->half[i] + 1;
+
+        if (width > MAX_ROW_WIDTH)
+            return 0;
+
+        if (width > widest)
+            widest = width;
+    }
+
+    return (int)widest;
 }
 
 /* Every position a cell of any row can name, from the one before the earliest
@@ -811,7 +839,7 @@ static bool prepare(context *ctx)
     if (grow_rows(ctx->scratch, (size_t)read->l_qseq + 1) < 0)
         return false;
 
-    ctx->span = aln_centers(read, ctx->scratch->centers);
+    ctx->span = aln_places(read, ctx->scratch->places);
 
     if (ctx->span.end <= ctx->span.begin)
         return false;
@@ -819,7 +847,7 @@ static bool prepare(context *ctx)
     ctx->rows   = (size_t)(ctx->span.end - ctx->span.begin) + 1;
     ctx->widest = widest_row(ctx);
 
-    if (ctx->widest > band_width(PHMM_MAX_BAND)
+    if (ctx->widest == 0
         || grow_band(ctx->scratch, ctx->rows, (size_t)ctx->widest) < 0)
         return false;
 

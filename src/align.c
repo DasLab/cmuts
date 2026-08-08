@@ -153,13 +153,14 @@ static aln_span placed_span(const cm_bam_record *read)
     return span;
 }
 
-aln_span aln_centers(const cm_bam_record *read, hts_pos_t *centers)
+aln_span aln_places(const cm_bam_record *read, aln_place *places)
 {
     aln_span  span      = placed_span(read);
     hts_pos_t reference = read->pos;
     size_t    placed    = 0;
 
-    centers[0] = reference;
+    places[0].first = reference;
+    places[0].last  = reference;
 
     for (uint32_t i = 0; i < read->n_cigar; i++) {
         uint32_t op       = bam_cigar_op(read->cigar[i]);
@@ -173,15 +174,20 @@ aln_span aln_centers(const cm_bam_record *read, hts_pos_t *centers)
             for (uint32_t j = 0; j < len; j++) {
                 if (consumes & CIGAR_CONSUMES_REFERENCE)
                     reference++;
-                centers[++placed] = reference;
+
+                placed++;
+                places[placed].first = reference;
+                places[placed].last  = reference;
             }
         } else if (consumes & CIGAR_CONSUMES_REFERENCE) {
-            /* Reference passed over with no base to pair it against: the band
-             * moves without the read moving, which is the whole of what a
-             * deletion does to it. The center already written for this base is
-             * replaced, there being one per base and not one per operation. */
-            reference      += (hts_pos_t)len;
-            centers[placed] = reference;
+            /* Reference passed over with no base to pair it against. The base
+             * before it keeps where it was placed and gains where the skip
+             * leaves off, so that the stretch it accounts for is the whole of
+             * what the path crosses without the read moving. Several skips in a
+             * row extend the same one, there being one place per base and not
+             * one per operation. */
+            reference          += (hts_pos_t)len;
+            places[placed].last = reference;
         }
     }
 

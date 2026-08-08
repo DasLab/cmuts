@@ -19,9 +19,11 @@
  * runs that make a deletion's position ambiguous in the first place, and the
  * cost of a read is linear in it.
  *
- * A band too narrow to hold a read's own gaps loses nothing: no path across the
- * matrix survives, and the read is handed back for the walk to count as
- * written. The maximum bounds a worker's matrix for the longest read it takes. */
+ * A row covers what the CIGAR path crosses on it before the band widens it at
+ * all, so no band is ever too narrow to hold a read's own gaps and none is
+ * refused for want of room. Nothing is the CIGAR path and nothing else, which
+ * is the alignment as written and marginalized over alone. The maximum bounds a
+ * worker's matrix for the longest read it takes. */
 #define PHMM_DEFAULT_BAND 16
 #define PHMM_MAX_BAND     256
 
