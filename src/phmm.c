@@ -37,6 +37,20 @@ enum { STATE_MATCH, STATE_INSERTION, STATE_DELETION, N_STATES };
 /* One cell of a band row, named so that a row of them can be returned. */
 typedef double band_cell[N_STATES];
 
+/* Everything a cell's comparison is afterwards asked for.
+ *
+ * The forward pass wants what the pairing is worth, the backward pass wants the
+ * same of a row it has yet to reach, the deletion closing there wants it again,
+ * and the accumulation wants how much of the pairing was a modification. All
+ * four come of one comparison, which costs two nucleotide decodes and a quality
+ * lookup, and which each of them used to make for itself. Kept for the whole
+ * matrix rather than a row at a time: the backward pass reads a row the forward
+ * pass wrote and left behind. */
+typedef struct {
+    double emission;
+    double modification;
+} cell_terms;
+
 /* A base drawn from nothing in particular, and a comparison that settles
  * nothing: an inserted base answers to no reference position, and a base
  * neither side has named says as little either way. */
@@ -54,6 +68,7 @@ struct phmm_scratch {
     aln_place *places;     /* one per placed read base, and one before them */
     double    *scale;      /* what each forward row was divided by */
     double    *forward;    /* rows, each of widest cells of N_STATES */
+    cell_terms *terms;     /* one per cell of it */
     /* Only the row in hand and the one below it are ever wanted, so two are
      * kept however many rows the read has. */
     band_cell *backward;
@@ -197,26 +212,6 @@ static comparison compare_at(const context *ctx, size_t i, hts_pos_t j)
     return out;
 }
 
-static double match_emission(const context *ctx, size_t i, hts_pos_t j)
-{
-    comparison at           = compare_at(ctx, i, j);
-    double     modification = ctx->model->params.modification;
-
-    if (!at.comparable)
-        return UNINFORMATIVE;
-
-    return at.agree ? agreement_chance(modification, at.error)
-                    : disagreement_chance(modification, at.error);
-}
-
-static double modification_at(const context *ctx, size_t i, hts_pos_t j)
-{
-    comparison at = compare_at(ctx, i, j);
-
-    return at.comparable ? phmm_modification(ctx->model, at.agree, at.error)
-                         : 0.0;
-}
-
 /* How far the base a row pairs is to be believed, whatever it turned out to be
  * set against: a base neither side could name was still read, and read as well
  * or as badly as its score says. */
@@ -232,6 +227,11 @@ static double confidence_at(const context *ctx, size_t i)
 static double *row_of(const context *ctx, size_t i)
 {
     return ctx->scratch->forward + i * (size_t)ctx->widest * N_STATES;
+}
+
+static cell_terms *terms_of(const context *ctx, size_t i)
+{
+    return ctx->scratch->terms + i * (size_t)ctx->widest;
 }
 
 /* Which of the two a row lands in is its parity. */
@@ -290,6 +290,29 @@ static bool within_row(const context *ctx, size_t i, hts_pos_t k)
 /* Forward                                                                   */
 /* ------------------------------------------------------------------------ */
 
+/* Every cell of a row compared once, before any pass asks what it says. */
+static void fill_terms(const context *ctx, size_t i)
+{
+    cell_terms *terms        = terms_of(ctx, i);
+    double      modification = ctx->model->params.modification;
+    hts_pos_t   width        = width_at(ctx, i);
+
+    for (hts_pos_t k = 0; k < width; k++) {
+        comparison at = compare_at(ctx, i, position_of(ctx, i, k));
+
+        if (!at.comparable) {
+            terms[k].emission     = UNINFORMATIVE;
+            terms[k].modification = 0.0;
+            continue;
+        }
+
+        terms[k].emission = at.agree
+                          ? agreement_chance(modification, at.error)
+                          : disagreement_chance(modification, at.error);
+        terms[k].modification = phmm_modification(ctx->model, at.agree, at.error);
+    }
+}
+
 /* Nothing has been read yet, so each cell of the first row is the alignment
  * poised to begin at that reference position, none of them preferred over the
  * others. None has begun with a deletion: a reference base passed over before
@@ -310,10 +333,11 @@ static void forward_first_row(const context *ctx)
 /* The two states that take a read base, and so read from the row above. */
 static void forward_paired_states(const context *ctx, size_t i)
 {
-    const phmm   *model = ctx->model;
-    double       *row   = row_of(ctx, i);
-    const double *above = row_of(ctx, i - 1);
-    hts_pos_t     shift = shift_between(ctx, i - 1, i);
+    const phmm       *model = ctx->model;
+    double           *row   = row_of(ctx, i);
+    const double     *above = row_of(ctx, i - 1);
+    const cell_terms *terms = terms_of(ctx, i);
+    hts_pos_t         shift = shift_between(ctx, i - 1, i);
 
     for (hts_pos_t k = 0; k < width_at(ctx, i); k++) {
         hts_pos_t diagonal = k - 1 + shift;  /* cell for j - 1, one row up */
@@ -327,7 +351,7 @@ static void forward_paired_states(const context *ctx, size_t i)
             paired = model->match_to_match     * from[STATE_MATCH]
                    + model->insertion_to_match * from[STATE_INSERTION]
                    + model->deletion_to_match  * from[STATE_DELETION];
-            paired *= match_emission(ctx, i, position_of(ctx, i, k));
+            paired *= terms[k].emission;
         }
 
         if (within_row(ctx, i - 1, straight)) {
@@ -414,6 +438,7 @@ static bool forward(const context *ctx)
         return false;
 
     for (size_t i = 1; i < ctx->rows; i++) {
+        fill_terms(ctx, i);
         forward_paired_states(ctx, i);
 
         if (deletions_live(ctx, i))
@@ -456,13 +481,13 @@ static void backward_row(const context *ctx, size_t i)
     double      below_scale = ctx->scratch->scale[i + 1];
     bool        live  = deletions_live(ctx, i);
 
-    band_cell       *row   = backward_row_of(ctx, i);
-    const band_cell *below = backward_row_of(ctx, i + 1);
+    band_cell        *row   = backward_row_of(ctx, i);
+    const band_cell  *below = backward_row_of(ctx, i + 1);
+    const cell_terms *terms = terms_of(ctx, i + 1);
 
     for (hts_pos_t k = width_at(ctx, i); k-- > 0; ) {
-        hts_pos_t j        = position_of(ctx, i, k);
-        hts_pos_t diagonal = k + 1 - shift;  /* cell for j + 1, one row down */
-        hts_pos_t straight = k - shift;      /* cell for j,     one row down */
+        hts_pos_t diagonal = k + 1 - shift;  /* a position on, one row down */
+        hts_pos_t straight = k - shift;      /* this position, one row down */
         double    paired   = 0.0;
         double    inserted = 0.0;
         double    deleted  = live && k + 1 < width_at(ctx, i)
@@ -470,7 +495,7 @@ static void backward_row(const context *ctx, size_t i)
                            : 0.0;
 
         if (within_row(ctx, i + 1, diagonal))
-            paired = match_emission(ctx, i + 1, j + 1)
+            paired = terms[diagonal].emission
                    * below[diagonal][STATE_MATCH] / below_scale;
 
         if (within_row(ctx, i + 1, straight))
@@ -523,10 +548,12 @@ static double closed_deletion(const context *ctx, size_t i, hts_pos_t k)
 {
     const double    *forward_row = row_of(ctx, i);
     const band_cell *below       = backward_row_of(ctx, i + 1);
-    hts_pos_t        j           = position_of(ctx, i, k);
     hts_pos_t        diagonal;
 
-    if (i + 1 >= ctx->rows)
+    /* Nothing to close where no deletion reached here, and the whole of what
+     * follows is a product with that. */
+    if (i + 1 >= ctx->rows
+        || forward_row[k * N_STATES + STATE_DELETION] == 0.0)
         return 0.0;
 
     diagonal = k + 1 - shift_between(ctx, i, i + 1);
@@ -536,7 +563,7 @@ static double closed_deletion(const context *ctx, size_t i, hts_pos_t k)
 
     return forward_row[k * N_STATES + STATE_DELETION]
          * ctx->model->deletion_to_match
-         * match_emission(ctx, i + 1, j + 1)
+         * terms_of(ctx, i + 1)[diagonal].emission
          * below[diagonal][STATE_MATCH]
          / ctx->scratch->scale[i + 1];
 }
@@ -548,7 +575,8 @@ static double opened_insertion(const context *ctx, size_t i, hts_pos_t k)
     const band_cell *back = backward_row_of(ctx, i);
     hts_pos_t        above;
 
-    if (i == 0)
+    /* As above: no insertion carried away from here, nothing to open. */
+    if (i == 0 || back[k][STATE_INSERTION] == 0.0)
         return 0.0;
 
     above = k + shift_between(ctx, i - 1, i);
@@ -587,6 +615,7 @@ static void accumulate_row(const context *ctx, size_t i)
     const phmm      *model       = ctx->model;
     const double    *forward_row = row_of(ctx, i);
     const band_cell *back        = backward_row_of(ctx, i);
+    const cell_terms *terms      = terms_of(ctx, i);
     double           confidence;
 
     if (i == 0)
@@ -605,7 +634,7 @@ static void accumulate_row(const context *ctx, size_t i)
         add_at(ctx, scratch->spanned, j - 1, paired + passed);
         add_at(ctx, scratch->mutations, j - 1,
                phmm_weigh(model, PHMM_SUBSTITUTION,
-                          paired * modification_at(ctx, i, j)));
+                          paired * terms[k].modification));
         add_at(ctx, scratch->mutations, j - 1,
                phmm_weigh(model, PHMM_DELETION, closed_deletion(ctx, i, k)));
         add_at(ctx, scratch->mutations, j,
@@ -658,6 +687,7 @@ void phmm_scratch_destroy(phmm_scratch *scratch)
 
     free(scratch->places);
     free(scratch->forward);
+    free(scratch->terms);
     free(scratch->scale);
     free(scratch->backward);
     free(scratch->coverage);
@@ -702,8 +732,9 @@ static int grow_rows(phmm_scratch *scratch, size_t rows)
  * read's regrows them however few rows this one needs. */
 static int grow_band(phmm_scratch *scratch, size_t rows, size_t widest)
 {
-    double    *forward;
-    band_cell *backward;
+    double     *forward;
+    band_cell  *backward;
+    cell_terms *terms;
 
     if (rows <= scratch->matrix_rows && widest <= scratch->widest)
         return 0;
@@ -714,13 +745,16 @@ static int grow_band(phmm_scratch *scratch, size_t rows, size_t widest)
     forward  = realloc(scratch->forward,
                        rows * widest * N_STATES * sizeof *forward);
     backward = realloc(scratch->backward, 2 * widest * sizeof *backward);
+    terms    = realloc(scratch->terms, rows * widest * sizeof *terms);
 
     if (forward)
         scratch->forward = forward;
     if (backward)
         scratch->backward = backward;
+    if (terms)
+        scratch->terms = terms;
 
-    if (!forward || !backward)
+    if (!forward || !backward || !terms)
         return -1;
 
     scratch->matrix_rows = rows;
