@@ -15,7 +15,9 @@
  * A modification is counted once per event and never once per base: one adduct
  * stops one reverse transcriptase once, whatever length of reference it then
  * skipped, and a disagreement is worth the chance the template really differed
- * rather than the read of it having been wrong.
+ * rather than the read of it having been wrong. Each event is then worth what
+ * its kind is worth, a substitution, a deletion and an insertion not speaking
+ * alike of a modification.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -72,6 +74,8 @@ static double error_at(const context *ctx, int32_t query)
  * side has named was still read, and still says nothing either way. */
 static void add_aligned_run(const context *ctx, const aln_run *run, aln_kind kind)
 {
+    const phmm *model = &ctx->config->model;
+
     for (uint32_t i = 0; i < run->len; i++) {
         hts_pos_t pos   = run->reference + (hts_pos_t)i;
         double    error = error_at(ctx, run->query + (int32_t)i);
@@ -81,8 +85,9 @@ static void add_aligned_run(const context *ctx, const aln_run *run, aln_kind kin
 
         if (kind != ALN_AMBIGUOUS)
             add_at(ctx, ACCUM_MUTATIONS, pos,
-                   phmm_modification(&ctx->config->model,
-                                     kind == ALN_MATCH, error));
+                   phmm_weigh(model, PHMM_SUBSTITUTION,
+                              phmm_modification(model, kind == ALN_MATCH,
+                                                error)));
     }
 }
 
@@ -97,7 +102,8 @@ static void add_deletion_run(const context *ctx, const aln_run *run)
         add_at(ctx, ACCUM_SPANNED, run->reference + (hts_pos_t)i, 1.0);
 
     add_at(ctx, ACCUM_MUTATIONS,
-           run->reference + (hts_pos_t)run->len - 1, 1.0);
+           run->reference + (hts_pos_t)run->len - 1,
+           phmm_weigh(&ctx->config->model, PHMM_DELETION, 1.0));
 }
 
 /* An insertion sits between two reference positions rather than on one, so it
@@ -105,7 +111,8 @@ static void add_deletion_run(const context *ctx, const aln_run *run)
  * and reaches neither. */
 static void add_insertion_run(const context *ctx, const aln_run *run)
 {
-    add_at(ctx, ACCUM_MUTATIONS, run->reference, 1.0);
+    add_at(ctx, ACCUM_MUTATIONS, run->reference,
+           phmm_weigh(&ctx->config->model, PHMM_INSERTION, 1.0));
 }
 
 /* A clip, a skip and a pad reach no reference position and are counted nowhere;
@@ -185,10 +192,11 @@ static bool marginalize(const context *ctx, tally_scratch *scratch)
 
 void tally_config_build(tally_config *config)
 {
-    phmm_params params = phmm_defaults();
+    phmm_params  params  = phmm_defaults();
+    phmm_weights weights = phmm_default_weights();
 
     phred_build(&config->quality);
-    phmm_build(&config->model, &params);
+    phmm_build(&config->model, &params, &weights);
 }
 
 tally_scratch *tally_scratch_create(void)

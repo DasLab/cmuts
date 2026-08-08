@@ -95,9 +95,22 @@ phmm_params phmm_defaults(void)
     };
 }
 
-void phmm_build(phmm *model, const phmm_params *params)
+phmm_weights phmm_default_weights(void)
+{
+    return (phmm_weights){
+        .weight = {
+            [PHMM_SUBSTITUTION] = 1.0,
+            [PHMM_DELETION]     = 1.0,
+            [PHMM_INSERTION]    = 1.0,
+        },
+    };
+}
+
+void phmm_build(phmm *model, const phmm_params *params,
+                const phmm_weights *weights)
 {
     model->params                 = *params;
+    model->weights                = *weights;
     model->match_to_insertion     = params->open_insertion;
     model->match_to_deletion      = params->open_deletion;
     model->match_to_match         = 1.0 - params->open_insertion
@@ -520,6 +533,11 @@ static double opened_insertion(const context *ctx, size_t i, int k)
  * reference it then skipped. An insertion is counted the same way, at the
  * position it sits before, and neither spans nor covers anything.
  *
+ * Every event laid down is then worth what its kind is worth, the three saying
+ * different amounts about a modification whatever the posterior says about the
+ * events themselves. The mutations alone are weighed: what a position was
+ * reached by does not bear on its having been reached.
+ *
  * The first row is the alignment poised to begin and not yet begun. Its
  * posterior says where the read starts rather than what any base of it was set
  * against, and there is no base of it to ask about, so it contributes to
@@ -527,6 +545,7 @@ static double opened_insertion(const context *ctx, size_t i, int k)
 static void accumulate_row(const context *ctx, size_t i)
 {
     phmm_scratch *scratch     = ctx->scratch;
+    const phmm   *model       = ctx->model;
     const double *forward_row = row_of(ctx, i);
     const double (*back)[N_STATES] = scratch->backward[i & 1];
     double        confidence;
@@ -546,9 +565,12 @@ static void accumulate_row(const context *ctx, size_t i)
         add_at(ctx, scratch->coverage, j - 1, paired * confidence);
         add_at(ctx, scratch->spanned, j - 1, paired + passed);
         add_at(ctx, scratch->mutations, j - 1,
-               paired * modification_at(ctx, i, j));
-        add_at(ctx, scratch->mutations, j - 1, closed_deletion(ctx, i, k));
-        add_at(ctx, scratch->mutations, j, opened_insertion(ctx, i, k));
+               phmm_weigh(model, PHMM_SUBSTITUTION,
+                          paired * modification_at(ctx, i, j)));
+        add_at(ctx, scratch->mutations, j - 1,
+               phmm_weigh(model, PHMM_DELETION, closed_deletion(ctx, i, k)));
+        add_at(ctx, scratch->mutations, j,
+               phmm_weigh(model, PHMM_INSERTION, opened_insertion(ctx, i, k)));
     }
 }
 

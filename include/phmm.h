@@ -43,6 +43,40 @@ typedef struct {
 
 phmm_params phmm_defaults(void);
 
+/* The kinds of event the mutation channel counts. */
+typedef enum {
+    PHMM_SUBSTITUTION,
+    PHMM_DELETION,
+    PHMM_INSERTION,
+    PHMM_N_EVENTS,
+} phmm_event;
+
+/* How much an event of each kind says about the template having been modified,
+ * given that the event happened at all.
+ *
+ * Not a belief about how a read comes about, so nothing here reaches either
+ * pass and the alignment does not depend on it: an insertion weighed at nothing
+ * is still an insertion the read may have, and still the reason a spurious base
+ * is not counted as a substitution instead. What a weight weighs is an event
+ * already posited.
+ *
+ * Relative, in that a factor common to all of them rescales every rate the run
+ * reports and changes nothing else. Whether any one of them is held at one is
+ * the caller's to decide; they arrive at one apiece, which is the statement that
+ * an event of any kind is worth one event.
+ *
+ * Measured from nothing, as the parameters are, and to be calibrated in time
+ * against the enrichment each kind shows over an untreated control.
+ *
+ * Indexed by kind so that a finer weighing -- by reference base, say, the
+ * chemistry not treating the four alike -- is another index rather than another
+ * field. */
+typedef struct {
+    double weight[PHMM_N_EVENTS];
+} phmm_weights;
+
+phmm_weights phmm_default_weights(void);
+
 /* The parameters with every transition they imply worked out once.
  *
  * A step from an insertion to a deletion is not among them, and neither is its
@@ -51,17 +85,19 @@ phmm_params phmm_defaults(void);
  * places. Nothing writes to the model once built, so one may be shared by every
  * thread. */
 typedef struct {
-    phmm_params params;
-    double      match_to_match;
-    double      match_to_insertion;
-    double      match_to_deletion;
-    double      insertion_to_insertion;
-    double      insertion_to_match;
-    double      deletion_to_deletion;
-    double      deletion_to_match;
+    phmm_params  params;
+    phmm_weights weights;
+    double       match_to_match;
+    double       match_to_insertion;
+    double       match_to_deletion;
+    double       insertion_to_insertion;
+    double       insertion_to_match;
+    double       deletion_to_deletion;
+    double       deletion_to_match;
 } phmm;
 
-void phmm_build(phmm *model, const phmm_params *params);
+void phmm_build(phmm *model, const phmm_params *params,
+                const phmm_weights *weights);
 
 /* Having read what was read, the chance the template really differed from the
  * reference here.
@@ -74,6 +110,15 @@ void phmm_build(phmm *model, const phmm_params *params);
  * Exposed because the walk counts the same quantity the marginal does, and the
  * two have to agree wherever the alignment was never in doubt. */
 double phmm_modification(const phmm *model, bool agree, double error);
+
+/* What one event of this kind, believed to this degree, is worth to the
+ * position it is laid at. Exposed for the same reason the modification above
+ * is, and weighing the events that one has already been applied to. */
+static inline double phmm_weigh(const phmm *model, phmm_event event,
+                                double posterior)
+{
+    return model->weights.weight[event] * posterior;
+}
 
 /* Buffers one thread reuses across reads, grown to whatever the longest read so
  * far has needed. */
