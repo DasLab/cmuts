@@ -200,27 +200,28 @@ static const int *uniform_band(tally_scratch *scratch, const cm_bam_record *read
 }
 
 /* Only a read the aligner had a choice about is worth marginalizing, and only
- * an indel gives it one. */
-static bool marginalize(const context *ctx, tally_scratch *scratch)
+ * an indel gives it one. A worker handed no scratch has nowhere to do it. */
+static bool worth_marginalizing(const context *ctx, const tally_scratch *scratch)
+{
+    return scratch && has_indel(ctx->read);
+}
+
+static phmm_status marginalize(const context *ctx, tally_scratch *scratch)
 {
     phmm_window window;
-    const int  *half;
-
-    if (!scratch || !has_indel(ctx->read))
-        return false;
-
-    half = uniform_band(scratch, ctx->read, ctx->tables->band);
+    phmm_status status;
+    const int  *half = uniform_band(scratch, ctx->read, ctx->tables->band);
 
     if (!half)
-        return false;
+        return PHMM_NO_MEMORY;
 
-    if (!phmm_run(&ctx->tables->model, &ctx->tables->quality,
-                  ctx->read, ctx->ref, half, scratch->phmm, &window))
-        return false;
+    status = phmm_run(&ctx->tables->model, &ctx->tables->quality,
+                      ctx->read, ctx->ref, half, scratch->phmm, &window);
 
-    add_window(ctx, &window);
+    if (status == PHMM_OK)
+        add_window(ctx, &window);
 
-    return true;
+    return status;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -269,8 +270,9 @@ void tally_scratch_destroy(tally_scratch *scratch)
     free(scratch);
 }
 
-void tally(const cm_bam_record *read, const cm_fasta_record *ref,
-           const tally_tables *tables, tally_scratch *scratch, accum *target)
+phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
+                  const tally_tables *tables, tally_scratch *scratch,
+                  accum *target)
 {
     context ctx = {
         .read   = read,
@@ -279,8 +281,16 @@ void tally(const cm_bam_record *read, const cm_fasta_record *ref,
         .target = target,
     };
 
-    if (!marginalize(&ctx, scratch))
+    if (worth_marginalizing(&ctx, scratch)) {
+        phmm_status status = marginalize(&ctx, scratch);
+
+        if (status != PHMM_OK)
+            return status;
+    } else {
         walk_alignment(&ctx);
+    }
 
     *accum_data(target, ACCUM_READS) += 1.0;
+
+    return PHMM_OK;
 }

@@ -15,6 +15,8 @@
 
 #include "pipeline.h"
 
+#include <stdatomic.h>
+
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,6 +48,10 @@ typedef struct {
     h5writer      *out;
     progress      *bar;
     tally_tables   tally_tables;
+    /* The first way a worker found to stop, which every worker writes and the
+     * loader reads: one failure is enough, and which of them arrived first is
+     * all the run has to report. */
+    _Atomic int    failure;   /* a phmm_status */
     bool           may_replace;
     filter_config  filter_config;
     size_t         batch;
@@ -101,6 +107,26 @@ static void shadow_switch(worker *w, refctx *ctx)
     w->held = ctx;
 }
 
+/* Every read of a run, into the worker's own shadow. A read the tally cannot
+ * count is one no later read would fare better on, so what it found is put
+ * where the loader will see it and the batch is seen through regardless. */
+static void count_run(worker *w, void **slots, size_t n,
+                      const cm_fasta_record *ref)
+{
+    for (size_t i = 0; i < n; i++) {
+        const workitem *item = slots[i];
+        cm_bam_record   read;
+        phmm_status     status;
+
+        cm_bam_record_view(item->rec, &read);
+        status = tally(&read, ref, &w->pipe->tally_tables, w->scratch,
+                       &w->shadow);
+
+        if (status != PHMM_OK)
+            atomic_store(&w->pipe->failure, status);
+    }
+}
+
 /* Processes a run of reads that all belong to one reference, which lets the
  * whole run cost a single handle release. */
 static void process_run(worker *w, void **slots, size_t n)
@@ -112,13 +138,11 @@ static void process_run(worker *w, void **slots, size_t n)
     shadow_switch(w, ctx);
     refctx_sequence(ctx, &ref);
 
-    for (size_t i = 0; i < n; i++) {
-        const workitem *item = slots[i];
-        cm_bam_record   read;
-
-        cm_bam_record_view(item->rec, &read);
-        tally(&read, &ref, &w->pipe->tally_tables, w->scratch, &w->shadow);
-    }
+    /* A run the failure reached first is unwound and not counted: nothing will
+     * read what it would have contributed, and the handles it holds are owed
+     * back whether it contributes or not. */
+    if (atomic_load(&w->pipe->failure) == PHMM_OK)
+        count_run(w, slots, n, &ref);
 
     /* The whole run is finished at the same moment, so it goes back in one
      * piece. Nothing reads these carriers afterwards: process_batch scans for
@@ -335,6 +359,12 @@ static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_
 
     while ((status = cm_bam_stream_next(p->bam, &rec)) == CM_ITER_OK) {
         progress_follow(p->bar);
+
+        /* A worker has found something no later read will mend, so there is
+         * nothing to be had from reading them. Stopping is not failing: what
+         * went wrong is the worker's to report, not the loader's. */
+        if (atomic_load(&p->failure) != PHMM_OK)
+            break;
 
         /* Unmapped reads align to no reference, so they are counted for the
          * run as a whole and go no further. */
@@ -633,6 +663,18 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
 
     queue_close(p.completed);
     pthread_join(cons.thread, NULL);
+
+    /* Asked once every worker has stopped, so that a failure on the last batch
+     * is caught as surely as one the loader saw in time to stop for. A loader
+     * that failed on its own account has already said something more particular
+     * than this could. */
+    if (status == 0 && atomic_load(&p.failure) != PHMM_OK) {
+        snprintf(error, error_len, "%s",
+                 atomic_load(&p.failure) == PHMM_NO_MEMORY
+                     ? "out of memory marginalizing a read"
+                     : "a marginalization did not hold together");
+        status = -1;
+    }
 
     /* The consumer has been joined, so the writer is again reachable from one
      * thread only and the run totals can be attached. */

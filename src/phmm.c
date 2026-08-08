@@ -828,9 +828,9 @@ static bool prepare(context *ctx)
     return true;
 }
 
-bool phmm_run(const phmm *model, const phred *quality,
-              const cm_bam_record *read, const cm_fasta_record *ref,
-              const int *half, phmm_scratch *scratch, phmm_window *out)
+phmm_status phmm_run(const phmm *model, const phred *quality,
+                     const cm_bam_record *read, const cm_fasta_record *ref,
+                     const int *half, phmm_scratch *scratch, phmm_window *out)
 {
     context ctx = {
         .model   = model,
@@ -841,8 +841,11 @@ bool phmm_run(const phmm *model, const phred *quality,
         .half    = half,
     };
 
-    if (!prepare(&ctx) || !forward(&ctx) || !backward(&ctx))
-        return false;
+    if (!prepare(&ctx))
+        return PHMM_NO_MEMORY;
+
+    if (!forward(&ctx) || !backward(&ctx))
+        return PHMM_UNSOUND;
 
     out->origin    = ctx.origin;
     out->len       = ctx.window;
@@ -850,5 +853,5 @@ bool phmm_run(const phmm *model, const phred *quality,
     out->spanned   = scratch->spanned;
     out->mutations = scratch->mutations;
 
-    return true;
+    return PHMM_OK;
 }

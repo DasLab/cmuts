@@ -151,6 +151,21 @@ typedef struct {
     const double *mutations;   /* events laid at that position's door */
 } phmm_window;
 
+/* How a marginalization ended.
+ *
+ * Neither failure is the read's doing, and neither leaves anything for a caller
+ * to salvage. A row that sums to nothing takes a band with no width to it, a
+ * row that sums to something not finite takes a parameter that is not a
+ * probability, and the two passes disagreeing about which paths exist takes an
+ * index gone wrong; none is a property of the alignment in hand, and none is
+ * mended by trying the next one. They are told apart only so that a run ending
+ * on one can say which it was. */
+typedef enum {
+    PHMM_OK,          /* out holds what the read is worth */
+    PHMM_NO_MEMORY,   /* the matrix could not be had */
+    PHMM_UNSOUND,     /* a pass did not hold together */
+} phmm_status;
+
 /* Marginalizes one read over the alignments its band admits, leaving the result
  * in out, which borrows from scratch and lasts until the next call on it.
  *
@@ -163,11 +178,10 @@ typedef struct {
  * The read must store a sequence and place at least one of its bases, the
  * filter having turned away any that does neither.
  *
- * Returns false where the read cannot be marginalized -- no room for the matrix
- * it asks for, or a pass that came to nothing -- and the caller is to fall back
- * on the alignment as it was written. Nothing is turned away for being large:
- * what a read costs is what it costs, and it is the memory running out that
+ * Anything but PHMM_OK ends the run: there is no read this can fail on and
+ * leave the rest worth counting. Nothing is turned away for being large, either
+ * -- what a read costs is what it costs, and it is the memory running out that
  * says so rather than a number chosen here. */
-bool phmm_run(const phmm *model, const phred *quality,
-              const cm_bam_record *read, const cm_fasta_record *ref,
-              const int *half, phmm_scratch *scratch, phmm_window *out);
+phmm_status phmm_run(const phmm *model, const phred *quality,
+                     const cm_bam_record *read, const cm_fasta_record *ref,
+                     const int *half, phmm_scratch *scratch, phmm_window *out);

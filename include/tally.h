@@ -49,6 +49,10 @@ void           tally_scratch_destroy(tally_scratch *scratch);
  * Accumulating into a caller-provided target rather than returning a fresh
  * struct is what lets a worker hold a private accumulator across a run of
  * reads: contributions land there with no allocation and no locking, and reach
- * the shared per-reference accumulator in a single merge. */
-void tally(const cm_bam_record *read, const cm_fasta_record *ref,
-           const tally_tables *tables, tally_scratch *scratch, accum *target);
+ * the shared per-reference accumulator in a single merge.
+ *
+ * Anything but PHMM_OK is the run's to end and not this read's to survive, the
+ * marginal failing only on what would fail again on every read after it. */
+phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
+                  const tally_tables *tables, tally_scratch *scratch,
+                  accum *target);
