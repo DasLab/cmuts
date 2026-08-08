@@ -15,9 +15,18 @@
  *
  * The band is drawn around the CIGAR and not around a diagonal, so what it
  * bounds is the departure from the alignment already found rather than the
- * departure from an ungapped one. Sixteen is far wider than the homopolymer
- * runs that make a deletion's position ambiguous in the first place, and the
- * cost of a read is linear in it.
+ * departure from an ungapped one.
+ *
+ * How far it has to reach is set by the length of the gap and not by the length
+ * of the run the gap sits in. Sliding a deletion of n bases along a homopolymer
+ * puts every row it passes n positions off the path, however far it slides, so
+ * two holds every placement of a deletion of one or two bases and a run of ten
+ * asks for no more than a run of three. Wider admits only alignments that open
+ * a gap twice or set a base against one it does not match, and on the two
+ * libraries this was measured against -- which differ by nearly twofold in how
+ * often they delete, and threefold in read length -- it scored no better and
+ * mostly worse. Two is where both put the mass of their deletion lengths, and
+ * a library whose gaps ran longer would want more.
  *
  * A row covers what the CIGAR path crosses on it before the band widens it at
  * all, so no band is ever too narrow to hold a read's own gaps and none is
@@ -28,7 +37,7 @@
  * linear in the band and nothing stopping a caller from asking for more than it
  * meant to. The model itself takes whatever it is given and asks for the memory
  * that implies. */
-#define PHMM_DEFAULT_BAND 16
+#define PHMM_DEFAULT_BAND 2
 #define PHMM_MAX_BAND     256
 
 /* What the model believes before it has seen a read.
