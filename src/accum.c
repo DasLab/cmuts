@@ -8,8 +8,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Coverage and span differ over exactly what a read did not read: a position it
+ * deleted is spanned but not covered, and a position it read poorly is spanned
+ * whole and covered only as far as the base is to be believed. A rate taken
+ * against coverage asks what fraction of the bases actually read disagreed; one
+ * taken against the span asks what fraction of the reads reaching a position
+ * found anything there at all, which is the denominator a deletion belongs
+ * over. */
 const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS] = {
     [ACCUM_COVERAGE]  = { "coverage",       ACCUM_PER_BASE },
+    [ACCUM_SPANNED]   = { "spanned",        ACCUM_PER_BASE },
     [ACCUM_MUTATIONS] = { "mutations",      ACCUM_PER_BASE },
     [ACCUM_READS]     = { "reads",          ACCUM_SCALAR   },
     [ACCUM_FILTERED]  = { "reads_filtered", ACCUM_SCALAR   },

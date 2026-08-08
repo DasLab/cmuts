@@ -8,18 +8,31 @@
 #include "accum.h"
 #include "bam.h"
 #include "fasta.h"
+#include "phmm.h"
 #include "phred.h"
 
-/* What the tally is told besides the read itself: how to read a quality, and in
- * time what to count as a modification and what to weigh it by.
+/* What the tally is told besides the read itself: how to read a quality, and
+ * what to make of an alignment that could have been written more than one way.
  *
  * Built before any worker starts and never written afterwards, which is what
  * lets every worker be handed the same one. */
 typedef struct {
     phred quality;
+    phmm  model;
 } tally_config;
 
 void tally_config_build(tally_config *config);
+
+/* Working buffers one worker reuses across every read it sees.
+ *
+ * Private to a worker rather than shared, since the marginal writes over the
+ * whole of it for each read, and reused rather than allocated per read, since a
+ * read is far too small a thing to allocate for. A NULL scratch is not an
+ * error: it costs the marginal and nothing else. */
+typedef struct tally_scratch tally_scratch;
+
+tally_scratch *tally_scratch_create(void);
+void           tally_scratch_destroy(tally_scratch *scratch);
 
 /* Adds one read's contribution to target, which is never cleared here.
  *
@@ -28,4 +41,4 @@ void tally_config_build(tally_config *config);
  * reads: contributions land there with no allocation and no locking, and reach
  * the shared per-reference accumulator in a single merge. */
 void tally(const cm_bam_record *read, const cm_fasta_record *ref,
-           const tally_config *config, accum *target);
+           const tally_config *config, tally_scratch *scratch, accum *target);

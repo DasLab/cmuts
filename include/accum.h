@@ -15,6 +15,7 @@
  * means adding one enumerator and one table row. */
 typedef enum {
     ACCUM_COVERAGE,
+    ACCUM_SPANNED,
     ACCUM_MUTATIONS,
     ACCUM_READS,
     ACCUM_FILTERED,

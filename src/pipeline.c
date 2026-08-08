@@ -64,11 +64,12 @@ static void finish_reference(pipeline *p, refctx *ctx)
 /* ------------------------------------------------------------------------ */
 
 typedef struct {
-    pipeline *pipe;
-    refctx   *held;       /* reference the shadow holds a handle for, or NULL */
-    accum     shadow;
-    void    **slots;      /* batch buffer, allocated before the thread starts */
-    pthread_t thread;
+    pipeline      *pipe;
+    refctx        *held;    /* reference the shadow holds a handle for, or NULL */
+    accum          shadow;
+    tally_scratch *scratch; /* what the processing step works in */
+    void         **slots;   /* batch buffer, allocated before the thread starts */
+    pthread_t      thread;
 } worker;
 
 /* Merges the shadow into its reference and releases the handle that protected
@@ -116,7 +117,7 @@ static void process_run(worker *w, void **slots, size_t n)
         cm_bam_record   read;
 
         cm_bam_record_view(item->rec, &read);
-        tally(&read, &ref, &w->pipe->tally_config, &w->shadow);
+        tally(&read, &ref, &w->pipe->tally_config, w->scratch, &w->shadow);
     }
 
     /* The whole run is finished at the same moment, so it goes back in one
@@ -568,10 +569,12 @@ static int start_workers(worker *workers, size_t n, pipeline *p, size_t *started
     *started = 0;
 
     for (size_t i = 0; i < n; i++) {
-        workers[i].pipe  = p;
-        workers[i].slots = calloc(p->batch, sizeof *workers[i].slots);
+        workers[i].pipe    = p;
+        workers[i].slots   = calloc(p->batch, sizeof *workers[i].slots);
+        workers[i].scratch = tally_scratch_create();
 
-        if (!workers[i].slots || accum_alloc(&workers[i].shadow, p->ref_cap) < 0) {
+        if (!workers[i].slots || !workers[i].scratch
+            || accum_alloc(&workers[i].shadow, p->ref_cap) < 0) {
             snprintf(error, error_len, "out of memory preparing worker %zu", i);
             return -1;
         }
@@ -640,6 +643,7 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
 done:
     for (size_t i = 0; i < cfg->workers; i++) {
         accum_free(&workers[i].shadow);
+        tally_scratch_destroy(workers[i].scratch);
         free(workers[i].slots);
     }
 
