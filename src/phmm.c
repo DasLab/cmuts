@@ -31,10 +31,16 @@
 #include "align.h"
 #include "nuc.h"
 
-/* Reference positions carried for each read base. */
-#define BAND_WIDTH (2 * PHMM_BAND + 1)
-
 enum { STATE_MATCH, STATE_INSERTION, STATE_DELETION, N_STATES };
+
+/* One cell of a band row, named so that a row of them can be returned. */
+typedef double band_cell[N_STATES];
+
+/* Reference positions carried for each read base. */
+static int band_width(int band)
+{
+    return 2 * band + 1;
+}
 
 /* A base drawn from nothing in particular, and a comparison that settles
  * nothing: an inserted base answers to no reference position, and a base
@@ -44,7 +50,10 @@ enum { STATE_MATCH, STATE_INSERTION, STATE_DELETION, N_STATES };
 /* How far the reference a read may reach before it is left to the walk. A band
  * following a CIGAR follows its reference skips too, and a read spanning an
  * intron would otherwise size its window to the intron. */
-#define MAX_SPAN (PHMM_MAX_QUERY + 2 * PHMM_BAND + 2)
+static size_t max_span(int band)
+{
+    return (size_t)PHMM_MAX_QUERY + 2 * (size_t)band + 2;
+}
 
 /* Forward times backward has to come to one on every row. A departure past this
  * is an index gone wrong rather than a rounding, and the read is better handed
@@ -53,17 +62,17 @@ enum { STATE_MATCH, STATE_INSERTION, STATE_DELETION, N_STATES };
 
 struct phmm_scratch {
     hts_pos_t *centers;    /* one per placed read base, and one before them */
-    double    *forward;    /* rows, each BAND_WIDTH cells of N_STATES */
+    double    *forward;    /* rows, each of width cells of N_STATES */
     double    *scale;      /* what each forward row was divided by */
+    /* Only the row in hand and the one below it are ever wanted, so two are
+     * kept however many rows the read has. */
+    band_cell *backward;
     double    *coverage;   /* the window handed back */
     double    *spanned;
     double    *mutations;
     size_t     rows;       /* rows the three buffers above are sized for */
-    size_t     window;     /* positions the two after them are sized for */
-
-    /* Only the row in hand and the one below it are ever wanted, and the band
-     * is a fixed width, so this one never has to grow. */
-    double     backward[2][BAND_WIDTH][N_STATES];
+    size_t     width;      /* cells a row of them holds */
+    size_t     window;     /* positions the three after them are sized for */
 };
 
 /* Everything one read is marginalized against, gathered so that the passes read
@@ -75,6 +84,8 @@ typedef struct {
     const cm_fasta_record *ref;
     phmm_scratch          *scratch;
     aln_span               span;
+    int                    band;
+    int                    width;   /* cells a row of the band holds */
     size_t                 rows;    /* placed bases, and one row before them */
     hts_pos_t              origin;  /* reference position of window value 0 */
     size_t                 window;
@@ -107,10 +118,11 @@ phmm_weights phmm_default_weights(void)
 }
 
 void phmm_build(phmm *model, const phmm_params *params,
-                const phmm_weights *weights)
+                const phmm_weights *weights, int band)
 {
     model->params                 = *params;
     model->weights                = *weights;
+    model->band                   = band;
     model->match_to_insertion     = params->open_insertion;
     model->match_to_deletion      = params->open_deletion;
     model->match_to_match         = 1.0 - params->open_insertion
@@ -228,7 +240,13 @@ static double confidence_at(const context *ctx, size_t i)
 
 static double *row_of(const context *ctx, size_t i)
 {
-    return ctx->scratch->forward + i * BAND_WIDTH * N_STATES;
+    return ctx->scratch->forward + i * (size_t)ctx->width * N_STATES;
+}
+
+/* Which of the two a row lands in is its parity. */
+static band_cell *backward_row_of(const context *ctx, size_t i)
+{
+    return ctx->scratch->backward + (i & 1) * (size_t)ctx->width;
 }
 
 /* The reference prefix length a cell of a row stands for. Every row is the same
@@ -236,7 +254,7 @@ static double *row_of(const context *ctx, size_t i)
  * one is found on the other by adding it. */
 static hts_pos_t position_of(const context *ctx, size_t i, int k)
 {
-    return ctx->scratch->centers[i] - PHMM_BAND + k;
+    return ctx->scratch->centers[i] - ctx->band + k;
 }
 
 static hts_pos_t shift_between(const context *ctx, size_t from, size_t to)
@@ -244,9 +262,9 @@ static hts_pos_t shift_between(const context *ctx, size_t from, size_t to)
     return ctx->scratch->centers[to] - ctx->scratch->centers[from];
 }
 
-static bool within_band(hts_pos_t k)
+static bool within_band(const context *ctx, hts_pos_t k)
 {
-    return k >= 0 && k < BAND_WIDTH;
+    return k >= 0 && k < ctx->width;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -262,8 +280,8 @@ static void forward_first_row(const context *ctx)
 {
     double *row = row_of(ctx, 0);
 
-    for (int k = 0; k < BAND_WIDTH; k++) {
-        row[k * N_STATES + STATE_MATCH]     = 1.0 / BAND_WIDTH;
+    for (int k = 0; k < ctx->width; k++) {
+        row[k * N_STATES + STATE_MATCH]     = 1.0 / ctx->width;
         row[k * N_STATES + STATE_INSERTION] = 0.0;
         row[k * N_STATES + STATE_DELETION]  = 0.0;
     }
@@ -277,13 +295,13 @@ static void forward_paired_states(const context *ctx, size_t i)
     const double *above = row_of(ctx, i - 1);
     hts_pos_t     shift = shift_between(ctx, i - 1, i);
 
-    for (int k = 0; k < BAND_WIDTH; k++) {
+    for (int k = 0; k < ctx->width; k++) {
         hts_pos_t diagonal = k - 1 + shift;  /* cell for j - 1, one row up */
         hts_pos_t straight = k + shift;      /* cell for j,     one row up */
         double    paired   = 0.0;
         double    inserted = 0.0;
 
-        if (within_band(diagonal)) {
+        if (within_band(ctx, diagonal)) {
             const double *from = above + diagonal * N_STATES;
 
             paired = model->match_to_match     * from[STATE_MATCH]
@@ -292,7 +310,7 @@ static void forward_paired_states(const context *ctx, size_t i)
             paired *= match_emission(ctx, i, position_of(ctx, i, k));
         }
 
-        if (within_band(straight)) {
+        if (within_band(ctx, straight)) {
             const double *from = above + straight * N_STATES;
 
             inserted = model->match_to_insertion     * from[STATE_MATCH]
@@ -315,7 +333,7 @@ static void forward_deletions(const context *ctx, size_t i)
 
     row[STATE_DELETION] = 0.0;
 
-    for (int k = 1; k < BAND_WIDTH; k++) {
+    for (int k = 1; k < ctx->width; k++) {
         const double *left = row + (k - 1) * N_STATES;
 
         row[k * N_STATES + STATE_DELETION] =
@@ -328,7 +346,7 @@ static void clear_deletions(const context *ctx, size_t i)
 {
     double *row = row_of(ctx, i);
 
-    for (int k = 0; k < BAND_WIDTH; k++)
+    for (int k = 0; k < ctx->width; k++)
         row[k * N_STATES + STATE_DELETION] = 0.0;
 }
 
@@ -353,13 +371,13 @@ static bool rescale(const context *ctx, size_t i)
     double *row   = row_of(ctx, i);
     double  total = 0.0;
 
-    for (int c = 0; c < BAND_WIDTH * N_STATES; c++)
+    for (int c = 0; c < ctx->width * N_STATES; c++)
         total += row[c];
 
     if (!(total > 0.0) || !isfinite(total))
         return false;
 
-    for (int c = 0; c < BAND_WIDTH * N_STATES; c++)
+    for (int c = 0; c < ctx->width * N_STATES; c++)
         row[c] /= total;
 
     ctx->scratch->scale[i] = total;
@@ -397,9 +415,9 @@ static bool forward(const context *ctx)
  * but not having passed over a reference base to do it. */
 static void backward_last_row(const context *ctx)
 {
-    double (*row)[N_STATES] = ctx->scratch->backward[(ctx->rows - 1) & 1];
+    band_cell *row = backward_row_of(ctx, ctx->rows - 1);
 
-    for (int k = 0; k < BAND_WIDTH; k++) {
+    for (int k = 0; k < ctx->width; k++) {
         row[k][STATE_MATCH]     = 1.0;
         row[k][STATE_INSERTION] = 1.0;
         row[k][STATE_DELETION]  = 0.0;
@@ -417,24 +435,24 @@ static void backward_row(const context *ctx, size_t i)
     double      below_scale = ctx->scratch->scale[i + 1];
     bool        live  = deletions_live(ctx, i);
 
-    double       (*row)[N_STATES]   = ctx->scratch->backward[i & 1];
-    const double (*below)[N_STATES] = ctx->scratch->backward[(i + 1) & 1];
+    band_cell       *row   = backward_row_of(ctx, i);
+    const band_cell *below = backward_row_of(ctx, i + 1);
 
-    for (int k = BAND_WIDTH; k-- > 0; ) {
+    for (int k = ctx->width; k-- > 0; ) {
         hts_pos_t j        = position_of(ctx, i, k);
         hts_pos_t diagonal = k + 1 - shift;  /* cell for j + 1, one row down */
         hts_pos_t straight = k - shift;      /* cell for j,     one row down */
         double    paired   = 0.0;
         double    inserted = 0.0;
-        double    deleted  = live && k + 1 < BAND_WIDTH
+        double    deleted  = live && k + 1 < ctx->width
                            ? row[k + 1][STATE_DELETION]
                            : 0.0;
 
-        if (within_band(diagonal))
+        if (within_band(ctx, diagonal))
             paired = match_emission(ctx, i + 1, j + 1)
                    * below[diagonal][STATE_MATCH] / below_scale;
 
-        if (within_band(straight))
+        if (within_band(ctx, straight))
             inserted = UNINFORMATIVE
                      * below[straight][STATE_INSERTION] / below_scale;
 
@@ -482,17 +500,17 @@ static void add_at(const context *ctx, double *field, hts_pos_t position,
  * it there is. */
 static double closed_deletion(const context *ctx, size_t i, int k)
 {
-    const double *forward_row = row_of(ctx, i);
-    const double (*below)[N_STATES] = ctx->scratch->backward[(i + 1) & 1];
-    hts_pos_t     j = position_of(ctx, i, k);
-    hts_pos_t     diagonal;
+    const double    *forward_row = row_of(ctx, i);
+    const band_cell *below       = backward_row_of(ctx, i + 1);
+    hts_pos_t        j           = position_of(ctx, i, k);
+    hts_pos_t        diagonal;
 
     if (i + 1 >= ctx->rows)
         return 0.0;
 
     diagonal = k + 1 - shift_between(ctx, i, i + 1);
 
-    if (!within_band(diagonal))
+    if (!within_band(ctx, diagonal))
         return 0.0;
 
     return forward_row[k * N_STATES + STATE_DELETION]
@@ -506,15 +524,15 @@ static double closed_deletion(const context *ctx, size_t i, int k)
  * that carried that row into this one has to be undone. */
 static double opened_insertion(const context *ctx, size_t i, int k)
 {
-    const double (*back)[N_STATES] = ctx->scratch->backward[i & 1];
-    hts_pos_t      above;
+    const band_cell *back = backward_row_of(ctx, i);
+    hts_pos_t        above;
 
     if (i == 0)
         return 0.0;
 
     above = k + shift_between(ctx, i - 1, i);
 
-    if (!within_band(above))
+    if (!within_band(ctx, above))
         return 0.0;
 
     return row_of(ctx, i - 1)[above * N_STATES + STATE_MATCH]
@@ -544,18 +562,18 @@ static double opened_insertion(const context *ctx, size_t i, int k)
  * nothing. */
 static void accumulate_row(const context *ctx, size_t i)
 {
-    phmm_scratch *scratch     = ctx->scratch;
-    const phmm   *model       = ctx->model;
-    const double *forward_row = row_of(ctx, i);
-    const double (*back)[N_STATES] = scratch->backward[i & 1];
-    double        confidence;
+    phmm_scratch    *scratch     = ctx->scratch;
+    const phmm      *model       = ctx->model;
+    const double    *forward_row = row_of(ctx, i);
+    const band_cell *back        = backward_row_of(ctx, i);
+    double           confidence;
 
     if (i == 0)
         return;
 
     confidence = confidence_at(ctx, i);
 
-    for (int k = 0; k < BAND_WIDTH; k++) {
+    for (int k = 0; k < ctx->width; k++) {
         hts_pos_t j      = position_of(ctx, i, k);
         double    paired = forward_row[k * N_STATES + STATE_MATCH]
                          * back[k][STATE_MATCH];
@@ -579,11 +597,11 @@ static void accumulate_row(const context *ctx, size_t i)
  * that statement, and it is cheap enough to make of one of them. */
 static bool normalized(const context *ctx)
 {
-    const double *forward_row = row_of(ctx, 0);
-    const double (*back)[N_STATES] = ctx->scratch->backward[0];
-    double        total = 0.0;
+    const double    *forward_row = row_of(ctx, 0);
+    const band_cell *back        = backward_row_of(ctx, 0);
+    double           total       = 0.0;
 
-    for (int k = 0; k < BAND_WIDTH; k++)
+    for (int k = 0; k < ctx->width; k++)
         for (int s = 0; s < N_STATES; s++)
             total += forward_row[k * N_STATES + s] * back[k][s];
 
@@ -620,6 +638,7 @@ void phmm_scratch_destroy(phmm_scratch *scratch)
     free(scratch->centers);
     free(scratch->forward);
     free(scratch->scale);
+    free(scratch->backward);
     free(scratch->coverage);
     free(scratch->spanned);
     free(scratch->mutations);
@@ -628,20 +647,28 @@ void phmm_scratch_destroy(phmm_scratch *scratch)
 
 /* Each buffer that grew is kept whether or not its neighbours did, so that a
  * scratch failing to grow is still the scratch it was, just larger in places
- * than it needs to be. */
-static int grow_rows(phmm_scratch *scratch, size_t rows)
+ * than it needs to be.
+ *
+ * Sized by the rows and the band together, so a wider band regrows them
+ * however few rows the read needs. Neither dimension ever shrinks. */
+static int grow_matrix(phmm_scratch *scratch, size_t rows, size_t width)
 {
     hts_pos_t *centers;
     double    *forward;
     double    *scale;
+    band_cell *backward;
 
-    if (rows <= scratch->rows)
+    if (rows <= scratch->rows && width <= scratch->width)
         return 0;
 
-    centers = realloc(scratch->centers, rows * sizeof *centers);
-    forward = realloc(scratch->forward,
-                      rows * BAND_WIDTH * N_STATES * sizeof *forward);
-    scale   = realloc(scratch->scale, rows * sizeof *scale);
+    rows  = rows  > scratch->rows  ? rows  : scratch->rows;
+    width = width > scratch->width ? width : scratch->width;
+
+    centers  = realloc(scratch->centers, rows * sizeof *centers);
+    forward  = realloc(scratch->forward,
+                       rows * width * N_STATES * sizeof *forward);
+    scale    = realloc(scratch->scale, rows * sizeof *scale);
+    backward = realloc(scratch->backward, 2 * width * sizeof *backward);
 
     if (centers)
         scratch->centers = centers;
@@ -649,11 +676,14 @@ static int grow_rows(phmm_scratch *scratch, size_t rows)
         scratch->forward = forward;
     if (scale)
         scratch->scale = scale;
+    if (backward)
+        scratch->backward = backward;
 
-    if (!centers || !forward || !scale)
+    if (!centers || !forward || !scale || !backward)
         return -1;
 
-    scratch->rows = rows;
+    scratch->rows  = rows;
+    scratch->width = width;
 
     return 0;
 }
@@ -697,9 +727,9 @@ static void size_window(context *ctx)
 {
     const hts_pos_t *centers = ctx->scratch->centers;
 
-    ctx->origin = centers[0] - PHMM_BAND - 1;
+    ctx->origin = centers[0] - ctx->band - 1;
     ctx->window = (size_t)(centers[ctx->rows - 1] - centers[0])
-                + 2 * PHMM_BAND + 2;
+                + 2 * (size_t)ctx->band + 2;
 }
 
 static bool prepare(context *ctx)
@@ -709,7 +739,8 @@ static bool prepare(context *ctx)
     if (!read->seq || read->l_qseq <= 0 || read->l_qseq > PHMM_MAX_QUERY)
         return false;
 
-    if (grow_rows(ctx->scratch, (size_t)read->l_qseq + 1) < 0)
+    if (grow_matrix(ctx->scratch, (size_t)read->l_qseq + 1,
+                    (size_t)ctx->width) < 0)
         return false;
 
     ctx->span = aln_centers(read, ctx->scratch->centers);
@@ -721,7 +752,8 @@ static bool prepare(context *ctx)
 
     size_window(ctx);
 
-    if (ctx->window > MAX_SPAN || grow_window(ctx->scratch, ctx->window) < 0)
+    if (ctx->window > max_span(ctx->band)
+        || grow_window(ctx->scratch, ctx->window) < 0)
         return false;
 
     memset(ctx->scratch->coverage, 0,
@@ -744,6 +776,8 @@ bool phmm_run(const phmm *model, const phred *quality,
         .read    = read,
         .ref     = ref,
         .scratch = scratch,
+        .band    = model->band,
+        .width   = band_width(model->band),
     };
 
     if (!prepare(&ctx) || !forward(&ctx) || !backward(&ctx))

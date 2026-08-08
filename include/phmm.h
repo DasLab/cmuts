@@ -17,8 +17,13 @@
  * bounds is the departure from the alignment already found rather than the
  * departure from an ungapped one. Sixteen is far wider than the homopolymer
  * runs that make a deletion's position ambiguous in the first place, and the
- * cost of a read is linear in it. */
-#define PHMM_BAND 16
+ * cost of a read is linear in it.
+ *
+ * A band too narrow to hold a read's own gaps loses nothing: no path across the
+ * matrix survives, and the read is handed back for the walk to count as
+ * written. The maximum bounds a worker's matrix for the longest read it takes. */
+#define PHMM_DEFAULT_BAND 16
+#define PHMM_MAX_BAND     256
 
 /* Reads longer than this are left to the walk. The matrix a read needs is its
  * length times the band times the three states, and a read long enough for that
@@ -87,6 +92,7 @@ phmm_weights phmm_default_weights(void);
 typedef struct {
     phmm_params  params;
     phmm_weights weights;
+    int          band;   /* reference positions either side of the CIGAR */
     double       match_to_match;
     double       match_to_insertion;
     double       match_to_deletion;
@@ -97,7 +103,7 @@ typedef struct {
 } phmm;
 
 void phmm_build(phmm *model, const phmm_params *params,
-                const phmm_weights *weights);
+                const phmm_weights *weights, int band);
 
 /* Having read what was read, the chance the template really differed from the
  * reference here.

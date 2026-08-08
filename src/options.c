@@ -78,6 +78,18 @@ static const cli_option OPTIONS[] = {
                 "to depends on the library protocol and on which mate is in hand.",
       .choices = STRAND_CHOICES },
 
+    { .group = "Counting", .name = "band", .type = OPT_INT,
+      .offset = offsetof(cli_args, pipeline.tally_config.band), .metavar = "N",
+      .help = "reference positions the marginal may look either side of the CIGAR",
+      .detail = "A read carrying an indel is counted over every alignment a band "
+                "this wide around its CIGAR admits, rather than over the one path "
+                "the aligner chose to report. The band follows that path rather "
+                "than a diagonal, so what it bounds is the departure from the "
+                "alignment already found. Cost is linear in it, and 0 pins the "
+                "marginal to the CIGAR, leaving every read with an indel counted "
+                "as written.",
+      .minimum = 0, .maximum = PHMM_MAX_BAND },
+
     { .group = "Performance", .name = "workers", .key = 'j', .type = OPT_SIZE,
       .offset = offsetof(cli_args, pipeline.workers), .metavar = "N",
       .help = "threads running the processing step",

@@ -45,7 +45,7 @@ typedef struct {
     ctxpool       *contexts;
     h5writer      *out;
     progress      *bar;
-    tally_config   tally_config;
+    tally_tables   tally_tables;
     bool           may_replace;
     filter_config  filter_config;
     size_t         batch;
@@ -117,7 +117,7 @@ static void process_run(worker *w, void **slots, size_t n)
         cm_bam_record   read;
 
         cm_bam_record_view(item->rec, &read);
-        tally(&read, &ref, &w->pipe->tally_config, w->scratch, &w->shadow);
+        tally(&read, &ref, &w->pipe->tally_tables, w->scratch, &w->shadow);
     }
 
     /* The whole run is finished at the same moment, so it goes back in one
@@ -419,6 +419,7 @@ pipeline_config pipeline_defaults(void)
         .batch          = 64,
         .live_refs      = 0,  /* derived from the longest reference */
         .filter_config  = filter_defaults(),
+        .tally_config   = tally_defaults(),
     };
 }
 
@@ -612,7 +613,7 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
         open_output(&p, cfg, error, error_len) < 0)
         goto done;
 
-    tally_config_build(&p.tally_config);
+    tally_tables_build(&p.tally_tables, &cfg->tally_config);
 
     /* Once nothing is left that could fail before a read is taken. */
     p.bar = progress_start(p.bam);

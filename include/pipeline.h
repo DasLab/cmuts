@@ -9,6 +9,7 @@
 #include <stddef.h>
 
 #include "filter.h"
+#include "tally.h"
 
 typedef struct {
     /* Read as though they were one file: every reference is counted across all
@@ -19,6 +20,7 @@ typedef struct {
     const char        *output_path;
     bool               overwrite;
     filter_config      filter_config;
+    tally_config       tally_config;
     size_t      workers;         /* threads running the processing step */
     int         decode_threads;  /* htslib threads for BGZF inflation */
     size_t      queue_capacity;  /* reads that may be in transit at once */

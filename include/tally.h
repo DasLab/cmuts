@@ -11,17 +11,26 @@
 #include "phmm.h"
 #include "phred.h"
 
-/* What the tally is told besides the read itself: how to read a quality, and
+/* What a caller asks for, plain enough for a command line to write into. */
+typedef struct {
+    int band;  /* reference positions the marginal may look either side of the
+                  CIGAR; 0 pins it to the path as written */
+} tally_config;
+
+tally_config tally_defaults(void);
+
+/* What the tally works from besides the read itself: how to read a quality, and
  * what to make of an alignment that could have been written more than one way.
  *
- * Built before any worker starts and never written afterwards, which is what
- * lets every worker be handed the same one. */
+ * Derived from the config rather than set alongside it, and built before any
+ * worker starts and never written afterwards, which is what lets every worker
+ * be handed the same one. */
 typedef struct {
     phred quality;
     phmm  model;
-} tally_config;
+} tally_tables;
 
-void tally_config_build(tally_config *config);
+void tally_tables_build(tally_tables *tables, const tally_config *config);
 
 /* Working buffers one worker reuses across every read it sees.
  *
@@ -41,4 +50,4 @@ void           tally_scratch_destroy(tally_scratch *scratch);
  * reads: contributions land there with no allocation and no locking, and reach
  * the shared per-reference accumulator in a single merge. */
 void tally(const cm_bam_record *read, const cm_fasta_record *ref,
-           const tally_config *config, tally_scratch *scratch, accum *target);
+           const tally_tables *tables, tally_scratch *scratch, accum *target);

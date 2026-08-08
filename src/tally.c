@@ -31,7 +31,7 @@
 typedef struct {
     const cm_bam_record   *read;
     const cm_fasta_record *ref;
-    const tally_config    *config;
+    const tally_tables    *tables;
     accum                 *target;
 } context;
 
@@ -57,7 +57,7 @@ static void add_at(const context *ctx, accum_field_id field, hts_pos_t pos,
 static double error_at(const context *ctx, int32_t query)
 {
     return ctx->read->qual
-         ? phred_error(&ctx->config->quality, ctx->read->qual[query])
+         ? phred_error(&ctx->tables->quality, ctx->read->qual[query])
          : 0.0;
 }
 
@@ -74,7 +74,7 @@ static double error_at(const context *ctx, int32_t query)
  * side has named was still read, and still says nothing either way. */
 static void add_aligned_run(const context *ctx, const aln_run *run, aln_kind kind)
 {
-    const phmm *model = &ctx->config->model;
+    const phmm *model = &ctx->tables->model;
 
     for (uint32_t i = 0; i < run->len; i++) {
         hts_pos_t pos   = run->reference + (hts_pos_t)i;
@@ -103,7 +103,7 @@ static void add_deletion_run(const context *ctx, const aln_run *run)
 
     add_at(ctx, ACCUM_MUTATIONS,
            run->reference + (hts_pos_t)run->len - 1,
-           phmm_weigh(&ctx->config->model, PHMM_DELETION, 1.0));
+           phmm_weigh(&ctx->tables->model, PHMM_DELETION, 1.0));
 }
 
 /* An insertion sits between two reference positions rather than on one, so it
@@ -112,7 +112,7 @@ static void add_deletion_run(const context *ctx, const aln_run *run)
 static void add_insertion_run(const context *ctx, const aln_run *run)
 {
     add_at(ctx, ACCUM_MUTATIONS, run->reference,
-           phmm_weigh(&ctx->config->model, PHMM_INSERTION, 1.0));
+           phmm_weigh(&ctx->tables->model, PHMM_INSERTION, 1.0));
 }
 
 /* A clip, a skip and a pad reach no reference position and are counted nowhere;
@@ -177,7 +177,7 @@ static bool marginalize(const context *ctx, tally_scratch *scratch)
     if (!scratch || !has_indel(ctx->read))
         return false;
 
-    if (!phmm_run(&ctx->config->model, &ctx->config->quality,
+    if (!phmm_run(&ctx->tables->model, &ctx->tables->quality,
                   ctx->read, ctx->ref, scratch->phmm, &window))
         return false;
 
@@ -190,13 +190,18 @@ static bool marginalize(const context *ctx, tally_scratch *scratch)
 /* Setup                                                                     */
 /* ------------------------------------------------------------------------ */
 
-void tally_config_build(tally_config *config)
+tally_config tally_defaults(void)
+{
+    return (tally_config){ .band = PHMM_DEFAULT_BAND };
+}
+
+void tally_tables_build(tally_tables *tables, const tally_config *config)
 {
     phmm_params  params  = phmm_defaults();
     phmm_weights weights = phmm_default_weights();
 
-    phred_build(&config->quality);
-    phmm_build(&config->model, &params, &weights);
+    phred_build(&tables->quality);
+    phmm_build(&tables->model, &params, &weights, config->band);
 }
 
 tally_scratch *tally_scratch_create(void)
@@ -226,12 +231,12 @@ void tally_scratch_destroy(tally_scratch *scratch)
 }
 
 void tally(const cm_bam_record *read, const cm_fasta_record *ref,
-           const tally_config *config, tally_scratch *scratch, accum *target)
+           const tally_tables *tables, tally_scratch *scratch, accum *target)
 {
     context ctx = {
         .read   = read,
         .ref    = ref,
-        .config = config,
+        .tables = tables,
         .target = target,
     };
 
