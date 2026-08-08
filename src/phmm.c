@@ -290,27 +290,21 @@ static bool within_row(const context *ctx, size_t i, hts_pos_t k)
 /* Forward                                                                   */
 /* ------------------------------------------------------------------------ */
 
-/* Every cell of a row compared once, before any pass asks what it says. */
-static void fill_terms(const context *ctx, size_t i)
+/* What one cell's comparison is afterwards asked for. */
+static cell_terms terms_at(const context *ctx, size_t i, hts_pos_t k)
 {
-    cell_terms *terms        = terms_of(ctx, i);
-    double      modification = ctx->model->params.modification;
-    hts_pos_t   width        = width_at(ctx, i);
+    comparison at  = compare_at(ctx, i, position_of(ctx, i, k));
+    double     m   = ctx->model->params.modification;
+    cell_terms out = { .emission = UNINFORMATIVE, .modification = 0.0 };
 
-    for (hts_pos_t k = 0; k < width; k++) {
-        comparison at = compare_at(ctx, i, position_of(ctx, i, k));
+    if (!at.comparable)
+        return out;
 
-        if (!at.comparable) {
-            terms[k].emission     = UNINFORMATIVE;
-            terms[k].modification = 0.0;
-            continue;
-        }
+    out.emission     = at.agree ? agreement_chance(m, at.error)
+                                : disagreement_chance(m, at.error);
+    out.modification = phmm_modification(ctx->model, at.agree, at.error);
 
-        terms[k].emission = at.agree
-                          ? agreement_chance(modification, at.error)
-                          : disagreement_chance(modification, at.error);
-        terms[k].modification = phmm_modification(ctx->model, at.agree, at.error);
-    }
+    return out;
 }
 
 /* Nothing has been read yet, so each cell of the first row is the alignment
@@ -318,80 +312,45 @@ static void fill_terms(const context *ctx, size_t i)
  * others. None has begun with a deletion: a reference base passed over before
  * the read starts is a base the read says nothing about, and its position could
  * never be recovered. */
-static void forward_first_row(const context *ctx)
+static double forward_first_row(const context *ctx)
 {
-    double *row   = row_of(ctx, 0);
+    double   *row   = row_of(ctx, 0);
     hts_pos_t width = width_at(ctx, 0);
+    double    total = 0.0;
 
-    for (int k = 0; k < width; k++) {
+    for (hts_pos_t k = 0; k < width; k++) {
         row[k * N_STATES + STATE_MATCH]     = 1.0 / width;
         row[k * N_STATES + STATE_INSERTION] = 0.0;
         row[k * N_STATES + STATE_DELETION]  = 0.0;
+
+        total += row[k * N_STATES + STATE_MATCH];
     }
+
+    return total;
 }
 
 /* The two states that take a read base, and so read from the row above. */
-static void forward_paired_states(const context *ctx, size_t i)
+static double paired_from(const phmm *model, const double *above, double emission)
 {
-    const phmm       *model = ctx->model;
-    double           *row   = row_of(ctx, i);
-    const double     *above = row_of(ctx, i - 1);
-    const cell_terms *terms = terms_of(ctx, i);
-    hts_pos_t         shift = shift_between(ctx, i - 1, i);
+    return (model->match_to_match     * above[STATE_MATCH]
+          + model->insertion_to_match * above[STATE_INSERTION]
+          + model->deletion_to_match  * above[STATE_DELETION]) * emission;
+}
 
-    for (hts_pos_t k = 0; k < width_at(ctx, i); k++) {
-        hts_pos_t diagonal = k - 1 + shift;  /* cell for j - 1, one row up */
-        hts_pos_t straight = k + shift;      /* cell for j,     one row up */
-        double    paired   = 0.0;
-        double    inserted = 0.0;
-
-        if (within_row(ctx, i - 1, diagonal)) {
-            const double *from = above + diagonal * N_STATES;
-
-            paired = model->match_to_match     * from[STATE_MATCH]
-                   + model->insertion_to_match * from[STATE_INSERTION]
-                   + model->deletion_to_match  * from[STATE_DELETION];
-            paired *= terms[k].emission;
-        }
-
-        if (within_row(ctx, i - 1, straight)) {
-            const double *from = above + straight * N_STATES;
-
-            inserted = model->match_to_insertion     * from[STATE_MATCH]
-                     + model->insertion_to_insertion * from[STATE_INSERTION];
-            inserted *= UNINFORMATIVE;
-        }
-
-        row[k * N_STATES + STATE_MATCH]     = paired;
-        row[k * N_STATES + STATE_INSERTION] = inserted;
-    }
+static double inserted_from(const phmm *model, const double *above)
+{
+    return (model->match_to_insertion     * above[STATE_MATCH]
+          + model->insertion_to_insertion * above[STATE_INSERTION])
+         * UNINFORMATIVE;
 }
 
 /* A deletion runs along the reference without the read moving, so it is the one
  * state whose row depends on itself: a cell takes from the cell to its left,
  * which must already hold this row's answer and not the last one's. */
-static void forward_deletions(const context *ctx, size_t i)
+static double deleted_from(const phmm *model, const double *left)
 {
-    const phmm *model = ctx->model;
-    double     *row   = row_of(ctx, i);
-
-    row[STATE_DELETION] = 0.0;
-
-    for (hts_pos_t k = 1; k < width_at(ctx, i); k++) {
-        const double *left = row + (k - 1) * N_STATES;
-
-        row[k * N_STATES + STATE_DELETION] =
-              model->match_to_deletion    * left[STATE_MATCH]
-            + model->deletion_to_deletion * left[STATE_DELETION];
-    }
-}
-
-static void clear_deletions(const context *ctx, size_t i)
-{
-    double *row = row_of(ctx, i);
-
-    for (hts_pos_t k = 0; k < width_at(ctx, i); k++)
-        row[k * N_STATES + STATE_DELETION] = 0.0;
+    return model->match_to_deletion    * left[STATE_MATCH]
+         + model->deletion_to_deletion * left[STATE_DELETION];
 }
 
 /* A deletion may neither open a read nor close one: reference passed over
@@ -407,17 +366,59 @@ static bool deletions_live(const context *ctx, size_t i)
     return i > 0 && i + 1 < ctx->rows;
 }
 
+/* One row of the forward pass, returning what it came to before it was scaled.
+ *
+ * Everything a cell wants is at hand by the time it is reached: its comparison
+ * is made here, the two states that take a read base read the row above, and
+ * the deletion reads the cell to the left, which this same loop wrote an
+ * iteration ago. So it is one pass over the row rather than four, which at a
+ * narrow band is most of what a row costs. The total is gathered as it goes,
+ * and in the order the cells lie, so that the sum is the one the scaling
+ * afterwards divides by. */
+static double forward_row(const context *ctx, size_t i)
+{
+    const phmm   *model = ctx->model;
+    double       *row   = row_of(ctx, i);
+    const double *above = row_of(ctx, i - 1);
+    cell_terms   *terms = terms_of(ctx, i);
+    hts_pos_t     shift = shift_between(ctx, i - 1, i);
+    hts_pos_t     width = width_at(ctx, i);
+    bool          live  = deletions_live(ctx, i);
+    double        total = 0.0;
+
+    for (hts_pos_t k = 0; k < width; k++) {
+        hts_pos_t diagonal = k - 1 + shift;  /* a position back, one row up */
+        hts_pos_t straight = k + shift;      /* this position, one row up */
+        double   *cell     = row + k * N_STATES;
+
+        terms[k] = terms_at(ctx, i, k);
+
+        cell[STATE_MATCH] = within_row(ctx, i - 1, diagonal)
+                          ? paired_from(model, above + diagonal * N_STATES,
+                                        terms[k].emission)
+                          : 0.0;
+        cell[STATE_INSERTION] = within_row(ctx, i - 1, straight)
+                              ? inserted_from(model, above + straight * N_STATES)
+                              : 0.0;
+        cell[STATE_DELETION] = live && k > 0
+                             ? deleted_from(model, cell - N_STATES)
+                             : 0.0;
+
+        total += cell[STATE_MATCH];
+        total += cell[STATE_INSERTION];
+        total += cell[STATE_DELETION];
+    }
+
+    return total;
+}
+
 /* Every row is divided by its own total, so that the numbers stay near one
  * however long the read: unscaled, a forward pass underflows a double within a
  * few hundred bases. */
-static bool rescale(const context *ctx, size_t i)
+static bool scale_row(const context *ctx, size_t i, double total)
 {
-    double *row   = row_of(ctx, i);
+    double   *row   = row_of(ctx, i);
     hts_pos_t cells = width_at(ctx, i) * N_STATES;
-    double  total = 0.0;
-
-    for (hts_pos_t c = 0; c < cells; c++)
-        total += row[c];
 
     if (!(total > 0.0) || !isfinite(total))
         return false;
@@ -430,25 +431,15 @@ static bool rescale(const context *ctx, size_t i)
     return true;
 }
 
+/* The first row is laid out rather than stepped into, having no row above it. */
 static bool forward(const context *ctx)
 {
-    forward_first_row(ctx);
-
-    if (!rescale(ctx, 0))
+    if (!scale_row(ctx, 0, forward_first_row(ctx)))
         return false;
 
-    for (size_t i = 1; i < ctx->rows; i++) {
-        fill_terms(ctx, i);
-        forward_paired_states(ctx, i);
-
-        if (deletions_live(ctx, i))
-            forward_deletions(ctx, i);
-        else
-            clear_deletions(ctx, i);
-
-        if (!rescale(ctx, i))
+    for (size_t i = 1; i < ctx->rows; i++)
+        if (!scale_row(ctx, i, forward_row(ctx, i)))
             return false;
-    }
 
     return true;
 }
@@ -484,13 +475,14 @@ static void backward_row(const context *ctx, size_t i)
     band_cell        *row   = backward_row_of(ctx, i);
     const band_cell  *below = backward_row_of(ctx, i + 1);
     const cell_terms *terms = terms_of(ctx, i + 1);
+    hts_pos_t         width = width_at(ctx, i);
 
-    for (hts_pos_t k = width_at(ctx, i); k-- > 0; ) {
+    for (hts_pos_t k = width; k-- > 0; ) {
         hts_pos_t diagonal = k + 1 - shift;  /* a position on, one row down */
         hts_pos_t straight = k - shift;      /* this position, one row down */
         double    paired   = 0.0;
         double    inserted = 0.0;
-        double    deleted  = live && k + 1 < width_at(ctx, i)
+        double    deleted  = live && k + 1 < width
                            ? row[k + 1][STATE_DELETION]
                            : 0.0;
 
@@ -546,14 +538,14 @@ static void add_at(const context *ctx, double *field, hts_pos_t position,
  * it there is. */
 static double closed_deletion(const context *ctx, size_t i, hts_pos_t k)
 {
-    const double    *forward_row = row_of(ctx, i);
-    const band_cell *below       = backward_row_of(ctx, i + 1);
+    const double    *front = row_of(ctx, i);
+    const band_cell *below = backward_row_of(ctx, i + 1);
     hts_pos_t        diagonal;
 
     /* Nothing to close where no deletion reached here, and the whole of what
      * follows is a product with that. */
     if (i + 1 >= ctx->rows
-        || forward_row[k * N_STATES + STATE_DELETION] == 0.0)
+        || front[k * N_STATES + STATE_DELETION] == 0.0)
         return 0.0;
 
     diagonal = k + 1 - shift_between(ctx, i, i + 1);
@@ -561,7 +553,7 @@ static double closed_deletion(const context *ctx, size_t i, hts_pos_t k)
     if (!within_row(ctx, i + 1, diagonal))
         return 0.0;
 
-    return forward_row[k * N_STATES + STATE_DELETION]
+    return front[k * N_STATES + STATE_DELETION]
          * ctx->model->deletion_to_match
          * terms_of(ctx, i + 1)[diagonal].emission
          * below[diagonal][STATE_MATCH]
@@ -611,23 +603,24 @@ static double opened_insertion(const context *ctx, size_t i, hts_pos_t k)
  * nothing. */
 static void accumulate_row(const context *ctx, size_t i)
 {
-    phmm_scratch    *scratch     = ctx->scratch;
-    const phmm      *model       = ctx->model;
-    const double    *forward_row = row_of(ctx, i);
-    const band_cell *back        = backward_row_of(ctx, i);
-    const cell_terms *terms      = terms_of(ctx, i);
-    double           confidence;
+    phmm_scratch     *scratch = ctx->scratch;
+    const phmm       *model   = ctx->model;
+    const double     *front   = row_of(ctx, i);
+    const band_cell  *back    = backward_row_of(ctx, i);
+    const cell_terms *terms   = terms_of(ctx, i);
+    hts_pos_t         width   = width_at(ctx, i);
+    double            confidence;
 
     if (i == 0)
         return;
 
     confidence = confidence_at(ctx, i);
 
-    for (hts_pos_t k = 0; k < width_at(ctx, i); k++) {
+    for (hts_pos_t k = 0; k < width; k++) {
         hts_pos_t j      = position_of(ctx, i, k);
-        double    paired = forward_row[k * N_STATES + STATE_MATCH]
+        double    paired = front[k * N_STATES + STATE_MATCH]
                          * back[k][STATE_MATCH];
-        double    passed = forward_row[k * N_STATES + STATE_DELETION]
+        double    passed = front[k * N_STATES + STATE_DELETION]
                          * back[k][STATE_DELETION];
 
         add_at(ctx, scratch->coverage, j - 1, paired * confidence);
@@ -647,13 +640,13 @@ static void accumulate_row(const context *ctx, size_t i)
  * that statement, and it is cheap enough to make of one of them. */
 static bool normalized(const context *ctx)
 {
-    const double    *forward_row = row_of(ctx, 0);
-    const band_cell *back        = backward_row_of(ctx, 0);
-    double           total       = 0.0;
+    const double    *front = row_of(ctx, 0);
+    const band_cell *back  = backward_row_of(ctx, 0);
+    double           total = 0.0;
 
     for (hts_pos_t k = 0; k < width_at(ctx, 0); k++)
         for (hts_pos_t s = 0; s < N_STATES; s++)
-            total += forward_row[k * N_STATES + s] * back[k][s];
+            total += front[k * N_STATES + s] * back[k][s];
 
     return fabs(total - 1.0) < NORMALIZATION_TOLERANCE;
 }
@@ -803,9 +796,12 @@ static hts_pos_t widest_row(const context *ctx)
 {
     hts_pos_t widest = 1;
 
-    for (size_t i = 0; i < ctx->rows; i++)
-        if (width_at(ctx, i) > widest)
-            widest = width_at(ctx, i);
+    for (size_t i = 0; i < ctx->rows; i++) {
+        hts_pos_t width = width_at(ctx, i);
+
+        if (width > widest)
+            widest = width;
+    }
 
     return widest;
 }
