@@ -86,21 +86,33 @@ struct phmm_scratch {
     size_t     window;       /* positions the last three are sized for */
 };
 
+/* A stretch of the reference, named by where it begins and how far it runs. */
+typedef struct {
+    hts_pos_t origin;
+    size_t    len;
+} extent;
+
 /* Everything one read is marginalized against, gathered so that the passes read
- * as the recursions they are. */
+ * as the recursions they are.
+ *
+ * What a caller hands over comes first and is fixed for the read. What follows
+ * is worked out from it, and stands for nothing until prepare has run: a pass
+ * reading it before then reads the band of whichever read came before. prepare
+ * is the only thing that writes any of it, which is why every other function
+ * here takes a context it may not modify. */
 typedef struct {
     const phmm            *model;
     const phred           *quality;
     const cm_bam_record   *read;
     const cm_fasta_record *ref;
     phmm_scratch          *scratch;
-    aln_span               span;
     const int             *half;    /* how far either side of the CIGAR each row
                                        may look; the caller's, one per row */
-    hts_pos_t              widest;  /* cells the widest of them holds */
+
+    aln_span               span;    /* the stretch of the read that is placed */
     size_t                 rows;    /* placed bases, and one row before them */
-    hts_pos_t              origin;  /* reference position of window value 0 */
-    size_t                 window;
+    hts_pos_t              widest;  /* cells the widest row holds */
+    extent                 window;  /* every position a cell of any row can name */
 } context;
 
 /* ------------------------------------------------------------------------ */
@@ -623,9 +635,9 @@ static void backward_row(const context *ctx, size_t i)
 static void add_at(const context *ctx, double *field, hts_pos_t position,
                    double value)
 {
-    hts_pos_t offset = position - ctx->origin;
+    hts_pos_t offset = position - ctx->window.origin;
 
-    if (offset >= 0 && (size_t)offset < ctx->window)
+    if (offset >= 0 && (size_t)offset < ctx->window.len)
         field[offset] += value;
 }
 
@@ -917,7 +929,7 @@ static hts_pos_t widest_row(const context *ctx)
  * a band reaches to the last one does. A row's reach is its center give or take
  * its own half-width, and a row further along may be narrower than one behind
  * it, so neither end belongs to a particular row and both are looked for. */
-static void size_window(context *ctx)
+static extent window_of(const context *ctx)
 {
     hts_pos_t first = origin_of(ctx, 0);
     hts_pos_t last  = first + width_at(ctx, 0);
@@ -932,8 +944,22 @@ static void size_window(context *ctx)
             last = hi;
     }
 
-    ctx->origin = first - 1;
-    ctx->window = (size_t)(last - first) + 1;
+    return (extent){
+        .origin = first - 1,
+        .len    = (size_t)(last - first) + 1,
+    };
+}
+
+/* The window is added to and never assigned, so what one read leaves in it must
+ * not reach the next. */
+static void clear_window(const context *ctx)
+{
+    phmm_scratch *scratch = ctx->scratch;
+    size_t        len     = ctx->window.len;
+
+    memset(scratch->coverage, 0, len * sizeof *scratch->coverage);
+    memset(scratch->spanned, 0, len * sizeof *scratch->spanned);
+    memset(scratch->mutations, 0, len * sizeof *scratch->mutations);
 }
 
 static bool prepare(context *ctx)
@@ -950,17 +976,12 @@ static bool prepare(context *ctx)
     if (grow_band(ctx->scratch, ctx->rows, (size_t)ctx->widest) < 0)
         return false;
 
-    size_window(ctx);
+    ctx->window = window_of(ctx);
 
-    if (grow_window(ctx->scratch, ctx->window) < 0)
+    if (grow_window(ctx->scratch, ctx->window.len) < 0)
         return false;
 
-    memset(ctx->scratch->coverage, 0,
-           ctx->window * sizeof *ctx->scratch->coverage);
-    memset(ctx->scratch->spanned, 0,
-           ctx->window * sizeof *ctx->scratch->spanned);
-    memset(ctx->scratch->mutations, 0,
-           ctx->window * sizeof *ctx->scratch->mutations);
+    clear_window(ctx);
 
     return true;
 }
@@ -984,8 +1005,8 @@ phmm_status phmm_run(const phmm *model, const phred *quality,
     if (!forward(&ctx) || !backward(&ctx))
         return PHMM_UNSOUND;
 
-    out->origin    = ctx.origin;
-    out->len       = ctx.window;
+    out->origin    = ctx.window.origin;
+    out->len       = ctx.window.len;
     out->coverage  = scratch->coverage;
     out->spanned   = scratch->spanned;
     out->mutations = scratch->mutations;
