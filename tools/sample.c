@@ -59,11 +59,6 @@ bool rng_chance(rng *r, double probability)
 /* Specifications                                                            */
 /* ------------------------------------------------------------------------ */
 
-spec spec_constant(long value)
-{
-    return (spec){ .low = value, .high = value };
-}
-
 static int fail(char *error, size_t error_len, const char *text, const char *why)
 {
     snprintf(error, error_len, "\"%s\" %s", text, why);
@@ -168,21 +163,4 @@ long spec_maximum(const spec *s)
             largest = s->values[i];
 
     return largest;
-}
-
-void spec_format(const spec *s, char *out, size_t size)
-{
-    if (s->n_values) {
-        int n = 0;
-
-        for (size_t i = 0; i < s->n_values && n >= 0 && (size_t)n < size; i++)
-            n += snprintf(out + n, size - (size_t)n, "%s%ld",
-                          i ? "," : "", s->values[i]);
-        return;
-    }
-
-    if (s->low == s->high)
-        snprintf(out, size, "%ld", s->low);
-    else
-        snprintf(out, size, "%ld:%ld", s->low, s->high);
 }

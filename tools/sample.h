@@ -46,13 +46,7 @@ typedef struct {
 /* Parses text into out. Returns 0, or -1 with a description in error. */
 int spec_parse(spec *out, const char *text, char *error, size_t error_len);
 
-/* A spec fixed to one value, for defaults. */
-spec spec_constant(long value);
-
 long spec_draw(const spec *s, rng *r);
 
 /* The largest value a spec can produce, for sizing buffers up front. */
 long spec_maximum(const spec *s);
-
-/* Renders a spec back into its written form. */
-void spec_format(const spec *s, char *out, size_t size);
