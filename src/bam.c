@@ -84,7 +84,7 @@ static uint64_t size_of(const char *path)
 
 /* Only CRAM stores fields separately enough to skip any, and only CRAM accepts
  * the option. Failing to set it costs nothing but speed, so it is not a reason
- * to refuse the file. */
+ * to reject the file. */
 static void limit_decoding(cm_bam_reader *reader)
 {
     if (reader->file->format.format == cram)
@@ -333,7 +333,7 @@ int32_t cm_bam_nref(const cm_bam_reader *reader)
 
 /* @HD is the first line where a sort order appears at all, so only the first
  * line is examined. A header carrying one elsewhere violates the specification
- * and is treated as saying nothing about sort order. */
+ * and is treated as declaring no sort order. */
 bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader)
 {
     const char *text = sam_hdr_str(reader->header);
@@ -380,8 +380,8 @@ void cm_bam_sq_open(cm_bam_sq_cursor *cursor, const cm_bam_reader *reader)
 
 /* The lines appear in the order the references are numbered, so reaching one
  * is a matter of walking forward over those before it. The cursor is left on
- * the line it reached rather than past it, so that asking twice for the same
- * reference answers the same both times. */
+ * the line it reached rather than past it, so two requests for the same
+ * reference give the same answer. */
 const char *cm_bam_sq_checksum(cm_bam_sq_cursor *cursor, int32_t tid, size_t *len)
 {
     const char *end;

@@ -128,7 +128,7 @@ static const char *digest_of(digest *md5, const cm_fasta_record *record)
 }
 
 /* Whether the sequence is the one the alignments were made against, where the
- * header says what that was.
+ * header declares what that was.
  *
  * A name and a length describe a reference without identifying it: another
  * sequence matching both passes the check and is scored against anyway. Only

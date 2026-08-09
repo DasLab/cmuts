@@ -637,10 +637,10 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
     queue_close(p.completed);
     pthread_join(cons.thread, NULL);
 
-    /* Asked once every worker has stopped, so that a failure on the last batch
-     * is caught as surely as one the loader saw in time to stop for. A loader
-     * that failed on its own account has already said something more particular
-     * than this could. */
+    /* Checked once every worker has stopped, so a failure on the last batch is
+     * caught as surely as one the loader saw in time to stop for. A loader that
+     * failed on its own account has already reported something more
+     * specific. */
     if (status == 0 && atomic_load(&p.failure) != PHMM_OK) {
         snprintf(error, error_len, "%s",
                  atomic_load(&p.failure) == PHMM_NO_MEMORY

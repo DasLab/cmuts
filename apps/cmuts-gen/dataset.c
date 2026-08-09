@@ -193,7 +193,7 @@ typedef struct {
     size_t next_read;         /* numbering, over the run as a whole */
 } writer;
 
-/* Room for the most reads a reference can be asked for, and never for none: an
+/* Room for the most reads a reference can receive, and never for none: an
  * empty allocation is one that cannot be told apart from a failed one. */
 static size_t places_needed(const spec *reads_per_ref)
 {

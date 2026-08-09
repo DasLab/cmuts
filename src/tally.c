@@ -45,7 +45,7 @@ static void add_window(const context *ctx, const phmm_window *window)
     }
 }
 
-/* A band of uniform width, the only shape asked for so far. Grown to the
+/* A band of uniform width, the only shape used so far. Grown to the
  * longest read seen and filled once, the width being fixed before any read
  * arrives. Returns NULL if it cannot be grown, which ends the run. */
 static const int *uniform_band(tally_scratch *scratch, const cm_bam_record *read,

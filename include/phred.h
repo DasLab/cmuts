@@ -20,7 +20,8 @@ typedef struct {
 void phred_build(phred *table);
 
 /* The chance a base call is wrong, and the chance it is right. Read from the
- * table rather than computed, being wanted once for every base of every read. */
+ * table rather than computed, since it is needed for every base of every
+ * read. */
 static inline double phred_error(const phred *table, uint8_t quality)
 {
     return table->error[quality];

@@ -17,8 +17,8 @@
 
 /* The maximum of an option that has no ceiling of its own, which is held only
  * to what its destination can carry. It is the widest number a command line
- * can be read into, so a row that named it outright would be saying the same
- * thing; nothing an option might mean by a maximum is given up to it. */
+ * can be read into, so naming it outright in a row would mean the same thing;
+ * no meaning an option might attach to a maximum is lost. */
 #define CLI_UNBOUNDED LONG_MAX
 
 /* The type of a row's destination. It must match the C type of the field at

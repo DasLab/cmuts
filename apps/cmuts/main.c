@@ -19,9 +19,9 @@ int main(int argc, char **argv)
     cli_args args;
     char     error[CM_ERROR_MAX];
 
-    /* htslib writes its own account of a failure to stderr, which would arrive
-     * beside ours saying the same thing in another voice. What it reports it
-     * also returns, so nothing is lost by keeping it quiet. */
+    /* htslib writes its own report of a failure to stderr, which would appear
+     * alongside ours and duplicate it. Everything it reports it also returns,
+     * so nothing is lost by silencing it. */
     hts_set_log_level(HTS_LOG_OFF);
 
     switch (cli_parse(&spec, argc, argv, &args)) {

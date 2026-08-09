@@ -175,7 +175,7 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
     for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++)
         w->dataset[id] = H5I_INVALID_HID;
 
-    /* Exclusive unless replacing was asked for, so that the decision cannot
+    /* Exclusive unless overwrite was requested, so that the decision cannot
      * be undone by the file appearing between the check and the create. */
     w->file = H5Fcreate(path, overwrite ? H5F_ACC_TRUNC : H5F_ACC_EXCL,
                         H5P_DEFAULT, H5P_DEFAULT);

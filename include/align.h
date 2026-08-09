@@ -11,10 +11,9 @@
 
 /* The stretch of a read the alignment places somewhere.
  *
- * Clipped bases are placed nowhere, and anything free to move a base has to be
- * told which bases it may move: left to itself it would align the clipped ends
- * too, and manufacture a placement for the very bases the aligner declined to
- * give one. */
+ * Clipped bases are placed nowhere, so anything free to move a base must be
+ * told which bases it may move. Left unconstrained it would align the clipped
+ * ends too, inventing a placement for the bases the aligner left unplaced. */
 typedef struct {
     int32_t begin;  /* first query offset the alignment places */
     int32_t end;    /* one past the last */

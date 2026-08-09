@@ -65,8 +65,8 @@ bool rng_chance(rng *r, double probability)
 /* ------------------------------------------------------------------------ */
 
 /* Enough for a number as anyone would write one. A longer run of characters is
- * refused rather than cut short: half a number is a different number, and one
- * silently read as that would be worse than one not read at all. */
+ * rejected, not truncated: a truncated run of digits parses as a different
+ * number, which would be worse than failing outright. */
 #define NUMBER_MAX 32
 
 static int fail(char *error, size_t error_len, const char *text, const char *why)

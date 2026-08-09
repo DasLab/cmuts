@@ -30,8 +30,9 @@ aln_span aln_placed_span(const cm_bam_record *read)
     uint32_t first = 0;
     uint32_t last  = read->n_cigar;
 
-    /* A read carrying no CIGAR places nothing, whatever length it stores, and
-     * saying so is what keeps a caller from reading centers never written. */
+    /* A read carrying no CIGAR places nothing, whatever length it stores.
+     * Returning an empty span keeps a caller from reading centers that were
+     * never written. */
     if (read->n_cigar == 0)
         return (aln_span){ .begin = 0, .end = 0 };
 

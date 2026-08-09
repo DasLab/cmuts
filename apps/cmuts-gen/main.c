@@ -23,9 +23,8 @@ int main(int argc, char **argv)
     dataset_config cfg;
     char           error[CM_ERROR_MAX];
 
-    /* Quiet for the reason cmuts keeps it quiet: what htslib reports it also
-     * returns, and its own account of a failure would arrive beside ours
-     * saying the same thing in another voice. */
+    /* Silenced for the reason cmuts silences it: everything htslib reports it
+     * also returns, so its report would only duplicate ours. */
     hts_set_log_level(HTS_LOG_OFF);
 
     switch (cli_parse(&spec, argc, argv, &args)) {

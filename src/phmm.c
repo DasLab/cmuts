@@ -661,7 +661,7 @@ static void backward_row(const context *ctx, size_t i)
 }
 
 /* ------------------------------------------------------------------------ */
-/* What a row says about the reference                                       */
+/* Accumulating a row into the window                                        */
 /* ------------------------------------------------------------------------ */
 
 /* The three window fields, each advanced to where a row's first cell enters
@@ -755,7 +755,7 @@ static weighing weighing_of(const context *ctx, size_t i)
  * The row's scaling is undone on the two states read here, which is cheaper
  * than undoing it across the whole row as it was written.
  *
- * The first row is the alignment about to begin. Its posterior says where the
+ * The first row is the alignment about to begin. Its posterior gives where the
  * read starts, not what any base was set against, so it contributes nothing. */
 static void accumulate_row(const context *ctx, size_t i)
 {
