@@ -31,6 +31,17 @@
 /* Enough for a placeholder and the ellipsis a variadic one carries. */
 #define METAVAR_MAX 32
 
+/* Enough for both forms of an option and the placeholder that follows them. */
+#define INVOCATION_MAX 64
+
+/* Enough for the note naming an option's default. A string default is written
+ * out in full, so this is the one of these a row could outgrow, and the note is
+ * cut short where it does rather than anything worse. */
+#define DEFAULT_NOTE_MAX 64
+
+/* Enough for the largest value an option will take, written out. */
+#define CEILING_MAX 32
+
 /* The column an option's help begins in. The arguments are listed against the
  * same one, and a difference between the two would read as a step partway down
  * the help rather than as anything deliberate. */
@@ -187,7 +198,7 @@ static const char *ceiling_text(const cli_option *opt, char *out, size_t size)
 static void report_out_of_range(const cli_option *opt, const char *text,
                                 const char *program, bool below)
 {
-    char limit[32];
+    char limit[CEILING_MAX];
 
     if (opt->maximum != CLI_UNBOUNDED)
         fprintf(stderr, "%s: --%s: %s is outside %ld..%ld\n",
@@ -334,8 +345,8 @@ static void format_default(const cli_option *opt, const void *defaults,
 
 static void print_option(FILE *out, const cli_option *opt, const void *defaults)
 {
-    char invocation[64];
-    char suffix[64];
+    char invocation[INVOCATION_MAX];
+    char suffix[DEFAULT_NOTE_MAX];
     int  n;
 
     if (opt->key)

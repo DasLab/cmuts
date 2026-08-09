@@ -64,6 +64,11 @@ bool rng_chance(rng *r, double probability)
 /* Specifications                                                            */
 /* ------------------------------------------------------------------------ */
 
+/* Enough for a number as anyone would write one. A longer run of characters is
+ * refused rather than cut short: half a number is a different number, and one
+ * silently read as that would be worse than one not read at all. */
+#define NUMBER_MAX 32
+
 static int fail(char *error, size_t error_len, const char *text, const char *why)
 {
     snprintf(error, error_len, "\"%s\" %s", text, why);
@@ -72,7 +77,7 @@ static int fail(char *error, size_t error_len, const char *text, const char *why
 
 static int parse_long(const char *text, const char *end, long *out)
 {
-    char  buffer[32];
+    char  buffer[NUMBER_MAX];
     char *stop = NULL;
     size_t n   = (size_t)(end - text);
 
