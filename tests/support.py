@@ -169,6 +169,20 @@ def reheadered(data: Dataset, directory, transform) -> Dataset:
 # ---------------------------------------------------------------------------
 
 
+def sequences(fasta):
+    """Every record of a FASTA, by name, in file order."""
+    records, name = {}, None
+
+    for line in fasta.read_text().splitlines():
+        if line.startswith(">"):
+            name = line[1:].split()[0]
+            records[name] = []
+        elif name:
+            records[name].append(line.strip())
+
+    return {name: "".join(parts) for name, parts in records.items()}
+
+
 def _count(bam, *flags) -> int:
     return int(_run(["samtools", "view", "-c", *flags, bam]).stdout)
 

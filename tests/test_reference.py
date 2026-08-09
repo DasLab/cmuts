@@ -12,7 +12,7 @@ from dataclasses import replace
 
 import pytest
 
-from support import outputs_agree, reheadered, run_cmuts, try_cmuts
+from support import outputs_agree, reheadered, run_cmuts, sequences, try_cmuts
 
 COMPLEMENT = str.maketrans("ACGT", "TGCA")
 
@@ -25,20 +25,6 @@ def data(datasets):
 # ---------------------------------------------------------------------------
 # Rewriting a reference, and what the header says about it
 # ---------------------------------------------------------------------------
-
-
-def sequences(fasta):
-    """Every record of a FASTA, by name, in file order."""
-    records, name = {}, None
-
-    for line in fasta.read_text().splitlines():
-        if line.startswith(">"):
-            name = line[1:].split()[0]
-            records[name] = []
-        elif name:
-            records[name].append(line.strip())
-
-    return {name: "".join(parts) for name, parts in records.items()}
 
 
 def written(records, path):
