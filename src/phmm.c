@@ -540,40 +540,40 @@ static double forward_row(const context *ctx, size_t i)
      * than the one they lie in. What comes of it is the divisor the row is
      * scaled by, so the sum is the same sum and nothing downstream reads the
      * order; it is not bit-exact in principle all the same. */
-    double           matched  = 0.0;
-    double           inserted = 0.0;
-    double           deleted  = 0.0;
+    double           total_paired   = 0.0;
+    double           total_inserted = 0.0;
+    double           total_deleted  = 0.0;
 
     for (hts_pos_t k = 0; k < width; k++) {
         hts_pos_t diagonal = k - 1 + shift;  /* a position back, one row up */
         hts_pos_t straight = k + shift;      /* this position, one row up */
-        double    here_match, here_insertion, here_deletion;
+        double    paired, inserted, deleted;
 
         terms[k] = terms_at(ctx, &each, position_of(ctx, i, k));
 
-        here_match = within(diagonal, above_width)
-                   ? paired_from(&step, above[diagonal], terms[k].emission)
-                   : 0.0;
-        here_insertion = within(straight, above_width)
-                       ? inserted_from(&step, above[straight])
-                       : 0.0;
-        here_deletion = live && k > 0
-                      ? deleted_from(model, left_match, left_deletion)
-                      : 0.0;
+        paired = within(diagonal, above_width)
+               ? paired_from(&step, above[diagonal], terms[k].emission)
+               : 0.0;
+        inserted = within(straight, above_width)
+                 ? inserted_from(&step, above[straight])
+                 : 0.0;
+        deleted = live && k > 0
+                ? deleted_from(model, left_match, left_deletion)
+                : 0.0;
 
-        row[k][STATE_MATCH]     = here_match;
-        row[k][STATE_INSERTION] = here_insertion;
-        row[k][STATE_DELETION]  = here_deletion;
+        row[k][STATE_MATCH]     = paired;
+        row[k][STATE_INSERTION] = inserted;
+        row[k][STATE_DELETION]  = deleted;
 
-        left_match    = here_match;
-        left_deletion = here_deletion;
+        left_match    = paired;
+        left_deletion = deleted;
 
-        matched  += here_match;
-        inserted += here_insertion;
-        deleted  += here_deletion;
+        total_paired   += paired;
+        total_inserted += inserted;
+        total_deleted  += deleted;
     }
 
-    return (matched + inserted) + deleted;
+    return (total_paired + total_inserted) + total_deleted;
 }
 
 /* Every row is scaled by its own total, so that the numbers stay near one
@@ -701,7 +701,8 @@ static void backward_row(const context *ctx, size_t i)
  * A position past either end of the reference is not turned away. Some of what
  * the band names really does lie outside, a read placed near a boundary having
  * paths that leave it; which of them are worth keeping is the caller's to say,
- * and saying it twice would leave two places to look when the answer changed. */
+ * and saying it twice would leave two places to look when the answer
+ * changed. */
 typedef struct {
     double *coverage;
     double *spanned;
@@ -796,8 +797,9 @@ static void accumulate_row(const context *ctx, size_t i)
     hts_pos_t         width    = width_at(ctx, i);
     /* An insertion belongs at the position its cell sits before, which is where
      * the next cell lays what it pairs, so it is held here and laid on the
-     * iteration after. That leaves every cell entering one slot of the mutations
-     * and no other, where laying it ahead would have each cell read back a slot
+     * iteration after. That leaves every cell entering one slot of the
+     * mutations and no other, where laying it ahead would have each cell read
+     * back a slot
      * the cell before it had just written. The last cell has none after it, so
      * its insertion is laid once the row is done. */
     double            carried  = 0.0;
