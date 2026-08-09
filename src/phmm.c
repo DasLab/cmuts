@@ -291,11 +291,16 @@ static hts_pos_t shift_between(const context *ctx, size_t from, size_t to)
 }
 
 /* Rows no longer share a width, so a cell index means nothing apart from the
- * row it indexes. Asking it of the wrong row is how the two passes would come
- * to disagree about which paths exist. */
-static bool within_row(const context *ctx, size_t i, hts_pos_t k)
+ * row it indexes, and it is that row's width the index has to be held against.
+ * Holding it against another's is how the two passes would come to disagree
+ * about which paths exist.
+ *
+ * The width is handed in rather than looked up because a row does not change
+ * width while it is being walked, and fetching it again for every cell of every
+ * neighbour is most of what the test costs. */
+static bool within(hts_pos_t k, hts_pos_t width)
 {
-    return k >= 0 && k < width_at(ctx, i);
+    return k >= 0 && k < width;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -433,6 +438,7 @@ static double forward_row(const context *ctx, size_t i)
     cell_terms      *terms = terms_of(ctx, i);
     hts_pos_t        shift = shift_between(ctx, i - 1, i);
     hts_pos_t        width = width_at(ctx, i);
+    hts_pos_t        above_width = width_at(ctx, i - 1);
     bool             live  = deletions_live(ctx, i);
     double           total = 0.0;
 
@@ -442,11 +448,11 @@ static double forward_row(const context *ctx, size_t i)
 
         terms[k] = terms_at(ctx, i, k);
 
-        row[k][STATE_MATCH] = within_row(ctx, i - 1, diagonal)
+        row[k][STATE_MATCH] = within(diagonal, above_width)
                             ? paired_from(&step, above[diagonal],
                                           terms[k].emission)
                             : 0.0;
-        row[k][STATE_INSERTION] = within_row(ctx, i - 1, straight)
+        row[k][STATE_INSERTION] = within(straight, above_width)
                                 ? inserted_from(&step, above[straight])
                                 : 0.0;
         row[k][STATE_DELETION] = live && k > 0
@@ -529,6 +535,7 @@ static void backward_row(const context *ctx, size_t i)
     const cell_terms *terms    = terms_of(ctx, i + 1);
     double           *pairings = ctx->scratch->pairings;
     hts_pos_t         width    = width_at(ctx, i);
+    hts_pos_t         below_width = width_at(ctx, i + 1);
 
     for (hts_pos_t k = width; k-- > 0; ) {
         hts_pos_t diagonal = k + 1 - shift;  /* a position on, one row down */
@@ -539,11 +546,11 @@ static void backward_row(const context *ctx, size_t i)
                            ? row[k + 1][STATE_DELETION]
                            : 0.0;
 
-        if (within_row(ctx, i + 1, diagonal))
+        if (within(diagonal, below_width))
             paired = terms[diagonal].emission
                    * below[diagonal][STATE_MATCH] * below_scale;
 
-        if (within_row(ctx, i + 1, straight))
+        if (within(straight, below_width))
             inserted = UNINFORMATIVE
                      * below[straight][STATE_INSERTION] * below_scale;
 
@@ -656,15 +663,17 @@ static void accumulate_row(const context *ctx, size_t i)
     double            confidence;
     double            scale;
     hts_pos_t         shift;
+    hts_pos_t         above_width;
 
     if (i == 0)
         return;
 
-    above      = row_of(ctx, i - 1);
-    weight     = weighing_of(ctx, i);
-    confidence = confidence_at(ctx, i);
-    scale      = scratch->scale[i];
-    shift      = shift_between(ctx, i - 1, i);
+    above       = row_of(ctx, i - 1);
+    weight      = weighing_of(ctx, i);
+    confidence  = confidence_at(ctx, i);
+    scale       = scratch->scale[i];
+    shift       = shift_between(ctx, i - 1, i);
+    above_width = width_at(ctx, i - 1);
 
     for (hts_pos_t k = 0; k < width; k++) {
         hts_pos_t j       = position_of(ctx, i, k);
@@ -673,7 +682,7 @@ static void accumulate_row(const context *ctx, size_t i)
         double    skipped = front[k][STATE_DELETION] * scale;
         double    paired  = matched * back[k][STATE_MATCH];
         double    passed  = skipped * back[k][STATE_DELETION];
-        double    opened  = within_row(ctx, i - 1, opening)
+        double    opened  = within(opening, above_width)
                           ? above[opening][STATE_MATCH]
                           * back[k][STATE_INSERTION]
                           : 0.0;
