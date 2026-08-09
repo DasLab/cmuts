@@ -447,34 +447,10 @@ pipeline_config pipeline_defaults(void)
         .decode_threads = 4,
         .queue_capacity = 4096,
         .batch          = 64,
-        .live_refs      = 0,  /* derived from the longest reference */
+        .live_refs      = 64,
         .filter_config  = filter_defaults(),
         .tally_config   = tally_defaults(),
     };
-}
-
-/* How far the loader may run ahead is what absorbs a worker that stalls on one
- * read: with too few contexts the loader blocks on the pool and the whole
- * pipeline waits behind the straggler. A context costs memory in proportion to
- * the longest reference, so the count comes from a byte budget rather than a
- * fixed number -- many short references get generous slack, while a handful of
- * very long ones cannot exhaust memory. Two is the least that still lets one
- * reference drain while the next is being loaded. */
-#define TARGET_CONTEXT_BYTES (32u << 20)
-#define MIN_LIVE_REFS 2
-#define MAX_LIVE_REFS 256
-
-static size_t derive_live_refs(size_t ref_cap)
-{
-    size_t per_context = ref_cap + 1 + accum_bytes(ref_cap);
-    size_t n           = TARGET_CONTEXT_BYTES / per_context;
-
-    if (n < MIN_LIVE_REFS)
-        return MIN_LIVE_REFS;
-    if (n > MAX_LIVE_REFS)
-        return MAX_LIVE_REFS;
-
-    return n;
 }
 
 static void pipeline_teardown(pipeline *p)
@@ -549,17 +525,15 @@ static int build_buffers(pipeline *p, const pipeline_config *cfg, char *error, s
      * and two for the loader: one being filled and one held in reserve, since
      * a short refill can leave it holding part of each. */
     size_t carriers = cfg->queue_capacity + (cfg->workers + 2) * cfg->batch;
-    size_t live;
 
     p->batch         = cfg->batch;
     p->filter_config = cfg->filter_config;
     p->ref_cap       = (size_t)cm_bam_stream_max_reflen(p->bam);
-    live             = cfg->live_refs ? cfg->live_refs : derive_live_refs(p->ref_cap);
 
     p->work      = queue_create(cfg->queue_capacity);
-    p->completed = queue_create(live);
+    p->completed = queue_create(cfg->live_refs);
     p->items     = itempool_create(carriers);
-    p->contexts  = ctxpool_create(live, p->ref_cap);
+    p->contexts  = ctxpool_create(cfg->live_refs, p->ref_cap);
 
     if (!p->work || !p->completed || !p->items || !p->contexts) {
         snprintf(error, error_len, "out of memory building the pipeline");

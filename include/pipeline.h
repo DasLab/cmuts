@@ -25,8 +25,7 @@ typedef struct {
     int         decode_threads;  /* htslib threads for BGZF inflation */
     size_t      queue_capacity;  /* reads that may be in transit at once */
     size_t      batch;           /* reads transferred per queue operation */
-    size_t      live_refs;       /* references in flight; 0 derives it from the
-                                    longest reference and a memory budget */
+    size_t      live_refs;       /* references in flight at once */
 } pipeline_config;
 
 pipeline_config pipeline_defaults(void);

@@ -121,10 +121,10 @@ static const cli_option OPTIONS[] = {
       .offset = offsetof(cli_args, pipeline.live_refs), .metavar = "N",
       .help = "references in flight",
       .detail = "How far the loader may run ahead of a worker that stalls on one "
-                "read. Left unset, a count is derived from the longest reference "
-                "and a memory budget, which keeps many short references generous "
-                "without letting a few very long ones exhaust memory.",
-      .unset_label = "derived from memory", .minimum = 0, .maximum = CLI_UNBOUNDED },
+                "read. Each reference in flight costs memory in proportion to the "
+                "longest reference in the file, so lower it where those are very "
+                "long.",
+      .minimum = 1, .maximum = CLI_UNBOUNDED },
 
     { .group = "Information", .name = "help", .key = 'h', .type = OPT_FLAG,
       .help = "show this help and exit", .action = CLI_SHOW_HELP },

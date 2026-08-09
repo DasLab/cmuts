@@ -49,9 +49,6 @@ typedef struct {
 int  accum_alloc(accum *acc, size_t cap);
 void accum_free(accum *acc);
 
-/* Bytes one accumulator of the given capacity occupies. */
-size_t accum_bytes(size_t cap);
-
 /* Zeroes the first len values of every per-base field, and every scalar. */
 void accum_zero(accum *acc, size_t len);
 

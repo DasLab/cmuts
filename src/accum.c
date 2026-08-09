@@ -40,11 +40,6 @@ static size_t arena_extent(size_t len)
     return total;
 }
 
-size_t accum_bytes(size_t cap)
-{
-    return arena_extent(cap) * sizeof(double);
-}
-
 static void bind_slots(accum *acc)
 {
     double *cursor = acc->arena;
