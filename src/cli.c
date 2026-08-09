@@ -11,7 +11,9 @@
 
 #include "cli.h"
 
+#include <float.h>
 #include <getopt.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -145,6 +147,54 @@ static int parse_choice(const cli_option *opt, const char *text, const char *pro
     return -1;
 }
 
+/* The largest whole number an option will take. One with no ceiling of its own
+ * is still held to what its destination can carry, so that no value is accepted
+ * that the field would silently truncate. */
+static long integer_ceiling(const cli_option *opt)
+{
+    if (opt->maximum != CLI_UNBOUNDED)
+        return opt->maximum;
+
+    return opt->type == OPT_INT ? INT32_MAX : LONG_MAX;
+}
+
+static double real_ceiling(const cli_option *opt)
+{
+    return opt->maximum != CLI_UNBOUNDED ? (double)opt->maximum : DBL_MAX;
+}
+
+/* The largest value an option will take, written out. */
+static const char *ceiling_text(const cli_option *opt, char *out, size_t size)
+{
+    if (opt->type == OPT_DOUBLE)
+        snprintf(out, size, "%g", real_ceiling(opt));
+    else
+        snprintf(out, size, "%ld", integer_ceiling(opt));
+
+    return out;
+}
+
+/* A range is quoted only where the row set one. An option with no ceiling of
+ * its own has a floor to fall short of and a destination to outgrow, and each
+ * is one bound rather than a range: a value refused for being negative has no
+ * business hearing what the widest one is. The text the caller wrote is echoed
+ * rather than the number read out of it, so a value comes back as given. */
+static void report_out_of_range(const cli_option *opt, const char *text,
+                                const char *program, bool below)
+{
+    char limit[32];
+
+    if (opt->maximum != CLI_UNBOUNDED)
+        fprintf(stderr, "%s: --%s: %s is outside %ld..%ld\n",
+                program, opt->name, text, opt->minimum, opt->maximum);
+    else if (below)
+        fprintf(stderr, "%s: --%s: %s is below %ld\n",
+                program, opt->name, text, opt->minimum);
+    else
+        fprintf(stderr, "%s: --%s: %s is above %s\n",
+                program, opt->name, text, ceiling_text(opt, limit, sizeof limit));
+}
+
 static int parse_number(const cli_option *opt, const char *text, const char *program,
                         long *out)
 {
@@ -156,9 +206,8 @@ static int parse_number(const cli_option *opt, const char *text, const char *pro
         return -1;
     }
 
-    if (n < opt->minimum || n > opt->maximum) {
-        fprintf(stderr, "%s: --%s: %ld is outside %ld..%ld\n",
-                program, opt->name, n, opt->minimum, opt->maximum);
+    if (n < opt->minimum || n > integer_ceiling(opt)) {
+        report_out_of_range(opt, text, program, n < opt->minimum);
         return -1;
     }
 
@@ -177,9 +226,8 @@ static int parse_double(const cli_option *opt, const char *text, const char *pro
         return -1;
     }
 
-    if (n < (double)opt->minimum || n > (double)opt->maximum) {
-        fprintf(stderr, "%s: --%s: %g is outside %ld..%ld\n",
-                program, opt->name, n, opt->minimum, opt->maximum);
+    if (n < (double)opt->minimum || n > real_ceiling(opt)) {
+        report_out_of_range(opt, text, program, n < (double)opt->minimum);
         return -1;
     }
 
@@ -474,7 +522,12 @@ static void print_json_bounds(FILE *out, const cli_option *opt)
         return;
     }
 
-    fprintf(out, "      \"minimum\": %ld, \"maximum\": %ld\n", opt->minimum, opt->maximum);
+    fprintf(out, "      \"minimum\": %ld, \"maximum\": ", opt->minimum);
+
+    if (opt->maximum == CLI_UNBOUNDED)
+        fputs("null\n", out);
+    else
+        fprintf(out, "%ld\n", opt->maximum);
 }
 
 static void print_json_option(FILE *out, const cli_option *opt, const void *defaults,

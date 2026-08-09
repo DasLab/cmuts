@@ -10,9 +10,16 @@
 
 #pragma once
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
+
+/* The maximum of an option that has no ceiling of its own, which is held only
+ * to what its destination can carry. It is the widest number a command line
+ * can be read into, so a row that named it outright would be saying the same
+ * thing; nothing an option might mean by a maximum is given up to it. */
+#define CLI_UNBOUNDED LONG_MAX
 
 /* The type of a row's destination. It must match the C type of the field at
  * that offset: the value is written through a pointer of exactly this type. */
@@ -57,7 +64,7 @@ typedef struct {
      * NULL where every value is a real setting. */
     const char       *unset_label;
     long              minimum;  /* bounds for the numeric types */
-    long              maximum;
+    long              maximum;  /* CLI_UNBOUNDED where only the floor binds */
     bool              hidden;   /* kept out of the help, still described by JSON */
     const cli_choice *choices;  /* accepted values, for OPT_ENUM */
     cli_action        action;

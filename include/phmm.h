@@ -31,12 +31,11 @@
  * refused for want of room. Nothing is the CIGAR path and nothing else, which
  * is the alignment as written and marginalized over alone.
  *
- * The maximum is what a command line will accept, the cost of a read being
- * linear in the band and nothing stopping a caller from asking for more than it
- * meant to. The model itself takes whatever it is given and asks for the memory
- * that implies. */
+ * Nothing bounds it above. The cost of a read is linear in the band, and the
+ * model takes whatever it is given and asks for the memory that implies, so a
+ * band asked for in bad faith ends the run for want of it rather than being
+ * refused at some width chosen here. */
 #define PHMM_DEFAULT_BAND 2
-#define PHMM_MAX_BAND     256
 
 /* What the model believes before it has seen a read.
  *

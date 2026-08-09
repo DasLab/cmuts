@@ -9,7 +9,6 @@
 #include "options.h"
 
 #include <stddef.h>
-#include <stdint.h>
 
 #include "filter.h"
 
@@ -59,7 +58,7 @@ static const cli_option OPTIONS[] = {
                 "Inserted and soft-clipped bases count; hard-clipped ones cannot, "
                 "being absent from the record. Left unset, no lower bound is "
                 "applied.",
-      .unset_label = "no limit", .minimum = 0, .maximum = INT32_MAX },
+      .unset_label = "no limit", .minimum = 0, .maximum = CLI_UNBOUNDED },
     { .group = "Filtering", .name = "max-length", .type = OPT_INT,
       .offset = offsetof(cli_args, pipeline.filter_config.max_length), .metavar = "N",
       .help = "discard reads longer than this",
@@ -68,7 +67,7 @@ static const cli_option OPTIONS[] = {
                 "longer than the reference they align to: a read carrying a large "
                 "insertion is long even where its aligned span is ordinary. Left "
                 "unset, no upper bound is applied.",
-      .unset_label = "no limit", .minimum = 0, .maximum = INT32_MAX },
+      .unset_label = "no limit", .minimum = 0, .maximum = CLI_UNBOUNDED },
     { .group = "Filtering", .name = "strand", .key = 's', .type = OPT_ENUM,
       .offset = offsetof(cli_args, pipeline.filter_config.strand), .metavar = "STRAND",
       .help = "keep alignments on this strand",
@@ -87,8 +86,9 @@ static const cli_option OPTIONS[] = {
                 "than a diagonal, so what it bounds is the departure from the "
                 "alignment already found. Cost is linear in it, and 0 pins the "
                 "marginal to the CIGAR, leaving every read with an indel counted "
-                "as written.",
-      .minimum = 0, .maximum = PHMM_MAX_BAND },
+                "as written. Nothing bounds it above, and a band wide enough to "
+                "exhaust memory ends the run.",
+      .minimum = 0, .maximum = CLI_UNBOUNDED },
 
     { .group = "Performance", .name = "workers", .key = 'j', .type = OPT_SIZE,
       .offset = offsetof(cli_args, pipeline.workers), .metavar = "N",
@@ -96,7 +96,7 @@ static const cli_option OPTIONS[] = {
       .detail = "Reads are taken from a shared pool, so a worker is free to cross "
                 "reference boundaries and no thread idles waiting for a reference "
                 "of its own.",
-      .minimum = 1, .maximum = 1024 },
+      .minimum = 1, .maximum = CLI_UNBOUNDED },
     { .group = "Performance", .name = "decode-threads", .type = OPT_INT,
       .offset = offsetof(cli_args, pipeline.decode_threads), .metavar = "N",
       .help = "htslib threads for BGZF decompression",
@@ -104,19 +104,19 @@ static const cli_option OPTIONS[] = {
                 "than a dial: lower it when the cores are not there to spare. A "
                 "total however many files are given, which share the threads "
                 "between them.",
-      .minimum = 0, .maximum = 64 },
+      .minimum = 0, .maximum = CLI_UNBOUNDED },
     { .group = "Performance", .name = "queue-capacity", .type = OPT_SIZE,
       .offset = offsetof(cli_args, pipeline.queue_capacity), .metavar = "N",
       .help = "reads in transit at once",
       .detail = "Bounds how far the loader may run ahead of the workers, and with "
                 "it how much memory reads in flight occupy.",
-      .minimum = 1, .maximum = 1 << 20 },
+      .minimum = 1, .maximum = CLI_UNBOUNDED },
     { .group = "Performance", .name = "batch", .type = OPT_SIZE,
       .offset = offsetof(cli_args, pipeline.batch), .metavar = "N",
       .help = "reads transferred per queue operation",
       .detail = "Larger batches amortize locking across more reads, at the cost "
                 "of holding that many reads behind a slow one.",
-      .minimum = 1, .maximum = 1 << 16 },
+      .minimum = 1, .maximum = CLI_UNBOUNDED },
     { .group = "Performance", .name = "live-refs", .type = OPT_SIZE,
       .offset = offsetof(cli_args, pipeline.live_refs), .metavar = "N",
       .help = "references in flight",
@@ -124,7 +124,7 @@ static const cli_option OPTIONS[] = {
                 "read. Left unset, a count is derived from the longest reference "
                 "and a memory budget, which keeps many short references generous "
                 "without letting a few very long ones exhaust memory.",
-      .unset_label = "derived from memory", .minimum = 0, .maximum = 1 << 16 },
+      .unset_label = "derived from memory", .minimum = 0, .maximum = CLI_UNBOUNDED },
 
     { .group = "Information", .name = "help", .key = 'h', .type = OPT_FLAG,
       .help = "show this help and exit", .action = CLI_SHOW_HELP },

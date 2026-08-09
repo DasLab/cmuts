@@ -77,7 +77,7 @@ static const cli_option OPTIONS[] = {
     { .group = "Layout", .name = "references", .type = OPT_SIZE,
       .offset = offsetof(gen_args, references), .metavar = "N",
       .help = "how many references to write",
-      .minimum = 1, .maximum = 1L << 30 },
+      .minimum = 1, .maximum = CLI_UNBOUNDED },
     { .group = "Layout", .name = "ref-length", .type = OPT_STRING,
       .offset = offsetof(gen_args, ref_length), .metavar = "SPEC",
       .help = "length of each reference", .detail = SPEC_DETAIL },
@@ -143,7 +143,7 @@ static const cli_option OPTIONS[] = {
     { .group = "Determinism", .name = "seed", .type = OPT_SIZE,
       .offset = offsetof(gen_args, seed), .metavar = "N",
       .help = "everything generated follows from this",
-      .minimum = 0, .maximum = 1L << 62 },
+      .minimum = 0, .maximum = CLI_UNBOUNDED },
 
     { .group = "Information", .name = "help", .key = 'h', .type = OPT_FLAG,
       .help = "show this help and exit", .action = CLI_SHOW_HELP },
