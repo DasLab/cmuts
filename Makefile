@@ -28,15 +28,12 @@ HDF5_LIBS   := $(shell pkg-config --libs   hdf5   2>/dev/null || echo -lhdf5)
 CPATH_CFLAGS := $(addprefix -isystem ,$(subst :, ,$(CPATH)))
 
 CFLAGS    := -std=c11 $(OPT) $(WARNINGS) -pthread -Iinclude $(HTS_CFLAGS) $(HDF5_CFLAGS) $(CPATH_CFLAGS) -MMD -MP
-CMUTS_LIBS := $(HTS_LIBS) $(HDF5_LIBS) -pthread -lm
-GEN_LIBS   := $(HTS_LIBS)
 
-# A sanitizer has to reach both the compiler and the linker.
+# A sanitizer has to reach both the compiler and the linker; what it adds to
+# the link is attached to each program's libraries, below.
 ifdef SANITIZE
 SANFLAGS   := -fsanitize=$(SANITIZE) -fno-omit-frame-pointer -g
 CFLAGS     += $(SANFLAGS)
-CMUTS_LIBS += $(SANFLAGS)
-GEN_LIBS   += $(SANFLAGS)
 endif
 
 # Defaults under the home directory so that installing needs no privileges and
@@ -48,38 +45,63 @@ BINDIR  ?= $(PREFIX)/bin
 INSTALL ?= install
 
 NAME     := cmuts
-GEN_NAME := cmuts-gen
+
+# One directory under apps/ per program, named for the binary it builds. A
+# program is its own sources, its own private headers, and whichever members of
+# the library it refers to; adding one means adding a directory and a word here.
+PROGRAMS := cmuts cmuts-gen
 
 BUILD    := build
 BIN      := $(BUILD)/$(NAME)
-GEN_BIN  := $(BUILD)/$(GEN_NAME)
+LIB      := $(BUILD)/lib$(NAME).a
 
-SRC      := $(wildcard src/*.c)
-GEN_SRC  := $(wildcard tools/*.c)
-OBJ      := $(SRC:src/%.c=$(BUILD)/src/%.o)
-GEN_OBJ  := $(GEN_SRC:tools/%.c=$(BUILD)/tools/%.o)
-DEP      := $(OBJ:.o=.d) $(GEN_OBJ:.o=.d)
+# Sources under src/ are the library and nothing else: no entry point lives
+# there, so every program can link the whole of it.
+LIB_SRC  := $(wildcard src/*.c)
+LIB_OBJ  := $(LIB_SRC:src/%.c=$(BUILD)/src/%.o)
 
-# The generator shares the command line parser and nothing else: it has its own
-# arguments, but no reason to read them differently.
-GEN_SHARED := $(BUILD)/src/cli.o
+app_sources = $(wildcard apps/$(1)/*.c)
+app_objects = $(patsubst apps/$(1)/%.c,$(BUILD)/apps/$(1)/%.o,$(call app_sources,$(1)))
 
-all: $(BIN) $(GEN_BIN)
+APP_SRC  := $(foreach p,$(PROGRAMS),$(call app_sources,$(p)))
+APP_OBJ  := $(foreach p,$(PROGRAMS),$(call app_objects,$(p)))
+BINS     := $(addprefix $(BUILD)/,$(PROGRAMS))
+SRC      := $(LIB_SRC) $(APP_SRC)
+DEP      := $(LIB_OBJ:.o=.d) $(APP_OBJ:.o=.d)
 
-$(BIN): $(OBJ)
-	$(CC) $(OBJ) -o $@ $(CMUTS_LIBS)
+# What each program needs beyond the library. The archive is searched, not
+# swallowed, so a program links only the members it refers to and only the
+# libraries those in turn require: the generator reaches cli.o alone and so
+# needs nothing of HDF5.
+LIBS_cmuts     := $(HTS_LIBS) $(HDF5_LIBS) -pthread -lm
+LIBS_cmuts-gen := $(HTS_LIBS)
 
-$(GEN_BIN): $(GEN_OBJ) $(GEN_SHARED)
-	$(CC) $(GEN_OBJ) $(GEN_SHARED) -o $@ $(GEN_LIBS)
+ifdef SANITIZE
+$(foreach p,$(PROGRAMS),$(eval LIBS_$(p) += $(SANFLAGS)))
+endif
 
-$(BUILD)/src/%.o: src/%.c | $(BUILD)/src
+all: $(BINS)
+
+# Objects first and the archive last, which is the order a linker resolves in.
+define program_rule
+$(BUILD)/$(1): $(call app_objects,$(1)) $$(LIB)
+	$$(CC) $$^ -o $$@ $$(LIBS_$(1))
+endef
+
+$(foreach p,$(PROGRAMS),$(eval $(call program_rule,$(p))))
+
+$(LIB): $(LIB_OBJ)
+	$(AR) rcs $@ $^
+
+# A program's own directory is on its include path, so a header beside its
+# source is private to it and one in include/ is shared.
+$(BUILD)/apps/%.o: apps/%.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -I$(<D) -c $< -o $@
+
+$(BUILD)/src/%.o: src/%.c
+	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD)/tools/%.o: tools/%.c | $(BUILD)/tools
-	$(CC) $(CFLAGS) -Itools -c $< -o $@
-
-$(BUILD)/src $(BUILD)/tools:
-	mkdir -p $@
 
 # cmuts alone. The generator writes test fixtures and benchmark inputs, which
 # is work done from the build tree; nothing looks for it on PATH.
@@ -96,7 +118,7 @@ uninstall:
 #     uv venv .venv && uv pip install --python .venv/bin/python --group dev
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
-check: $(BIN) $(GEN_BIN)
+check: $(BINS)
 	$(PYTHON) -m pytest
 
 # Separate object trees, so that an object from an ordinary build cannot link
@@ -109,7 +131,9 @@ asan:
 	@$(MAKE) BUILD=$(BUILD)/asan OPT=-O1 SANITIZE=address,undefined all
 
 # clang-tidy reads the compile database, not this file. A clang that is not the
-# system one also needs the SDK spelled out.
+# system one also needs the SDK spelled out. Every source is described, the
+# programs' as well as the library's, each with its own directory on the include
+# path as the build gives it.
 CLANG_TIDY ?= $(firstword $(wildcard /opt/homebrew/opt/llvm/bin/clang-tidy) clang-tidy)
 SDK        := $(if $(filter Darwin,$(shell uname)),-isysroot $(shell xcrun --show-sdk-path),)
 TIDY_FLAGS := -std=c11 $(SDK) -Iinclude $(HTS_CFLAGS) $(HDF5_CFLAGS)
@@ -121,7 +145,7 @@ compile_commands.json: Makefile $(SRC)
 	     [ $$first -eq 1 ] || printf ',\n'; \
 	     first=0; \
 	     printf '  { "directory": "%s", "file": "%s", "command": "%s" }' \
-	       "$(CURDIR)" "$$f" "$(CC) $(TIDY_FLAGS) -c $$f"; \
+	       "$(CURDIR)" "$$f" "$(CC) $(TIDY_FLAGS) -I$$(dirname $$f) -c $$f"; \
 	   done; \
 	   printf '\n]\n'; } > $@
 

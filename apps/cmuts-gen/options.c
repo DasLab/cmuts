@@ -1,4 +1,4 @@
-/* genopts.c -- cmuts-gen's command line, as one table.
+/* options.c -- cmuts-gen's command line, as one table.
  *
  * Rows use designated initializers so that a field added to cli_option
  * defaults quietly rather than having to be spelled out in every one.
@@ -6,7 +6,7 @@
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
 
-#include "genopts.h"
+#include "options.h"
 
 #include <stddef.h>
 

@@ -1,4 +1,4 @@
-/* cmuts-gen.c -- driver for generating alignments and the reference they came from.
+/* main.c -- driver for generating alignments and the reference they came from.
  *
  * Writes a BAM and a matching FASTA, for tests that need a known shape and for
  * benchmarks that need volume.
@@ -11,7 +11,7 @@
 #include "cli.h"
 #include "dataset.h"
 #include "error.h"
-#include "genopts.h"
+#include "options.h"
 
 int main(int argc, char **argv)
 {

@@ -1,4 +1,4 @@
-/* genopts.h -- what cmuts-gen accepts on the command line.
+/* options.h -- what cmuts-gen accepts on the command line.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
