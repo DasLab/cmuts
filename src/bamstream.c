@@ -189,17 +189,21 @@ static bool holder_of(const cm_bam_stream *stream, int64_t reference, size_t fro
  * first, so the files are drained in the order they were named. */
 static bool lowest_holder(const cm_bam_stream *stream, size_t *out)
 {
-    bool found = false;
+    size_t lowest = 0;
+    bool   found  = false;
 
     for (size_t i = 0; i < stream->n; i++) {
         if (stream->sources[i].spent)
             continue;
 
-        if (!found || order_of(&stream->sources[i]) < order_of(&stream->sources[*out])) {
-            *out  = i;
-            found = true;
+        if (!found || order_of(&stream->sources[i]) < order_of(&stream->sources[lowest])) {
+            lowest = i;
+            found  = true;
         }
     }
+
+    if (found)
+        *out = lowest;
 
     return found;
 }

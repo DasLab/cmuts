@@ -477,7 +477,7 @@ int main(int argc, char **argv)
     layout_specs layout   = { 0 };
     char         error[CM_ERROR_MAX];
 
-    cli_spec spec = {
+    cli_spec command = {
         .program   = "cmuts-gen",
         .version   = CMUTS_VERSION,
         .summary   = "generate alignments and the reference they came from",
@@ -487,7 +487,7 @@ int main(int argc, char **argv)
         .args_size = sizeof defaults,
     };
 
-    switch (cli_parse(&spec, argc, argv, &args)) {
+    switch (cli_parse(&command, argc, argv, &args)) {
         case CLI_DONE:  return 0;
         case CLI_ERROR: return 2;
         case CLI_OK:    break;
@@ -495,7 +495,7 @@ int main(int argc, char **argv)
 
     if (build_model(&model, &layout, &args, error, sizeof error) < 0 ||
         generate(&args, &model, &layout, error, sizeof error) < 0) {
-        fprintf(stderr, "%s: %s\n", spec.program, error);
+        fprintf(stderr, "%s: %s\n", command.program, error);
         return 1;
     }
 

@@ -288,6 +288,17 @@ static band_cell *row_of(const context *ctx, size_t i)
     return ctx->scratch->forward + i * (size_t)ctx->widest;
 }
 
+/* The same row where a pass only reads it.
+ *
+ * A pointer to an array takes a qualifier of its own only from C23, so a row
+ * meant to be read cannot simply be spelled const where it is taken. The cast
+ * that says so lives here and in its backward twin rather than at each of the
+ * places that would otherwise carry one. */
+static const band_cell *read_row_of(const context *ctx, size_t i)
+{
+    return (const band_cell *)row_of(ctx, i);
+}
+
 /* A forward row together with what restores it.
  *
  * A row is left scaled by every divisor but its own, that last one having been
@@ -312,7 +323,7 @@ typedef struct {
 static scaled_row scaled_row_of(const context *ctx, size_t i)
 {
     return (scaled_row){
-        .cell  = row_of(ctx, i),
+        .cell  = read_row_of(ctx, i),
         .scale = ctx->scratch->scale[i],
     };
 }
@@ -332,6 +343,12 @@ static cell_terms *terms_of(const context *ctx, size_t i)
 static band_cell *backward_row_of(const context *ctx, size_t i)
 {
     return ctx->scratch->backward + (i & 1) * (size_t)ctx->widest;
+}
+
+/* The twin of read_row_of, for the same reason. */
+static const band_cell *read_backward_row_of(const context *ctx, size_t i)
+{
+    return (const band_cell *)backward_row_of(ctx, i);
 }
 
 /* The reference a row's own base accounts for beyond the one it pairs with,
@@ -503,7 +520,7 @@ static double forward_row(const context *ctx, size_t i)
     const phmm      *model = ctx->model;
     descent          step  = descent_into(ctx, i);
     band_cell       *row   = row_of(ctx, i);
-    const band_cell *above = row_of(ctx, i - 1);
+    const band_cell *above = read_row_of(ctx, i - 1);
     cell_terms      *terms = terms_of(ctx, i);
     row_terms        each  = row_terms_of(ctx, i);
     hts_pos_t        shift = shift_between(ctx, i - 1, i);
@@ -601,7 +618,7 @@ static void backward_row(const context *ctx, size_t i)
     bool        live  = deletions_live(ctx, i);
 
     band_cell        *row      = backward_row_of(ctx, i);
-    const band_cell  *below    = backward_row_of(ctx, i + 1);
+    const band_cell  *below    = read_backward_row_of(ctx, i + 1);
     const cell_terms *terms    = terms_of(ctx, i + 1);
     double           *pairings = ctx->scratch->pairings;
     hts_pos_t         width    = width_at(ctx, i);
@@ -748,7 +765,7 @@ static void accumulate_row(const context *ctx, size_t i)
 {
     phmm_scratch     *scratch  = ctx->scratch;
     scaled_row        front    = scaled_row_of(ctx, i);
-    const band_cell  *back     = backward_row_of(ctx, i);
+    const band_cell  *back     = read_backward_row_of(ctx, i);
     const cell_terms *terms    = terms_of(ctx, i);
     const double     *pairings = scratch->pairings;
     hts_pos_t         width    = width_at(ctx, i);
@@ -807,7 +824,7 @@ static void accumulate_row(const context *ctx, size_t i)
 static bool normalized(const context *ctx)
 {
     scaled_row       front = scaled_row_of(ctx, 0);
-    const band_cell *back  = backward_row_of(ctx, 0);
+    const band_cell *back  = read_backward_row_of(ctx, 0);
     double           total = 0.0;
 
     for (hts_pos_t k = 0; k < width_at(ctx, 0); k++)
