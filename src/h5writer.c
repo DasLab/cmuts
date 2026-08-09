@@ -53,6 +53,28 @@ static int fail(h5writer *w, const char *what)
     return -1;
 }
 
+/* A creation property list with object timestamping turned off.
+ *
+ * HDF5 stamps every object header with the time it was written, so two runs
+ * over the same input would produce files differing in bytes that say nothing
+ * about the result. Applied to the file as well as the datasets: an fcpl also
+ * carries the root group's creation properties, and that group is stamped like
+ * any other. */
+static hid_t untimed_plist(hid_t class_id)
+{
+    hid_t plist = H5Pcreate(class_id);
+
+    if (plist < 0)
+        return H5I_INVALID_HID;
+
+    if (H5Pset_obj_track_times(plist, false) < 0) {
+        H5Pclose(plist);
+        return H5I_INVALID_HID;
+    }
+
+    return plist;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Dataset construction                                                      */
 /* ------------------------------------------------------------------------ */
@@ -89,7 +111,7 @@ static void field_shape(const h5writer *w, accum_field_id id, hsize_t *dims, hsi
 
 static hid_t make_layout(const hsize_t *chunk, int rank)
 {
-    hid_t dcpl = H5Pcreate(H5P_DATASET_CREATE);
+    hid_t dcpl = untimed_plist(H5P_DATASET_CREATE);
     float fill = (float)NAN;
 
     if (dcpl < 0)
@@ -161,6 +183,7 @@ static hid_t create_field(h5writer *w, accum_field_id id)
 h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
                           bool overwrite)
 {
+    hid_t     fcpl;
     h5writer *w = calloc(1, sizeof *w);
     if (!w)
         return NULL;
@@ -175,10 +198,18 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
     for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++)
         w->dataset[id] = H5I_INVALID_HID;
 
+    fcpl = untimed_plist(H5P_FILE_CREATE);
+    if (fcpl < 0) {
+        fail(w, "unable to prepare the output file");
+        return w;
+    }
+
     /* Exclusive unless overwrite was requested, so that the decision cannot
      * be undone by the file appearing between the check and the create. */
     w->file = H5Fcreate(path, overwrite ? H5F_ACC_TRUNC : H5F_ACC_EXCL,
-                        H5P_DEFAULT, H5P_DEFAULT);
+                        fcpl, H5P_DEFAULT);
+    H5Pclose(fcpl);
+
     if (w->file < 0) {
         fail(w, "unable to create the output file");
         return w;
@@ -304,18 +335,21 @@ int h5writer_names(h5writer *w, const char *const *names, int32_t n_refs)
     hsize_t dims    = (hsize_t)n_refs;
     hid_t   type    = make_string_type();
     hid_t   space   = H5Screate_simple(1, &dims, NULL);
+    hid_t   dcpl    = untimed_plist(H5P_DATASET_CREATE);
     hid_t   dataset = H5I_INVALID_HID;
     herr_t  status  = -1;
 
-    if (type >= 0 && space >= 0)
+    if (type >= 0 && space >= 0 && dcpl >= 0)
         dataset = H5Dcreate2(w->file, DATASET_REFERENCE, type, space,
-                             H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+                             H5P_DEFAULT, dcpl, H5P_DEFAULT);
 
     if (dataset >= 0)
         status = H5Dwrite(dataset, type, H5S_ALL, H5S_ALL, H5P_DEFAULT, names);
 
     if (dataset >= 0)
         H5Dclose(dataset);
+    if (dcpl >= 0)
+        H5Pclose(dcpl);
     if (space >= 0)
         H5Sclose(space);
     if (type >= 0)
