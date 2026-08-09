@@ -159,7 +159,7 @@ cli_spec cmuts_spec(const cli_args *defaults)
     return (cli_spec){
         .program       = "cmuts",
         .version       = CMUTS_VERSION,
-        .summary       = "per-reference accumulation over a BAM file",
+        .summary       = "Fast, multithreaded pair-HMM counting of MaP-seq mutations.",
         .options       = OPTIONS,
         .n_options     = sizeof OPTIONS / sizeof *OPTIONS,
         .positionals   = POSITIONALS,
