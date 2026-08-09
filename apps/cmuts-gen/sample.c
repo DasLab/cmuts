@@ -30,11 +30,16 @@ uint64_t rng_next(rng *r)
     return z ^ (z >> 31);
 }
 
+/* The top bits are the ones with full quality, and this many of them are
+ * exactly what a double's mantissa holds. The shift drops the rest and the
+ * scale is two to the same power, so the two are written once and follow. */
+#define FRACTION_BITS  53
+#define FRACTION_SHIFT (64 - FRACTION_BITS)
+#define FRACTION_SCALE (1.0 / (double)(1ULL << FRACTION_BITS))
+
 double rng_fraction(rng *r)
 {
-    /* The top 53 bits are the ones with full quality, and are exactly what a
-     * double's mantissa holds. */
-    return (double)(rng_next(r) >> 11) * (1.0 / 9007199254740992.0);
+    return (double)(rng_next(r) >> FRACTION_SHIFT) * FRACTION_SCALE;
 }
 
 long rng_between(rng *r, long low, long high)

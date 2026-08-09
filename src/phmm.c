@@ -54,7 +54,13 @@ typedef struct {
 /* A base drawn from nothing in particular, and a comparison that settles
  * nothing: an inserted base answers to no reference position, and a base
  * neither side has named says as little either way. */
-#define UNINFORMATIVE 0.25
+#define UNINFORMATIVE (1.0 / NUC_BASES)
+
+/* A misread base, or a modified one, lands on one of the bases the reference
+ * does not name, and is taken to be as likely to have landed on any of them.
+ * Both this and UNINFORMATIVE are the width of the alphabet rather than numbers
+ * of their own, so nuc.h is the one place either changes. */
+#define OTHER_BASES ((double)(NUC_BASES - 1))
 
 /* Forward times backward has to come to one on every row. A departure past this
  * is an index gone wrong rather than a rounding, and the read is better handed
@@ -163,13 +169,14 @@ void phmm_build(phmm *model, const phmm_params *params,
  * which is what makes these a distribution over the four bases. */
 static double agreement_chance(double modification, double error)
 {
-    return (1.0 - modification) * (1.0 - error) + modification * error / 3.0;
+    return (1.0 - modification) * (1.0 - error)
+         + modification * error / OTHER_BASES;
 }
 
 static double disagreement_chance(double modification, double error)
 {
-    return (1.0 - modification) * error / 3.0
-         + modification * (1.0 - error / 3.0) / 3.0;
+    return (1.0 - modification) * error / OTHER_BASES
+         + modification * (1.0 - error / OTHER_BASES) / OTHER_BASES;
 }
 
 /* Having read what was read, the chance the template really differed from the
@@ -184,9 +191,9 @@ static double phmm_modification(const phmm *model, bool agree, double error)
     double modification = model->params.modification;
 
     return agree
-         ? modification * error / 3.0
+         ? modification * error / OTHER_BASES
              / agreement_chance(modification, error)
-         : modification * (1.0 - error / 3.0) / 3.0
+         : modification * (1.0 - error / OTHER_BASES) / OTHER_BASES
              / disagreement_chance(modification, error);
 }
 

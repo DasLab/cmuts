@@ -15,6 +15,17 @@
 
 static const char BASES[] = "ACGT";
 
+/* What an MD string is allowed: a few characters for each event, and room at
+ * the end for the count it closes with.
+ *
+ * Neither bounds anything on its own, every write being through snprintf
+ * against what is left, so an underestimate truncates the tag rather than
+ * running past the buffer. MD_HEADROOM is what the writing loop keeps in hand
+ * so that no string a real read produces is the one that gets truncated. */
+#define MD_PER_EVENT 4
+#define MD_TAIL      32
+#define MD_HEADROOM  16
+
 typedef enum {
     EV_MATCH,
     EV_MISMATCH,
@@ -59,9 +70,8 @@ sim_scratch *sim_scratch_create(const sim_model *model)
     if (!scratch)
         return NULL;
 
-    scratch->capacity = largest_read(model);
-    /* An MD string is at most a few characters per event. */
-    scratch->md_capacity = scratch->capacity * 4 + 32;
+    scratch->capacity    = largest_read(model);
+    scratch->md_capacity = scratch->capacity * MD_PER_EVENT + MD_TAIL;
 
     scratch->events = calloc(scratch->capacity, sizeof *scratch->events);
     scratch->cigar  = calloc(scratch->capacity, sizeof *scratch->cigar);
@@ -289,7 +299,7 @@ static void build_md(const sim_event *events, size_t n, char *md, size_t cap)
     long   run  = 0;
     bool   deleting = false;
 
-    for (size_t i = 0; i < n && used + 16 < cap; i++) {
+    for (size_t i = 0; i < n && used + MD_HEADROOM < cap; i++) {
         switch (events[i].kind) {
             case EV_MATCH:
                 deleting = false;

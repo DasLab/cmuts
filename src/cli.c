@@ -31,6 +31,11 @@
 /* Enough for a placeholder and the ellipsis a variadic one carries. */
 #define METAVAR_MAX 32
 
+/* The column an option's help begins in. The arguments are listed against the
+ * same one, and a difference between the two would read as a step partway down
+ * the help rather than as anything deliberate. */
+#define HELP_COLUMN 28
+
 /* getopt records a short option in optopt, and for a long one leaves the
  * identifier it was given instead, which names nothing a reader would know. A
  * long one is read back from the word getopt stopped on. */
@@ -341,7 +346,7 @@ static void print_option(FILE *out, const cli_option *opt, const void *defaults)
     if (opt->metavar && n > 0 && (size_t)n < sizeof invocation)
         snprintf(invocation + n, sizeof invocation - (size_t)n, " %s", opt->metavar);
 
-    fprintf(out, "  %-28s %s", invocation, opt->help);
+    fprintf(out, "  %-*s %s", HELP_COLUMN, invocation, opt->help);
 
     if (opt->choices) {
         fputs(" (", out);
@@ -409,7 +414,7 @@ static void print_positionals(const cli_spec *spec, FILE *out)
     for (size_t i = 0; i < spec->n_positionals; i++) {
         char form[METAVAR_MAX];
 
-        fprintf(out, "  %-28s %s\n",
+        fprintf(out, "  %-*s %s\n", HELP_COLUMN,
                 positional_form(&spec->positionals[i], form, sizeof form),
                 spec->positionals[i].help);
     }

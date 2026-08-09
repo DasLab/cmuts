@@ -30,6 +30,9 @@
  * leading 0xff in an otherwise full-length quality array. */
 #define QUAL_ABSENT 0xff
 
+/* The low bits a BGZF virtual offset spends on the position within a block. */
+#define BGZF_OFFSET_BITS 16
+
 static const char SORT_ORDER_COORDINATE[] = "coordinate";
 
 struct cm_bam_reader {
@@ -56,9 +59,14 @@ static uint64_t raw_offset(const cm_bam_reader *reader)
         return (uint64_t)htell(cram_fd_get_fp(file->fp.cram));
 
     /* A bgzipped SAM reads through BGZF as well, so the format alone does not
-     * settle which of these applies. */
+     * settle which of these applies.
+     *
+     * A BGZF virtual offset is two numbers in one: the compressed block's own
+     * position in the upper bits, and how far into the inflated block the
+     * reader has come in the lower BGZF_OFFSET_BITS. It is the first alone that
+     * says how much of the file has been read. */
     if (file->is_bgzf)
-        return (uint64_t)(bgzf_tell(file->fp.bgzf) >> 16);
+        return (uint64_t)(bgzf_tell(file->fp.bgzf) >> BGZF_OFFSET_BITS);
 
     return file->fp.hfile ? (uint64_t)htell(file->fp.hfile) : 0;
 }

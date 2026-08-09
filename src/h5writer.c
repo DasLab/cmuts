@@ -21,11 +21,23 @@
 
 /* Rows are completed in roughly ascending order, so holding a handful of
  * chunks in the cache keeps a single-row write from forcing a read, modify and
- * rewrite of the chunk around it. */
+ * rewrite of the chunk around it. The slots are a hash table over chunk
+ * indices, which is why their number is prime. */
 #define CACHED_CHUNKS 4
 #define CACHE_SLOTS   521
 
+/* HDF5's own default, restated because naming either of the other two means
+ * passing all three. */
+#define CACHE_PREEMPTION 0.75
+
 #define DEFLATE_LEVEL 3
+
+/* A per-base field is a reference by position, a scalar field one value for the
+ * reference. Both are described through the same arrays, which are sized to the
+ * larger of the two. */
+#define RANK_SCALAR   1
+#define RANK_PER_BASE 2
+#define RANK_MAX      RANK_PER_BASE
 
 struct h5writer {
     hid_t   file;
@@ -60,7 +72,8 @@ static hsize_t rows_per_chunk(const h5writer *w)
 
 static int field_rank(accum_field_id id)
 {
-    return ACCUM_FIELDS[id].kind == ACCUM_PER_BASE ? 2 : 1;
+    return ACCUM_FIELDS[id].kind == ACCUM_PER_BASE ? RANK_PER_BASE
+                                                   : RANK_SCALAR;
 }
 
 static void field_shape(const h5writer *w, accum_field_id id, hsize_t *dims, hsize_t *chunk)
@@ -68,7 +81,7 @@ static void field_shape(const h5writer *w, accum_field_id id, hsize_t *dims, hsi
     dims[0]  = (hsize_t)w->n_refs;
     chunk[0] = rows_per_chunk(w);
 
-    if (field_rank(id) == 2) {
+    if (field_rank(id) == RANK_PER_BASE) {
         dims[1]  = w->ref_cap;
         chunk[1] = w->ref_cap;
     }
@@ -105,7 +118,8 @@ static hid_t make_access(const hsize_t *chunk, int rank)
     for (int i = 0; i < rank; i++)
         bytes *= (size_t)chunk[i];
 
-    if (H5Pset_chunk_cache(dapl, CACHE_SLOTS, CACHED_CHUNKS * bytes, 0.75) < 0) {
+    if (H5Pset_chunk_cache(dapl, CACHE_SLOTS, CACHED_CHUNKS * bytes,
+                           CACHE_PREEMPTION) < 0) {
         H5Pclose(dapl);
         return H5I_INVALID_HID;
     }
@@ -115,9 +129,9 @@ static hid_t make_access(const hsize_t *chunk, int rank)
 
 static hid_t create_field(h5writer *w, accum_field_id id)
 {
-    hsize_t dims[2]  = { 0, 0 };
-    hsize_t chunk[2] = { 0, 0 };
-    int     rank     = field_rank(id);
+    hsize_t dims[RANK_MAX]  = { 0, 0 };
+    hsize_t chunk[RANK_MAX] = { 0, 0 };
+    int     rank            = field_rank(id);
     hid_t   space, dcpl, dapl, dataset;
 
     field_shape(w, id, dims, chunk);
@@ -210,9 +224,9 @@ const char *h5writer_error(const h5writer *w)
 static int select_row(hid_t dataset, int32_t tid, size_t len, int rank,
                       hid_t *filespace, hid_t *memspace)
 {
-    hsize_t start[2] = { (hsize_t)tid, 0 };
-    hsize_t count[2] = { 1, (hsize_t)len };
-    hsize_t extent   = rank == 2 ? (hsize_t)len : 1;
+    hsize_t start[RANK_MAX] = { (hsize_t)tid, 0 };
+    hsize_t count[RANK_MAX] = { 1, (hsize_t)len };
+    hsize_t extent          = rank == RANK_PER_BASE ? (hsize_t)len : 1;
 
     *filespace = H5Dget_space(dataset);
     if (*filespace < 0)
