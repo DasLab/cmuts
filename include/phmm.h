@@ -5,8 +5,6 @@
 
 #pragma once
 
-#include <stdbool.h>
-
 #include "bam.h"
 #include "fasta.h"
 #include "phred.h"
@@ -113,27 +111,6 @@ typedef struct {
 
 void phmm_build(phmm *model, const phmm_params *params,
                 const phmm_weights *weights);
-
-/* Having read what was read, the chance the template really differed from the
- * reference here.
- *
- * A base agreeing with the reference may have been modified and then misread
- * back into agreement, and one disagreeing may be an unmodified base misread.
- * The first is negligible and the second is not, which is what makes a poorly
- * read disagreement worth less than a clean one.
- *
- * Exposed because the walk counts the same quantity the marginal does, and the
- * two have to agree wherever the alignment was never in doubt. */
-double phmm_modification(const phmm *model, bool agree, double error);
-
-/* What one event of this kind, believed to this degree, is worth to the
- * position it is laid at. Exposed for the same reason the modification above
- * is, and weighing the events that one has already been applied to. */
-static inline double phmm_weigh(const phmm *model, phmm_event event,
-                                double posterior)
-{
-    return model->weights.weight[event] * posterior;
-}
 
 /* Buffers one thread reuses across reads, grown to whatever the longest read so
  * far has needed. */

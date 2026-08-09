@@ -155,7 +155,14 @@ static double disagreement_chance(double modification, double error)
          + modification * (1.0 - error / 3.0) / 3.0;
 }
 
-double phmm_modification(const phmm *model, bool agree, double error)
+/* Having read what was read, the chance the template really differed from the
+ * reference here.
+ *
+ * A base agreeing with the reference may have been modified and then misread
+ * back into agreement, and one disagreeing may be an unmodified base misread.
+ * The first is negligible and the second is not, which is what makes a poorly
+ * read disagreement worth less than a clean one. */
+static double phmm_modification(const phmm *model, bool agree, double error)
 {
     double modification = model->params.modification;
 
@@ -164,6 +171,13 @@ double phmm_modification(const phmm *model, bool agree, double error)
              / agreement_chance(modification, error)
          : modification * (1.0 - error / 3.0) / 3.0
              / disagreement_chance(modification, error);
+}
+
+/* What one event of this kind, believed to this degree, is worth to the
+ * position it is laid at. */
+static double phmm_weigh(const phmm *model, phmm_event event, double posterior)
+{
+    return model->weights.weight[event] * posterior;
 }
 
 /* ------------------------------------------------------------------------ */

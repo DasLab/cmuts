@@ -37,8 +37,8 @@ void tally_tables_build(tally_tables *tables, const tally_config *config);
  *
  * Private to a worker rather than shared, since the marginal writes over the
  * whole of it for each read, and reused rather than allocated per read, since a
- * read is far too small a thing to allocate for. A NULL scratch is not an
- * error: it costs the marginal and nothing else. */
+ * read is far too small a thing to allocate for. Every read is counted through
+ * one, so a caller must have made it before any read arrives. */
 typedef struct tally_scratch tally_scratch;
 
 tally_scratch *tally_scratch_create(void);
