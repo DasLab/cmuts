@@ -8,6 +8,8 @@
 
 #include <stdio.h>
 
+#include <htslib/hts_log.h>
+
 #include "cli.h"
 #include "dataset.h"
 #include "error.h"
@@ -20,6 +22,11 @@ int main(int argc, char **argv)
     gen_args       args;
     dataset_config cfg;
     char           error[CM_ERROR_MAX];
+
+    /* Quiet for the reason cmuts keeps it quiet: what htslib reports it also
+     * returns, and its own account of a failure would arrive beside ours
+     * saying the same thing in another voice. */
+    hts_set_log_level(HTS_LOG_OFF);
 
     switch (cli_parse(&spec, argc, argv, &args)) {
         case CLI_DONE:  return 0;

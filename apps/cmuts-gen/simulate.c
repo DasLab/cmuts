@@ -18,10 +18,11 @@ static const char BASES[] = "ACGT";
 /* What an MD string is allowed: a few characters for each event, and room at
  * the end for the count it closes with.
  *
- * Neither bounds anything on its own, every write being through snprintf
- * against what is left, so an underestimate truncates the tag rather than
- * running past the buffer. MD_HEADROOM is what the writing loop keeps in hand
- * so that no string a real read produces is the one that gets truncated. */
+ * Neither is what keeps the writing inside the buffer -- the cursor is held
+ * short of the end at every step, whatever these say -- so an underestimate
+ * costs a tag cut short and nothing worse. MD_HEADROOM is what the loop keeps
+ * in hand so that a tag that is cut short is left after a whole event rather
+ * than partway through a number. */
 #define MD_PER_EVENT 4
 #define MD_TAIL      32
 #define MD_HEADROOM  16
@@ -289,10 +290,44 @@ static size_t build_sequence(const sim_event *events, size_t n, const sim_model 
     return len;
 }
 
+/* A match count and the one character that closes it: the base that broke the
+ * run, or the caret that opens a deletion.
+ *
+ * The cursor is left where the text ends and not where it would have ended had
+ * there been room, which is what snprintf hands back. The two part company only
+ * once the buffer is full, and a cursor past the end would leave every write
+ * after it addressing memory that is not there. */
+static size_t append_run(char *md, size_t used, size_t cap, long run,
+                         char closing)
+{
+    int wrote = snprintf(md + used, cap - used, "%ld%c", run, closing);
+
+    if (wrote < 0)
+        return used;
+
+    return used + (size_t)wrote < cap ? used + (size_t)wrote : cap - 1;
+}
+
+/* One deleted base, written only where both it and the terminator after it
+ * have somewhere to go. */
+static size_t append_base(char *md, size_t used, size_t cap, char base)
+{
+    if (used + 1 >= cap)
+        return used;
+
+    md[used++] = base;
+    md[used]   = '\0';
+
+    return used;
+}
+
 /* MD describes only the reference-consuming positions, so insertions and soft
  * clips contribute nothing to it. It opens and closes with a match count, and
  * carries one between every pair of events, which is why a run of zero is
- * still written out. */
+ * still written out.
+ *
+ * Every step leaves the cursor short of cap, so the closing count writes into
+ * a buffer it is still inside however the events fell. */
 static void build_md(const sim_event *events, size_t n, char *md, size_t cap)
 {
     size_t used = 0;
@@ -308,18 +343,17 @@ static void build_md(const sim_event *events, size_t n, char *md, size_t cap)
 
             case EV_MISMATCH:
                 deleting = false;
-                used += (size_t)snprintf(md + used, cap - used, "%ld%c", run, events[i].ref);
-                run = 0;
+                used = append_run(md, used, cap, run, events[i].ref);
+                run  = 0;
                 break;
 
             case EV_DELETE:
                 if (!deleting) {
-                    used += (size_t)snprintf(md + used, cap - used, "%ld^", run);
-                    run = 0;
+                    used = append_run(md, used, cap, run, '^');
+                    run  = 0;
                     deleting = true;
                 }
-                md[used++] = events[i].ref;
-                md[used]   = '\0';
+                used = append_base(md, used, cap, events[i].ref);
                 break;
 
             default:
