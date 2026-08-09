@@ -5,4 +5,4 @@
 
 #pragma once
 
-#define CMUTS_VERSION "0.1.0"
+#define CMUTS_VERSION "2.0.0-alpha"
