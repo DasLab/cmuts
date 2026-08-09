@@ -42,10 +42,10 @@ typedef double band_cell[N_STATES];
  * The forward pass wants what the pairing is worth, the backward pass wants the
  * same of a row it has yet to reach, the deletion closing there wants it again,
  * and the accumulation wants how much of the pairing was a modification. All
- * four come of one comparison, which costs two nucleotide decodes and a quality
- * lookup, so it is made once and held rather than made again wherever it is
- * wanted. Kept for the whole matrix rather than a row at a time: the backward
- * pass reads a row the forward pass wrote and left behind. */
+ * four come of one comparison, so it is made once and held rather than made
+ * again wherever it is wanted. Kept for the whole matrix rather than a row at
+ * a time: the backward pass reads a row the forward pass wrote and left
+ * behind. */
 typedef struct {
     double emission;
     double modification;
@@ -191,7 +191,7 @@ static double phmm_modification(const phmm *model, bool agree, double error)
 }
 
 /* ------------------------------------------------------------------------ */
-/* One read base against one reference base                                  */
+/* One read base against the reference                                       */
 /* ------------------------------------------------------------------------ */
 
 /* A record storing no qualities weighs every base fully, there being nothing to
@@ -204,36 +204,69 @@ static double error_at(const context *ctx, int32_t query)
          : 0.0;
 }
 
-typedef struct {
-    bool   comparable;  /* both are named bases, and both are there to read */
-    bool   agree;
-    double error;
-} comparison;
-
-/* Cell (i, j) reads read base i - 1 of the placed span against reference base
- * j - 1. A position past either end of the reference has nothing to be compared
- * with, which is a thing not known rather than a disagreement. */
-static comparison compare_at(const context *ctx, size_t i, hts_pos_t j)
+/* What a pairing that agreed, or one that did not, is worth, and how much of it
+ * belongs to the template having really differed. */
+static cell_terms terms_from(const context *ctx, bool agree, double error)
 {
-    comparison out   = { .comparable = false, .agree = false, .error = 0.0 };
-    int32_t    query = ctx->span.begin + (int32_t)i - 1;
-    nuc        theirs;
+    double m = ctx->model->params.modification;
+
+    return (cell_terms){
+        .emission     = agree ? agreement_chance(m, error)
+                              : disagreement_chance(m, error),
+        .modification = phmm_modification(ctx->model, agree, error),
+    };
+}
+
+/* Every value a cell of one row can take.
+ *
+ * A row pairs one read base, which is read once and scored once, so the only
+ * thing a cell of it settles is which of three the reference offers: the same
+ * base, a different one, or nothing that can be compared at all. The three are
+ * worked out when the row is entered and a cell picks among them, which is
+ * what keeps the divisions a modification costs off the cell.
+ *
+ * A read that names no base here agrees with nothing and differs from nothing,
+ * so all three are the same and a cell need not ask about the read again. */
+typedef struct {
+    cell_terms agree;
+    cell_terms differ;
+    cell_terms neither;
     nuc        ours;
+} row_terms;
+
+static row_terms row_terms_of(const context *ctx, size_t i)
+{
+    int32_t    query   = ctx->span.begin + (int32_t)i - 1;
+    double     error   = error_at(ctx, query);
+    nuc        ours    = nuc_from_read(ctx->read->seq, query);
+    cell_terms neither = { .emission = UNINFORMATIVE, .modification = 0.0 };
+    bool       named   = nuc_is_base(ours);
+
+    return (row_terms){
+        .agree   = named ? terms_from(ctx, true, error) : neither,
+        .differ  = named ? terms_from(ctx, false, error) : neither,
+        .neither = neither,
+        .ours    = ours,
+    };
+}
+
+/* Cell (i, j) reads the row's base against reference base j - 1. A position
+ * past either end of the reference has nothing to be compared with, which is a
+ * thing not known rather than a disagreement. */
+static cell_terms terms_at(const context *ctx, const row_terms *row,
+                           hts_pos_t j)
+{
+    nuc theirs;
 
     if (j < 1 || (size_t)j > ctx->ref->len)
-        return out;
+        return row->neither;
 
     theirs = nuc_from_char(ctx->ref->seq[j - 1]);
-    ours   = nuc_from_read(ctx->read->seq, query);
 
-    if (!nuc_is_base(theirs) || !nuc_is_base(ours))
-        return out;
+    if (!nuc_is_base(theirs))
+        return row->neither;
 
-    out.comparable = true;
-    out.agree      = theirs == ours;
-    out.error      = error_at(ctx, query);
-
-    return out;
+    return theirs == row->ours ? row->agree : row->differ;
 }
 
 /* How far the base a row pairs is to be believed, whatever it turned out to be
@@ -356,23 +389,6 @@ static bool within(hts_pos_t k, hts_pos_t width)
 /* Forward                                                                   */
 /* ------------------------------------------------------------------------ */
 
-/* What one cell's comparison is afterwards asked for. */
-static cell_terms terms_at(const context *ctx, size_t i, hts_pos_t k)
-{
-    comparison at  = compare_at(ctx, i, position_of(ctx, i, k));
-    double     m   = ctx->model->params.modification;
-    cell_terms out = { .emission = UNINFORMATIVE, .modification = 0.0 };
-
-    if (!at.comparable)
-        return out;
-
-    out.emission     = at.agree ? agreement_chance(m, at.error)
-                                : disagreement_chance(m, at.error);
-    out.modification = phmm_modification(ctx->model, at.agree, at.error);
-
-    return out;
-}
-
 /* Nothing has been read yet, so each cell of the first row is the alignment
  * poised to begin at that reference position, none of them preferred over the
  * others. None has begun with a deletion: a reference base passed over before
@@ -489,6 +505,7 @@ static double forward_row(const context *ctx, size_t i)
     band_cell       *row   = row_of(ctx, i);
     const band_cell *above = row_of(ctx, i - 1);
     cell_terms      *terms = terms_of(ctx, i);
+    row_terms        each  = row_terms_of(ctx, i);
     hts_pos_t        shift = shift_between(ctx, i - 1, i);
     hts_pos_t        width = width_at(ctx, i);
     hts_pos_t        above_width = width_at(ctx, i - 1);
@@ -499,7 +516,7 @@ static double forward_row(const context *ctx, size_t i)
         hts_pos_t diagonal = k - 1 + shift;  /* a position back, one row up */
         hts_pos_t straight = k + shift;      /* this position, one row up */
 
-        terms[k] = terms_at(ctx, i, k);
+        terms[k] = terms_at(ctx, &each, position_of(ctx, i, k));
 
         row[k][STATE_MATCH] = within(diagonal, above_width)
                             ? paired_from(&step, above[diagonal],
