@@ -66,12 +66,17 @@ typedef struct {
  * is the loops that are ragged, and they are what the cost follows. */
 struct phmm_scratch {
     aln_place *places;     /* one per placed read base, and one before them */
-    double    *scale;      /* what each forward row was divided by */
-    double    *forward;    /* rows, each of widest cells of N_STATES */
+    double    *scale;      /* what each forward row is scaled by, which is the
+                              reciprocal of what it came to */
+    band_cell *forward;    /* rows, each of widest cells */
     cell_terms *terms;     /* one per cell of it */
     /* Only the row in hand and the one below it are ever wanted, so two are
      * kept however many rows the read has. */
     band_cell *backward;
+    /* What a pairing on the row below is worth, one per cell of the row in
+     * hand. The backward pass forms it and the deletion closing there is a
+     * product with it, so it is handed along rather than made twice. */
+    double    *pairings;
     double    *coverage;   /* the window handed back */
     double    *spanned;
     double    *mutations;
@@ -173,13 +178,6 @@ static double phmm_modification(const phmm *model, bool agree, double error)
              / disagreement_chance(modification, error);
 }
 
-/* What one event of this kind, believed to this degree, is worth to the
- * position it is laid at. */
-static double phmm_weigh(const phmm *model, phmm_event event, double posterior)
-{
-    return model->weights.weight[event] * posterior;
-}
-
 /* ------------------------------------------------------------------------ */
 /* One read base against one reference base                                  */
 /* ------------------------------------------------------------------------ */
@@ -238,9 +236,9 @@ static double confidence_at(const context *ctx, size_t i)
 /* The band                                                                  */
 /* ------------------------------------------------------------------------ */
 
-static double *row_of(const context *ctx, size_t i)
+static band_cell *row_of(const context *ctx, size_t i)
 {
-    return ctx->scratch->forward + i * (size_t)ctx->widest * N_STATES;
+    return ctx->scratch->forward + i * (size_t)ctx->widest;
 }
 
 static cell_terms *terms_of(const context *ctx, size_t i)
@@ -328,34 +326,71 @@ static cell_terms terms_at(const context *ctx, size_t i, hts_pos_t k)
  * never be recovered. */
 static double forward_first_row(const context *ctx)
 {
-    double   *row   = row_of(ctx, 0);
-    hts_pos_t width = width_at(ctx, 0);
-    double    total = 0.0;
+    band_cell *row   = row_of(ctx, 0);
+    hts_pos_t  width = width_at(ctx, 0);
+    double     share = 1.0 / (double)width;
+    double     total = 0.0;
 
     for (hts_pos_t k = 0; k < width; k++) {
-        row[k * N_STATES + STATE_MATCH]     = 1.0 / width;
-        row[k * N_STATES + STATE_INSERTION] = 0.0;
-        row[k * N_STATES + STATE_DELETION]  = 0.0;
+        row[k][STATE_MATCH]     = share;
+        row[k][STATE_INSERTION] = 0.0;
+        row[k][STATE_DELETION]  = 0.0;
 
-        total += row[k * N_STATES + STATE_MATCH];
+        total += share;
     }
 
     return total;
 }
 
-/* The two states that take a read base, and so read from the row above. */
-static double paired_from(const phmm *model, const double *above, double emission)
+/* What each state of the row above contributes to a cell of this one, with
+ * everything constant along the row multiplied out once: what the row above is
+ * scaled by, and the flat emission an inserted base carries. What is left is
+ * the pairing's own emission, that being the one thing a cell decides for
+ * itself.
+ *
+ * Folding the scaling in here is what spares the row a second walk. Dividing a
+ * row by its total and stepping from it undivided leave the same numbers, but
+ * the first costs a multiplication, a load and a store for every state of every
+ * cell where this costs a handful of multiplications for the whole row. A row
+ * therefore holds its own total times what dividing it would have left, and
+ * that one factor is undone where the posteriors are read off. */
+typedef struct {
+    double match_to_match;
+    double insertion_to_match;
+    double deletion_to_match;
+    double match_to_insertion;
+    double insertion_to_insertion;
+} descent;
+
+static descent descent_into(const context *ctx, size_t i)
 {
-    return (model->match_to_match     * above[STATE_MATCH]
-          + model->insertion_to_match * above[STATE_INSERTION]
-          + model->deletion_to_match  * above[STATE_DELETION]) * emission;
+    const phmm *model = ctx->model;
+    double      scale = ctx->scratch->scale[i - 1];
+
+    return (descent){
+        .match_to_match         = model->match_to_match * scale,
+        .insertion_to_match     = model->insertion_to_match * scale,
+        .deletion_to_match      = model->deletion_to_match * scale,
+        .match_to_insertion     = model->match_to_insertion * scale
+                                * UNINFORMATIVE,
+        .insertion_to_insertion = model->insertion_to_insertion * scale
+                                * UNINFORMATIVE,
+    };
 }
 
-static double inserted_from(const phmm *model, const double *above)
+/* The two states that take a read base, and so read from the row above. */
+static double paired_from(const descent *step, const double *above,
+                          double emission)
 {
-    return (model->match_to_insertion     * above[STATE_MATCH]
-          + model->insertion_to_insertion * above[STATE_INSERTION])
-         * UNINFORMATIVE;
+    return (step->match_to_match     * above[STATE_MATCH]
+          + step->insertion_to_match * above[STATE_INSERTION]
+          + step->deletion_to_match  * above[STATE_DELETION]) * emission;
+}
+
+static double inserted_from(const descent *step, const double *above)
+{
+    return step->match_to_insertion     * above[STATE_MATCH]
+         + step->insertion_to_insertion * above[STATE_INSERTION];
 }
 
 /* A deletion runs along the reference without the read moving, so it is the one
@@ -391,56 +426,51 @@ static bool deletions_live(const context *ctx, size_t i)
  * afterwards divides by. */
 static double forward_row(const context *ctx, size_t i)
 {
-    const phmm   *model = ctx->model;
-    double       *row   = row_of(ctx, i);
-    const double *above = row_of(ctx, i - 1);
-    cell_terms   *terms = terms_of(ctx, i);
-    hts_pos_t     shift = shift_between(ctx, i - 1, i);
-    hts_pos_t     width = width_at(ctx, i);
-    bool          live  = deletions_live(ctx, i);
-    double        total = 0.0;
+    const phmm      *model = ctx->model;
+    descent          step  = descent_into(ctx, i);
+    band_cell       *row   = row_of(ctx, i);
+    const band_cell *above = row_of(ctx, i - 1);
+    cell_terms      *terms = terms_of(ctx, i);
+    hts_pos_t        shift = shift_between(ctx, i - 1, i);
+    hts_pos_t        width = width_at(ctx, i);
+    bool             live  = deletions_live(ctx, i);
+    double           total = 0.0;
 
     for (hts_pos_t k = 0; k < width; k++) {
         hts_pos_t diagonal = k - 1 + shift;  /* a position back, one row up */
         hts_pos_t straight = k + shift;      /* this position, one row up */
-        double   *cell     = row + k * N_STATES;
 
         terms[k] = terms_at(ctx, i, k);
 
-        cell[STATE_MATCH] = within_row(ctx, i - 1, diagonal)
-                          ? paired_from(model, above + diagonal * N_STATES,
-                                        terms[k].emission)
-                          : 0.0;
-        cell[STATE_INSERTION] = within_row(ctx, i - 1, straight)
-                              ? inserted_from(model, above + straight * N_STATES)
-                              : 0.0;
-        cell[STATE_DELETION] = live && k > 0
-                             ? deleted_from(model, cell - N_STATES)
-                             : 0.0;
+        row[k][STATE_MATCH] = within_row(ctx, i - 1, diagonal)
+                            ? paired_from(&step, above[diagonal],
+                                          terms[k].emission)
+                            : 0.0;
+        row[k][STATE_INSERTION] = within_row(ctx, i - 1, straight)
+                                ? inserted_from(&step, above[straight])
+                                : 0.0;
+        row[k][STATE_DELETION] = live && k > 0
+                               ? deleted_from(model, row[k - 1])
+                               : 0.0;
 
-        total += cell[STATE_MATCH];
-        total += cell[STATE_INSERTION];
-        total += cell[STATE_DELETION];
+        total += row[k][STATE_MATCH];
+        total += row[k][STATE_INSERTION];
+        total += row[k][STATE_DELETION];
     }
 
     return total;
 }
 
-/* Every row is divided by its own total, so that the numbers stay near one
+/* Every row is scaled by its own total, so that the numbers stay near one
  * however long the read: unscaled, a forward pass underflows a double within a
- * few hundred bases. */
-static bool scale_row(const context *ctx, size_t i, double total)
+ * few hundred bases. The scaling itself is left to the descent out of the row,
+ * so all that is kept here is what the descent will want. */
+static bool record_total(const context *ctx, size_t i, double total)
 {
-    double   *row   = row_of(ctx, i);
-    hts_pos_t cells = width_at(ctx, i) * N_STATES;
-
     if (!(total > 0.0) || !isfinite(total))
         return false;
 
-    for (hts_pos_t c = 0; c < cells; c++)
-        row[c] /= total;
-
-    ctx->scratch->scale[i] = total;
+    ctx->scratch->scale[i] = 1.0 / total;
 
     return true;
 }
@@ -448,11 +478,11 @@ static bool scale_row(const context *ctx, size_t i, double total)
 /* The first row is laid out rather than stepped into, having no row above it. */
 static bool forward(const context *ctx)
 {
-    if (!scale_row(ctx, 0, forward_first_row(ctx)))
+    if (!record_total(ctx, 0, forward_first_row(ctx)))
         return false;
 
     for (size_t i = 1; i < ctx->rows; i++)
-        if (!scale_row(ctx, i, forward_row(ctx, i)))
+        if (!record_total(ctx, i, forward_row(ctx, i)))
             return false;
 
     return true;
@@ -463,22 +493,30 @@ static bool forward(const context *ctx)
 /* ------------------------------------------------------------------------ */
 
 /* The alignment ends on the last row, having paired or inserted its final base
- * but not having passed over a reference base to do it. */
+ * but not having passed over a reference base to do it. There is no row below
+ * for a deletion to close on, so nothing is worth anything there. */
 static void backward_last_row(const context *ctx)
 {
-    band_cell *row = backward_row_of(ctx, ctx->rows - 1);
+    band_cell *row      = backward_row_of(ctx, ctx->rows - 1);
+    double    *pairings = ctx->scratch->pairings;
 
     for (hts_pos_t k = 0; k < width_at(ctx, ctx->rows - 1); k++) {
         row[k][STATE_MATCH]     = 1.0;
         row[k][STATE_INSERTION] = 1.0;
         row[k][STATE_DELETION]  = 0.0;
+
+        pairings[k] = 0.0;
     }
 }
 
 /* Everything reached from a cell, which for the two states that stay on this
  * row means the cell to its right. Only what crosses to the row below carries
- * that row's divisor, the deletion chain along this one having been divided
- * already as it was written. */
+ * that row's scaling, the deletion chain along this one having been scaled
+ * already as it was written.
+ *
+ * What a pairing on the row below is worth is left behind for the accumulation,
+ * the deletion closing there being a product with exactly this and nothing
+ * else. */
 static void backward_row(const context *ctx, size_t i)
 {
     const phmm *model = ctx->model;
@@ -486,10 +524,11 @@ static void backward_row(const context *ctx, size_t i)
     double      below_scale = ctx->scratch->scale[i + 1];
     bool        live  = deletions_live(ctx, i);
 
-    band_cell        *row   = backward_row_of(ctx, i);
-    const band_cell  *below = backward_row_of(ctx, i + 1);
-    const cell_terms *terms = terms_of(ctx, i + 1);
-    hts_pos_t         width = width_at(ctx, i);
+    band_cell        *row      = backward_row_of(ctx, i);
+    const band_cell  *below    = backward_row_of(ctx, i + 1);
+    const cell_terms *terms    = terms_of(ctx, i + 1);
+    double           *pairings = ctx->scratch->pairings;
+    hts_pos_t         width    = width_at(ctx, i);
 
     for (hts_pos_t k = width; k-- > 0; ) {
         hts_pos_t diagonal = k + 1 - shift;  /* a position on, one row down */
@@ -502,11 +541,13 @@ static void backward_row(const context *ctx, size_t i)
 
         if (within_row(ctx, i + 1, diagonal))
             paired = terms[diagonal].emission
-                   * below[diagonal][STATE_MATCH] / below_scale;
+                   * below[diagonal][STATE_MATCH] * below_scale;
 
         if (within_row(ctx, i + 1, straight))
             inserted = UNINFORMATIVE
-                     * below[straight][STATE_INSERTION] / below_scale;
+                     * below[straight][STATE_INSERTION] * below_scale;
+
+        pairings[k] = paired;
 
         row[k][STATE_MATCH] = model->match_to_match     * paired
                             + model->match_to_insertion * inserted
@@ -526,75 +567,49 @@ static void backward_row(const context *ctx, size_t i)
 /* What a row says about the reference                                       */
 /* ------------------------------------------------------------------------ */
 
+/* A position past either end of the reference is not turned away here. The
+ * window is sized to hold every position the band can name and some of those
+ * really do lie outside, a read placed near a boundary having paths that leave
+ * it; which of them are worth keeping is the caller's to say, and saying it
+ * twice would leave two places to look when the answer changed. */
 static void add_at(const context *ctx, double *field, hts_pos_t position,
                    double value)
 {
     hts_pos_t offset = position - ctx->origin;
 
-    if (position < 0 || (size_t)position >= ctx->ref->len)
-        return;
-
     if (offset >= 0 && (size_t)offset < ctx->window)
         field[offset] += value;
 }
 
-/* The chance a deletion ends here rather than at any of the other places it
- * could have: the run in hand, the step back out of it, and the pairing that
- * follows. That pairing lies on the row below, so the divisor which carried
- * this row into it has to be undone.
+/* What one event of each kind, believed to whatever degree a cell believes it,
+ * is worth to the position it is laid at.
  *
- * Counted where the run ends rather than where it begins because reverse
- * transcription reads the template from its 3' end, so the last base a deletion
- * passes over is the first the enzyme met, and the likeliest to carry what
- * stopped it. The two are the marginals of one joint over runs -- summing
- * either over the runs it can belong to gives the same expected number of
- * events -- so the choice moves where a deletion is counted and not how much of
- * it there is. */
-static double closed_deletion(const context *ctx, size_t i, hts_pos_t k)
+ * Each is the weight its kind carries and then everything the event's posterior
+ * is a product with that a cell does not decide: for a deletion the step back
+ * out of the run, and for an insertion the step into it, the flat emission it
+ * carries, and the scalings of the two rows it lies between. What is left for a
+ * cell is what a cell alone knows.
+ *
+ * Wanted only of a row that has one above it, an insertion opening on the first
+ * row being an insertion nothing carried into. */
+typedef struct {
+    double substitution;
+    double deletion;
+    double insertion;
+} weighing;
+
+static weighing weighing_of(const context *ctx, size_t i)
 {
-    const double    *front = row_of(ctx, i);
-    const band_cell *below = backward_row_of(ctx, i + 1);
-    hts_pos_t        diagonal;
+    const phmm   *model  = ctx->model;
+    const double *weight = model->weights.weight;
 
-    /* Nothing to close where no deletion reached here, and the whole of what
-     * follows is a product with that. */
-    if (i + 1 >= ctx->rows
-        || front[k * N_STATES + STATE_DELETION] == 0.0)
-        return 0.0;
-
-    diagonal = k + 1 - shift_between(ctx, i, i + 1);
-
-    if (!within_row(ctx, i + 1, diagonal))
-        return 0.0;
-
-    return front[k * N_STATES + STATE_DELETION]
-         * ctx->model->deletion_to_match
-         * terms_of(ctx, i + 1)[diagonal].emission
-         * below[diagonal][STATE_MATCH]
-         / ctx->scratch->scale[i + 1];
-}
-
-/* The same for an insertion, whose pairing lies on the row above: the divisor
- * that carried that row into this one has to be undone. */
-static double opened_insertion(const context *ctx, size_t i, hts_pos_t k)
-{
-    const band_cell *back = backward_row_of(ctx, i);
-    hts_pos_t        above;
-
-    /* As above: no insertion carried away from here, nothing to open. */
-    if (i == 0 || back[k][STATE_INSERTION] == 0.0)
-        return 0.0;
-
-    above = k + shift_between(ctx, i - 1, i);
-
-    if (!within_row(ctx, i - 1, above))
-        return 0.0;
-
-    return row_of(ctx, i - 1)[above * N_STATES + STATE_MATCH]
-         * ctx->model->match_to_insertion
-         * UNINFORMATIVE
-         * back[k][STATE_INSERTION]
-         / ctx->scratch->scale[i];
+    return (weighing){
+        .substitution = weight[PHMM_SUBSTITUTION],
+        .deletion     = weight[PHMM_DELETION] * model->deletion_to_match,
+        .insertion    = weight[PHMM_INSERTION] * model->match_to_insertion
+                      * UNINFORMATIVE
+                      * ctx->scratch->scale[i - 1] * ctx->scratch->scale[i],
+    };
 }
 
 /* A pairing spans the position it pairs with and covers it as far as the base
@@ -611,41 +626,64 @@ static double opened_insertion(const context *ctx, size_t i, hts_pos_t k)
  * events themselves. The mutations alone are weighed: what a position was
  * reached by does not bear on its having been reached.
  *
+ * A deletion is laid where its run ends rather than where it begins because
+ * reverse transcription reads the template from its 3' end, so the last base a
+ * deletion passes over is the first the enzyme met, and the likeliest to carry
+ * what stopped it. The two are the marginals of one joint over runs -- summing
+ * either over the runs it can belong to gives the same expected number of
+ * events -- so the choice moves where a deletion is counted and not how much of
+ * it there is. What it ends against is the pairing on the row below, which the
+ * backward pass left behind; what an insertion opens out of is the pairing on
+ * the row above, which is still where the forward pass wrote it.
+ *
+ * The row's own scaling is undone on the two states that are asked about, that
+ * being cheaper than undoing it on the whole row as it was written.
+ *
  * The first row is the alignment poised to begin and not yet begun. Its
  * posterior says where the read starts rather than what any base of it was set
  * against, and there is no base of it to ask about, so it contributes to
  * nothing. */
 static void accumulate_row(const context *ctx, size_t i)
 {
-    phmm_scratch     *scratch = ctx->scratch;
-    const phmm       *model   = ctx->model;
-    const double     *front   = row_of(ctx, i);
-    const band_cell  *back    = backward_row_of(ctx, i);
-    const cell_terms *terms   = terms_of(ctx, i);
-    hts_pos_t         width   = width_at(ctx, i);
+    phmm_scratch     *scratch  = ctx->scratch;
+    const band_cell  *front    = row_of(ctx, i);
+    const band_cell  *back     = backward_row_of(ctx, i);
+    const cell_terms *terms    = terms_of(ctx, i);
+    const double     *pairings = scratch->pairings;
+    hts_pos_t         width    = width_at(ctx, i);
+    const band_cell  *above;
+    weighing          weight;
     double            confidence;
+    double            scale;
+    hts_pos_t         shift;
 
     if (i == 0)
         return;
 
+    above      = row_of(ctx, i - 1);
+    weight     = weighing_of(ctx, i);
     confidence = confidence_at(ctx, i);
+    scale      = scratch->scale[i];
+    shift      = shift_between(ctx, i - 1, i);
 
     for (hts_pos_t k = 0; k < width; k++) {
-        hts_pos_t j      = position_of(ctx, i, k);
-        double    paired = front[k * N_STATES + STATE_MATCH]
-                         * back[k][STATE_MATCH];
-        double    passed = front[k * N_STATES + STATE_DELETION]
-                         * back[k][STATE_DELETION];
+        hts_pos_t j       = position_of(ctx, i, k);
+        hts_pos_t opening = k + shift;   /* this position, one row up */
+        double    matched = front[k][STATE_MATCH] * scale;
+        double    skipped = front[k][STATE_DELETION] * scale;
+        double    paired  = matched * back[k][STATE_MATCH];
+        double    passed  = skipped * back[k][STATE_DELETION];
+        double    opened  = within_row(ctx, i - 1, opening)
+                          ? above[opening][STATE_MATCH]
+                          * back[k][STATE_INSERTION]
+                          : 0.0;
 
         add_at(ctx, scratch->coverage, j - 1, paired * confidence);
         add_at(ctx, scratch->spanned, j - 1, paired + passed);
         add_at(ctx, scratch->mutations, j - 1,
-               phmm_weigh(model, PHMM_SUBSTITUTION,
-                          paired * terms[k].modification));
-        add_at(ctx, scratch->mutations, j - 1,
-               phmm_weigh(model, PHMM_DELETION, closed_deletion(ctx, i, k)));
-        add_at(ctx, scratch->mutations, j,
-               phmm_weigh(model, PHMM_INSERTION, opened_insertion(ctx, i, k)));
+               weight.substitution * paired * terms[k].modification
+             + weight.deletion * skipped * pairings[k]);
+        add_at(ctx, scratch->mutations, j, weight.insertion * opened);
     }
 }
 
@@ -654,15 +692,16 @@ static void accumulate_row(const context *ctx, size_t i)
  * that statement, and it is cheap enough to make of one of them. */
 static bool normalized(const context *ctx)
 {
-    const double    *front = row_of(ctx, 0);
+    const band_cell *front = row_of(ctx, 0);
     const band_cell *back  = backward_row_of(ctx, 0);
     double           total = 0.0;
 
     for (hts_pos_t k = 0; k < width_at(ctx, 0); k++)
         for (hts_pos_t s = 0; s < N_STATES; s++)
-            total += front[k * N_STATES + s] * back[k][s];
+            total += front[k][s] * back[k][s];
 
-    return fabs(total - 1.0) < NORMALIZATION_TOLERANCE;
+    return fabs(total * ctx->scratch->scale[0] - 1.0)
+         < NORMALIZATION_TOLERANCE;
 }
 
 static bool backward(const context *ctx)
@@ -697,6 +736,7 @@ void phmm_scratch_destroy(phmm_scratch *scratch)
     free(scratch->terms);
     free(scratch->scale);
     free(scratch->backward);
+    free(scratch->pairings);
     free(scratch->coverage);
     free(scratch->spanned);
     free(scratch->mutations);
@@ -739,8 +779,9 @@ static int grow_rows(phmm_scratch *scratch, size_t rows)
  * read's regrows them however few rows this one needs. */
 static int grow_band(phmm_scratch *scratch, size_t rows, size_t widest)
 {
-    double     *forward;
+    band_cell  *forward;
     band_cell  *backward;
+    double     *pairings;
     cell_terms *terms;
 
     if (rows <= scratch->matrix_rows && widest <= scratch->widest)
@@ -749,19 +790,21 @@ static int grow_band(phmm_scratch *scratch, size_t rows, size_t widest)
     rows   = rows   > scratch->matrix_rows ? rows   : scratch->matrix_rows;
     widest = widest > scratch->widest      ? widest : scratch->widest;
 
-    forward  = realloc(scratch->forward,
-                       rows * widest * N_STATES * sizeof *forward);
+    forward  = realloc(scratch->forward, rows * widest * sizeof *forward);
     backward = realloc(scratch->backward, 2 * widest * sizeof *backward);
+    pairings = realloc(scratch->pairings, widest * sizeof *pairings);
     terms    = realloc(scratch->terms, rows * widest * sizeof *terms);
 
     if (forward)
         scratch->forward = forward;
     if (backward)
         scratch->backward = backward;
+    if (pairings)
+        scratch->pairings = pairings;
     if (terms)
         scratch->terms = terms;
 
-    if (!forward || !backward || !terms)
+    if (!forward || !backward || !pairings || !terms)
         return -1;
 
     scratch->matrix_rows = rows;
