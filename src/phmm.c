@@ -236,9 +236,46 @@ static double confidence_at(const context *ctx, size_t i)
 /* The band                                                                  */
 /* ------------------------------------------------------------------------ */
 
+/* A forward row as the pass left it, which is not what the row stands for: see
+ * scaled_row below before reading one. */
 static band_cell *row_of(const context *ctx, size_t i)
 {
     return ctx->scratch->forward + i * (size_t)ctx->widest;
+}
+
+/* A forward row together with what restores it.
+ *
+ * A row is left scaled by every divisor but its own, that last one having been
+ * folded into the transitions leaving the row rather than walked over the row
+ * again. So what is stored is the row's own total times what the row stands
+ * for, and the two are a probability only together.
+ *
+ * Undoing it belongs here and nowhere else. Reading a forward row any other way
+ * is the one mistake this file cannot catch: the numbers look like posteriors
+ * and are wrong by a factor that changes from row to row, so nothing overflows,
+ * nothing fails to sum, and the counts come out quietly wrong.
+ *
+ * A row and its divisor are fetched together, once, because a pass that laid
+ * anything down between fetching them would have to fetch them both again: the
+ * window it writes is doubles and so is a row, and no compiler may assume the
+ * two do not overlap. */
+typedef struct {
+    const band_cell *cell;
+    double           scale;
+} scaled_row;
+
+static scaled_row scaled_row_of(const context *ctx, size_t i)
+{
+    return (scaled_row){
+        .cell  = row_of(ctx, i),
+        .scale = ctx->scratch->scale[i],
+    };
+}
+
+/* What one cell of it stands for. */
+static double forward_at(const scaled_row *row, hts_pos_t k, int state)
+{
+    return row->cell[k][state] * row->scale;
 }
 
 static cell_terms *terms_of(const context *ctx, size_t i)
@@ -356,9 +393,13 @@ static double forward_first_row(const context *ctx)
  * Folding the scaling in here is what spares the row a second walk. Dividing a
  * row by its total and stepping from it undivided leave the same numbers, but
  * the first costs a multiplication, a load and a store for every state of every
- * cell where this costs a handful of multiplications for the whole row. A row
- * therefore holds its own total times what dividing it would have left, and
- * that one factor is undone where the posteriors are read off. */
+ * cell where this costs a handful of multiplications for the whole row.
+ *
+ * This is the one place that reads a forward row without going through
+ * forward_at, and it is the same undoing by another route: a divisor that would
+ * multiply every cell of the row above is carried instead by the five constants
+ * every cell of it is met with. Everything else that reads a row goes through
+ * forward_at, where what the undoing is for is written down. */
 typedef struct {
     double match_to_match;
     double insertion_to_match;
@@ -593,9 +634,13 @@ static void add_at(const context *ctx, double *field, hts_pos_t position,
  *
  * Each is the weight its kind carries and then everything the event's posterior
  * is a product with that a cell does not decide: for a deletion the step back
- * out of the run, and for an insertion the step into it, the flat emission it
- * carries, and the scalings of the two rows it lies between. What is left for a
- * cell is what a cell alone knows.
+ * out of the run, and for an insertion the step into it and the flat emission
+ * it carries. What is left for a cell is what a cell alone knows.
+ *
+ * An insertion also carries the divisor of the row it opens on, every posterior
+ * over a step between two rows doing so. That is the recursion and not the way
+ * a row is stored -- what a row is stored as is undone by forward_at, and the
+ * two would otherwise be easy to read as one thing.
  *
  * Wanted only of a row that has one above it, an insertion opening on the first
  * row being an insertion nothing carried into. */
@@ -614,8 +659,7 @@ static weighing weighing_of(const context *ctx, size_t i)
         .substitution = weight[PHMM_SUBSTITUTION],
         .deletion     = weight[PHMM_DELETION] * model->deletion_to_match,
         .insertion    = weight[PHMM_INSERTION] * model->match_to_insertion
-                      * UNINFORMATIVE
-                      * ctx->scratch->scale[i - 1] * ctx->scratch->scale[i],
+                      * UNINFORMATIVE * ctx->scratch->scale[i],
     };
 }
 
@@ -653,37 +697,35 @@ static weighing weighing_of(const context *ctx, size_t i)
 static void accumulate_row(const context *ctx, size_t i)
 {
     phmm_scratch     *scratch  = ctx->scratch;
-    const band_cell  *front    = row_of(ctx, i);
+    scaled_row        front    = scaled_row_of(ctx, i);
     const band_cell  *back     = backward_row_of(ctx, i);
     const cell_terms *terms    = terms_of(ctx, i);
     const double     *pairings = scratch->pairings;
     hts_pos_t         width    = width_at(ctx, i);
-    const band_cell  *above;
+    scaled_row        above;
     weighing          weight;
     double            confidence;
-    double            scale;
     hts_pos_t         shift;
     hts_pos_t         above_width;
 
     if (i == 0)
         return;
 
-    above       = row_of(ctx, i - 1);
+    above       = scaled_row_of(ctx, i - 1);
     weight      = weighing_of(ctx, i);
     confidence  = confidence_at(ctx, i);
-    scale       = scratch->scale[i];
     shift       = shift_between(ctx, i - 1, i);
     above_width = width_at(ctx, i - 1);
 
     for (hts_pos_t k = 0; k < width; k++) {
         hts_pos_t j       = position_of(ctx, i, k);
         hts_pos_t opening = k + shift;   /* this position, one row up */
-        double    matched = front[k][STATE_MATCH] * scale;
-        double    skipped = front[k][STATE_DELETION] * scale;
+        double    matched = forward_at(&front, k, STATE_MATCH);
+        double    skipped = forward_at(&front, k, STATE_DELETION);
         double    paired  = matched * back[k][STATE_MATCH];
         double    passed  = skipped * back[k][STATE_DELETION];
         double    opened  = within(opening, above_width)
-                          ? above[opening][STATE_MATCH]
+                          ? forward_at(&above, opening, STATE_MATCH)
                           * back[k][STATE_INSERTION]
                           : 0.0;
 
@@ -701,16 +743,15 @@ static void accumulate_row(const context *ctx, size_t i)
  * that statement, and it is cheap enough to make of one of them. */
 static bool normalized(const context *ctx)
 {
-    const band_cell *front = row_of(ctx, 0);
+    scaled_row       front = scaled_row_of(ctx, 0);
     const band_cell *back  = backward_row_of(ctx, 0);
     double           total = 0.0;
 
     for (hts_pos_t k = 0; k < width_at(ctx, 0); k++)
-        for (hts_pos_t s = 0; s < N_STATES; s++)
-            total += front[k][s] * back[k][s];
+        for (int s = 0; s < N_STATES; s++)
+            total += forward_at(&front, k, s) * back[k][s];
 
-    return fabs(total * ctx->scratch->scale[0] - 1.0)
-         < NORMALIZATION_TOLERANCE;
+    return fabs(total - 1.0) < NORMALIZATION_TOLERANCE;
 }
 
 static bool backward(const context *ctx)
