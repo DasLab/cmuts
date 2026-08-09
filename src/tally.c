@@ -1,22 +1,9 @@
 /* tally.c -- one read's contribution to a reference.
  *
- * Every read is marginalized over the alignments a band around its CIGAR
- * admits, and contributes what each reference position is worth under the
- * posterior rather than under the one path the aligner chose to report. A band
- * of nothing is that path and nothing else, so taking an alignment as written
- * is the narrowest setting rather than a second way of counting.
- *
- * Three things are counted. Coverage is the confidence in the bases actually
- * read at a position, so that a rate taken against it is divided by the
- * evidence that was really there; the span is the chance the read reached the
- * position at all, whether it read a base there or passed over it, and is the
- * denominator a deletion belongs over, having no base to be believed. A
- * modification is counted once per event and never once per base: one adduct
- * stops one reverse transcriptase once, whatever length of reference it then
- * skipped, and a disagreement is worth the chance the template really differed
- * rather than the read of it having been wrong. Each event is then worth what
- * its kind is worth, a substitution, a deletion and an insertion not speaking
- * alike of a modification.
+ * Drives the marginal over one read and adds the window it returns to the
+ * reference's accumulator, clipping to the reference's own bounds. What the
+ * three counted quantities mean is described in phmm.c, which computes them,
+ * and in accum.c, which stores them.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -58,12 +45,9 @@ static void add_window(const context *ctx, const phmm_window *window)
     }
 }
 
-/* One band, the same width at every row, which is the shape the marginal was
- * built around and the only one asked for yet. It is grown to the longest read
- * seen and filled once, the width being settled before any read arrives.
- *
- * Returns NULL where it cannot be grown, which is the run over: there is no
- * other way a read is counted. */
+/* A band of uniform width, the only shape asked for so far. Grown to the
+ * longest read seen and filled once, the width being fixed before any read
+ * arrives. Returns NULL if it cannot be grown, which ends the run. */
 static const int *uniform_band(tally_scratch *scratch, const cm_bam_record *read,
                                int band)
 {

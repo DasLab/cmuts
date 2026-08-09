@@ -1,4 +1,4 @@
-/* phmm.h -- an alignment marginalized rather than taken at its word.
+/* phmm.h -- marginalizing a read over the alignments a band admits.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -11,39 +11,23 @@
 
 /* How far either side of the aligner's path the model may look.
  *
- * The band is drawn around the CIGAR and not around a diagonal, so what it
- * bounds is the departure from the alignment already found rather than the
- * departure from an ungapped one.
+ * The band is drawn around the CIGAR, not around a diagonal, so it bounds
+ * departure from the reported alignment. Required width follows the length of
+ * the gap, not the length of the homopolymer run the gap sits in: 2 admits
+ * every placement of a one or two base deletion. Wider scored no better on the
+ * two libraries tested.
  *
- * How far it has to reach is set by the length of the gap and not by the length
- * of the run the gap sits in. Sliding a deletion of n bases along a homopolymer
- * puts every row it passes n positions off the path, however far it slides, so
- * two holds every placement of a deletion of one or two bases and a run of ten
- * asks for no more than a run of three. Wider admits only alignments that open
- * a gap twice or set a base against one it does not match, and on the two
- * libraries this was measured against -- which differ by nearly twofold in how
- * often they delete, and threefold in read length -- it scored no better and
- * mostly worse. Two is where both put the mass of their deletion lengths, and
- * a library whose gaps ran longer would want more.
+ * A row always covers what the CIGAR path crosses, before the band widens it,
+ * so no band is too narrow to hold a read's own gaps. A band of 0 is the CIGAR
+ * path alone.
  *
- * A row covers what the CIGAR path crosses on it before the band widens it at
- * all, so no band is ever too narrow to hold a read's own gaps and none is
- * refused for want of room. Nothing is the CIGAR path and nothing else, which
- * is the alignment as written and marginalized over alone.
- *
- * Nothing bounds it above. The cost of a read is linear in the band, and the
- * model takes whatever it is given and asks for the memory that implies, so a
- * band asked for in bad faith ends the run for want of it rather than being
- * refused at some width chosen here. */
+ * There is no upper bound. Cost per read is linear in the band, and an
+ * unreasonable one ends the run by exhausting memory. */
 #define PHMM_DEFAULT_BAND 2
 
-/* What the model believes before it has seen a read.
- *
- * Provisional. These are the right order of magnitude for reverse transcription
- * of a chemically modified template and are measured from nothing; they belong
- * on the command line, and ought in time to be estimated from the alignments
- * themselves. Until then they sit here, in one place, so that there is a single
- * thing to change. */
+/* Provisional default rates, the right order of magnitude for reverse
+ * transcription of a chemically modified template but not measured. They should
+ * become command-line options, and eventually estimates from the alignments. */
 typedef struct {
     double open_deletion;     /* chance an aligned position begins one */
     double open_insertion;
@@ -63,26 +47,16 @@ typedef enum {
     PHMM_N_EVENTS,
 } phmm_event;
 
-/* How much an event of each kind says about the template having been modified,
- * given that the event happened at all.
+/* How much an event of each kind counts towards the mutation total, given that
+ * the event happened.
  *
- * Not a belief about how a read comes about, so nothing here reaches either
- * pass and the alignment does not depend on it: an insertion weighed at nothing
- * is still an insertion the read may have, and still the reason a spurious base
- * is not counted as a substitution instead. What a weight weighs is an event
- * already posited.
+ * These reach the accumulation only. Neither pass reads them, so the alignment
+ * does not depend on them. They are relative: a factor common to all three
+ * rescales every rate the run reports and changes nothing else. Each defaults
+ * to 1, and they are uncalibrated.
  *
- * Relative, in that a factor common to all of them rescales every rate the run
- * reports and changes nothing else. Whether any one of them is held at one is
- * the caller's to decide; they arrive at one apiece, which is the statement that
- * an event of any kind is worth one event.
- *
- * Measured from nothing, as the parameters are, and to be calibrated in time
- * against the enrichment each kind shows over an untreated control.
- *
- * Indexed by kind so that a finer weighing -- by reference base, say, the
- * chemistry not treating the four alike -- is another index rather than another
- * field. */
+ * Indexed by kind so that a finer breakdown, by reference base for example, is
+ * another index rather than another field. */
 typedef struct {
     double weight[PHMM_N_EVENTS];
 } phmm_weights;
@@ -91,11 +65,10 @@ phmm_weights phmm_default_weights(void);
 
 /* The parameters with every transition they imply worked out once.
  *
- * A step from an insertion to a deletion is not among them, and neither is its
- * reverse: an inserted base followed by a deleted one is a substitution in
- * disguise, and allowing the pair would put the posterior for one event in two
- * places. Nothing writes to the model once built, so one may be shared by every
- * thread. */
+ * Insertion to deletion and deletion to insertion are absent: an inserted base
+ * followed by a deleted one is a substitution, and allowing the pair would
+ * record one event's posterior in two places. The model is read-only once
+ * built, so one may be shared by every thread. */
 typedef struct {
     phmm_params  params;
     phmm_weights weights;
@@ -111,62 +84,57 @@ typedef struct {
 void phmm_build(phmm *model, const phmm_params *params,
                 const phmm_weights *weights);
 
-/* Buffers one thread reuses across reads, grown to whatever the longest read so
- * far has needed. */
+/* Buffers one thread reuses across reads, grown to fit the longest read seen. */
 typedef struct phmm_scratch phmm_scratch;
 
 phmm_scratch *phmm_scratch_create(void);
 void          phmm_scratch_destroy(phmm_scratch *scratch);
 
-/* What one read is worth to each reference position it could have reached.
+/* What one read contributes to each reference position it could have reached.
  *
- * A window rather than the whole reference, because a read reaches a few
- * hundred positions of a reference that may be far longer. The values are the
- * read's alone and are to be added, not assigned, and every one of them is
- * fractional, being spread over each placement the band allowed.
+ * A window, not the whole reference, since a read reaches a few hundred
+ * positions of a reference that may be far longer. Values are fractional,
+ * spread over each placement the band allowed, and must be added to a target
+ * rather than assigned.
  *
- * The window may begin before the reference does or end after it: a read placed
- * near either boundary really has paths that leave it, and dropping them is the
- * caller's to do. */
+ * The window may extend past either end of the reference: a read placed near a
+ * boundary has paths that leave it. Discarding those is the caller's job. */
 typedef struct {
     hts_pos_t     origin;      /* reference position of value 0 */
     size_t        len;
     const double *coverage;    /* base read there, weighed by its quality */
     const double *spanned;     /* position reached, read or deleted */
-    const double *mutations;   /* events laid at that position's door */
+    const double *mutations;   /* events attributed to that position */
 } phmm_window;
 
 /* How a marginalization ended.
  *
- * Neither failure is the read's doing, and neither leaves anything for a caller
- * to salvage. A row that sums to nothing takes a band with no width to it, a
- * row that sums to something not finite takes a parameter that is not a
- * probability, and the two passes disagreeing about which paths exist takes an
- * index gone wrong; none is a property of the alignment in hand, and none is
- * mended by trying the next one. They are told apart only so that a run ending
- * on one can say which it was. */
+ * Both failures indicate a bad parameter or a bug, not a bad read, and neither
+ * is fixed by trying the next alignment. A row summing to zero means a band
+ * with no width; a row summing to something non-finite means a parameter that
+ * is not a probability; the two passes disagreeing about which paths exist
+ * means an index error. They are distinguished only so a run can report which
+ * occurred. */
 typedef enum {
-    PHMM_OK,          /* out holds what the read is worth */
-    PHMM_NO_MEMORY,   /* the matrix could not be had */
+    PHMM_OK,          /* out holds the read's contribution */
+    PHMM_NO_MEMORY,   /* the matrix could not be allocated */
     PHMM_UNSOUND,     /* a pass did not hold together */
 } phmm_status;
 
 /* Marginalizes one read over the alignments its band admits, leaving the result
- * in out, which borrows from scratch and lasts until the next call on it.
+ * in out, which borrows from scratch and is valid until the next call on it.
  *
- * The band is given row by row: half[i] is how far either side of the CIGAR row
- * i may look, a row being one base of the placed span and one before them all.
- * It must hold at least read->l_qseq + 1 entries, that being the most rows a
- * read can have, and only those the span reaches are read. Constant throughout
- * is a band of one width; nothing here decides the shape.
+ * The band is given per row: half[i] is how far either side of CIGAR row i the
+ * model may look, a row being one base of the placed span plus one before them
+ * all. half must hold at least read->l_qseq + 1 entries; only those the span
+ * reaches are read. A constant array gives a uniform band. The shape is the
+ * caller's to choose.
  *
- * The read must store a sequence and place at least one of its bases, the
- * filter having turned away any that does neither.
+ * The read must store a sequence and place at least one base; the filter
+ * rejects any that does neither.
  *
- * Anything but PHMM_OK ends the run: there is no read this can fail on and
- * leave the rest worth counting. Nothing is turned away for being large, either
- * -- what a read costs is what it costs, and it is the memory running out that
- * says so rather than a number chosen here. */
+ * Anything but PHMM_OK ends the run. No read is rejected for being large: cost
+ * is whatever the read implies, and memory exhaustion is what reports it. */
 phmm_status phmm_run(const phmm *model, const phred *quality,
                      const cm_bam_record *read, const cm_fasta_record *ref,
                      const int *half, phmm_scratch *scratch, phmm_window *out);

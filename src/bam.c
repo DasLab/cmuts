@@ -63,8 +63,8 @@ static uint64_t raw_offset(const cm_bam_reader *reader)
      *
      * A BGZF virtual offset is two numbers in one: the compressed block's own
      * position in the upper bits, and how far into the inflated block the
-     * reader has come in the lower BGZF_OFFSET_BITS. It is the first alone that
-     * says how much of the file has been read. */
+     * reader has come in the lower BGZF_OFFSET_BITS. Only the first indicates
+     * how much of the file has been read. */
     if (file->is_bgzf)
         return (uint64_t)(bgzf_tell(file->fp.bgzf) >> BGZF_OFFSET_BITS);
 
@@ -121,8 +121,8 @@ cm_bam_reader *cm_bam_open(const char *path, const char **why)
 
     limit_decoding(reader);
 
-    /* Where the file is not one htslib recognises, this is what says so: the
-     * open itself succeeds on anything readable. */
+    /* This is where an unrecognised format is detected: the open itself
+     * succeeds on anything readable. */
     reader->header = sam_hdr_read(reader->file);
     if (!reader->header) {
         *why = "unable to read the header";

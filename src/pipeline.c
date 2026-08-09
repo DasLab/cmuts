@@ -201,10 +201,10 @@ static void *worker_main(void *arg)
 
 /* What the loader has in hand.
  *
- * Each of the three is a pair of values that only make sense together: a
- * reference and the reads it has turned away, a batch bound for the workers
- * and how much of it is filled, a reservoir of carriers and how many remain.
- * Kept as locals they were six variables to hold in step by hand. */
+ * Each of the three is a pair of values only meaningful together: a reference
+ * and its count of filtered reads, a batch bound for the workers and how much
+ * of it is filled, a reservoir of carriers and how many remain. As locals they
+ * were six variables to keep in step by hand. */
 typedef struct {
     pipeline *pipe;
 
@@ -245,10 +245,9 @@ static void loader_dispatch(loader *l)
     l->queued = 0;
 }
 
-/* Lets go of the reference in hand: what is queued for it goes first, then the
- * count of what it turned away, and the loader's own handle last. The count
- * has to arrive before the handle goes, or the reference could be written
- * without it. */
+/* Releases the current reference: queued reads first, then its filtered count,
+ * then the loader's own handle. The count must arrive before the handle is
+ * dropped, or the reference could be written without it. */
 static void loader_leave_reference(loader *l)
 {
     refctx *ctx = l->reference;
@@ -283,9 +282,9 @@ static refctx *open_reference(pipeline *p, int32_t tid)
 }
 
 /* Moves to the reference a read belongs to, unless it is already the one in
- * hand. This happens before the filter is applied, so that a read rejected
- * there can still be counted against its reference: one whose reads were all
- * turned away is a different thing from one that received none at all. */
+ * hand. This happens before the filter is applied, so a rejected read is still
+ * counted against its reference: one whose reads were all filtered out is
+ * distinct from one that received none. */
 static bool loader_on_reference(loader *l, int32_t tid)
 {
     if (l->reference && l->reference->tid == tid)

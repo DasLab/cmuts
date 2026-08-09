@@ -36,15 +36,14 @@
 
 /* Enough for the note naming an option's default. A string default is written
  * out in full, so this is the one of these a row could outgrow, and the note is
- * cut short where it does rather than anything worse. */
+ * truncated where it does. */
 #define DEFAULT_NOTE_MAX 64
 
 /* Enough for the largest value an option will take, written out. */
 #define CEILING_MAX 32
 
-/* The column an option's help begins in. The arguments are listed against the
- * same one, and a difference between the two would read as a step partway down
- * the help rather than as anything deliberate. */
+/* The column an option's help begins in. The arguments list uses the same one;
+ * a difference between them shows as a misaligned step in --help. */
 #define HELP_COLUMN 28
 
 /* getopt records a short option in optopt, and for a long one leaves the
@@ -104,8 +103,8 @@ static const cli_option *option_by_id(const cli_spec *spec, int id)
 /* getopt_long inputs, built from the table                                  */
 /* ------------------------------------------------------------------------ */
 
-/* The leading colon has getopt report a missing value apart from an option it
- * does not know, which are different mistakes and want different words. */
+/* The leading colon has getopt report a missing value separately from an
+ * unknown option. They are different mistakes and get different messages. */
 static void build_short_options(const cli_spec *spec, char *out, size_t size)
 {
     size_t n = 0;
@@ -190,11 +189,10 @@ static const char *ceiling_text(const cli_option *opt, char *out, size_t size)
     return out;
 }
 
-/* A range is quoted only where the row set one. An option with no ceiling of
- * its own has a floor to fall short of and a destination to outgrow, and each
- * is one bound rather than a range: a value refused for being negative has no
- * business hearing what the widest one is. The text the caller wrote is echoed
- * rather than the number read out of it, so a value comes back as given. */
+/* A range is quoted only where the row declared one. An option with no ceiling
+ * of its own has two independent bounds -- its floor, and what its destination
+ * can hold -- so a value is reported against the single bound it missed. The
+ * caller's text is echoed verbatim, not the number parsed from it. */
 static void report_out_of_range(const cli_option *opt, const char *text,
                                 const char *program, bool below)
 {
@@ -312,8 +310,8 @@ static void format_default(const cli_option *opt, const void *defaults,
     if (!stores_a_value(opt))
         return;
 
-    /* An option that need not be applied says so rather than showing the value
-     * that stands for not applying it. */
+    /* An optional setting shows its label, not the sentinel value that means
+     * "not applied". */
     if (opt->unset_label) {
         snprintf(out, size, " (default: %s)", opt->unset_label);
         return;

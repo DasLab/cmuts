@@ -130,13 +130,13 @@ static const char *digest_of(digest *md5, const cm_fasta_record *record)
 /* Whether the sequence is the one the alignments were made against, where the
  * header says what that was.
  *
- * A name and a length are a description of a reference rather than the
- * reference itself: another sequence answering to both passes them and is
- * scored against regardless. M5 is what settles it, being taken over the bases.
- * It is optional and frequently absent, though, so a reference declaring none
- * is taken on trust -- refusing those would refuse most files that exist. One
- * declaring something that is not an MD5 is a different matter: the header is
- * wrong, and going on would mean passing a check that was never made. */
+ * A name and a length describe a reference without identifying it: another
+ * sequence matching both passes the check and is scored against anyway. Only
+ * M5 settles it, being taken over the bases. It is optional and frequently
+ * absent, so a reference declaring none is accepted; rejecting those would
+ * reject most files that exist. A declared value that is not an MD5 is
+ * different: the header is wrong, and continuing would mean passing a check
+ * that was never made. */
 static bool checksum_matches(refseq_source *src, size_t file, int32_t tid, digest *md5)
 {
     size_t      declared_len = 0;

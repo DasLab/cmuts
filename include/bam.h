@@ -139,7 +139,7 @@ void cm_bam_sq_open(cm_bam_sq_cursor *cursor, const cm_bam_reader *reader);
  * omit it. The result points into the header text and lives as long as the
  * reader does.
  *
- * References must be asked for in non-decreasing order, which is what the
- * cursor buys: one walk of the text answers a whole run of them, where asking
- * htslib for the tag would first have it parse the header into records. */
+ * References must be requested in non-decreasing order. That is what the
+ * cursor exploits: one walk of the text answers a whole run of them, where
+ * asking htslib for the tag would first parse the header into records. */
 const char *cm_bam_sq_checksum(cm_bam_sq_cursor *cursor, int32_t tid, size_t *len);

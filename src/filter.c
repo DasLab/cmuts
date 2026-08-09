@@ -51,9 +51,8 @@ static bool length_accepted(const filter_config *filter, const cm_bam_record *re
 }
 
 /* A record may store no sequence at all, which SAM spells as a QUAL and SEQ of
- * "*". There is nothing to compare against the reference, so such a read is
- * turned away here rather than reaching a step that would have to invent an
- * answer for it. */
+ * "*". There is nothing to compare against the reference, so it is excluded
+ * here instead of reaching a step that would have to invent an answer. */
 static bool sequence_present(const cm_bam_record *read)
 {
     return read->seq != NULL;
@@ -61,10 +60,9 @@ static bool sequence_present(const cm_bam_record *read)
 
 /* A record may place none of its read: no CIGAR at all, which SAM spells the
  * same way as an absent sequence; one made wholly of clips, naming bases the
- * aligner declined to put anywhere; or one naming no base of the read at all,
- * having nothing but reference in it. There is then no position for the read to
- * say anything about, so it is turned away here rather than counted as one that
- * went on to contribute nothing to any of them. */
+ * aligner left unplaced; or one naming no base of the read, having nothing but
+ * reference in it. There is then no position for it to contribute to, so it is
+ * excluded here instead of counted as a read that contributed nothing. */
 static bool placement_present(const cm_bam_record *read)
 {
     aln_span placed = aln_placed_span(read);
@@ -74,7 +72,7 @@ static bool placement_present(const cm_bam_record *read)
 
 /* A secondary alignment places a read already counted at its primary, so
  * accepting one would count a single molecule twice. Supplementary alignments
- * carry distinct pieces of a split read, and are not refused here. */
+ * carry distinct pieces of a split read and are not excluded. */
 static bool is_primary(const cm_bam_record *read)
 {
     return (read->flag & BAM_FSECONDARY) == 0;

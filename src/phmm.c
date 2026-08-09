@@ -1,24 +1,22 @@
 /* phmm.c -- a banded pair HMM over one read and the reference it was placed on.
  *
- * Three states, the usual ones: M pairs a read base with a reference base, I
- * takes a read base the reference has nothing for, and D passes over a
- * reference base the read has nothing for. Both indices are prefix lengths, so
- * a cell (i, j) is the first i placed read bases set against the first j bases
- * of the reference, and the state says what the last operation was. A cell in
- * M or I therefore reads reference base j - 1 and read base i - 1.
+ * Three states: M pairs a read base with a reference base, I takes a read base
+ * the reference has nothing for, D passes over a reference base the read has
+ * nothing for. Both indices are prefix lengths, so cell (i, j) is the first i
+ * placed read bases against the first j reference bases, and the state is the
+ * last operation. A cell in M or I reads reference base j - 1, read base i - 1.
  *
- * Only a band of reference positions is carried for each read base: what the
- * CIGAR path crosses on that base's row, and a half-width either side of it.
- * Everything below is thus a probability conditioned on the alignment staying
- * inside that band, which is the approximation the whole thing rests on: local
- * ambiguity is marginalized away, and a grossly misplaced read is not rescued.
- * A band of nothing leaves the CIGAR path alone and marginalizes over it.
+ * Each read base carries only a band of reference positions: what the CIGAR
+ * path crosses on that row, plus a half-width either side. Every probability
+ * here is therefore conditioned on the alignment staying inside the band. That
+ * is the approximation: local ambiguity is marginalized away, a grossly
+ * misplaced read is not rescued. A band of 0 marginalizes over the CIGAR path
+ * alone.
  *
- * Rows are divided by their own totals as the forward pass goes and the
- * backward pass divides by the same numbers again, which is what lets a
- * posterior be read off as a product of the two with no separate normalizer and
- * no logarithms. Those divisors multiply back up to the likelihood of the read,
- * so nothing is lost by never forming it.
+ * The forward pass divides each row by its own total and the backward pass
+ * divides by the same numbers, which lets a posterior be read off as the
+ * product of the two with no separate normalizer and no logarithms. Those
+ * divisors multiply back up to the read's likelihood, which is never formed.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -37,51 +35,44 @@ enum { STATE_MATCH, STATE_INSERTION, STATE_DELETION, N_STATES };
 /* One cell of a band row, named so that a row of them can be returned. */
 typedef double band_cell[N_STATES];
 
-/* Everything a cell's comparison is afterwards asked for.
- *
- * The forward pass wants what the pairing is worth, the backward pass wants the
- * same of a row it has yet to reach, the deletion closing there wants it again,
- * and the accumulation wants how much of the pairing was a modification. All
- * four come of one comparison, so it is made once and held rather than made
- * again wherever it is wanted. Kept for the whole matrix rather than a row at
- * a time: the backward pass reads a row the forward pass wrote and left
- * behind. */
+/* Results of one cell's base comparison, used by four separate readers: the
+ * forward pass, the backward pass, the deletion closing on the row, and the
+ * accumulation. One comparison serves all four, so it is made once and stored.
+ * Stored for the whole matrix, not one row, since the backward pass reads rows
+ * the forward pass has already left behind. */
 typedef struct {
     double emission;
     double modification;
 } cell_terms;
 
-/* A base drawn from nothing in particular, and a comparison that settles
- * nothing: an inserted base answers to no reference position, and a base
- * neither side has named says as little either way. */
+/* The emission of a comparison that settles nothing: an inserted base, which
+ * answers to no reference position, or a base neither side has named. */
 #define UNINFORMATIVE (1.0 / NUC_BASES)
 
-/* A misread base, or a modified one, lands on one of the bases the reference
- * does not name, and is taken to be as likely to have landed on any of them.
- * Both this and UNINFORMATIVE are the width of the alphabet rather than numbers
- * of their own, so nuc.h is the one place either changes. */
+/* A misread or modified base lands on one of the bases the reference does not
+ * name, with equal probability for each. Both this and UNINFORMATIVE derive
+ * from the alphabet width, so nuc.h is the only place either changes. */
 #define OTHER_BASES ((double)(NUC_BASES - 1))
 
-/* Forward times backward has to come to one on every row. A departure past this
- * is an index gone wrong rather than a rounding, and the read is better handed
- * back than counted from a matrix that does not hold. */
+/* Forward times backward must come to one on every row. A departure past this
+ * indicates an index error, not rounding, and the read is discarded. */
 #define NORMALIZATION_TOLERANCE 1e-6
 
-/* Rows are stored at the widest row's stride rather than each at its own, so
- * that a row is found by multiplication and no table of offsets is needed. It
- * is the loops that are ragged, and they are what the cost follows. */
+/* Rows are stored at the widest row's stride, so a row is located by
+ * multiplication and no offset table is needed. Only the loops are ragged, and
+ * they are what the cost follows. */
 struct phmm_scratch {
     aln_place *places;     /* one per placed read base, and one before them */
     double    *scale;      /* what each forward row is scaled by, which is the
                               reciprocal of what it came to */
     band_cell *forward;    /* rows, each of widest cells */
     cell_terms *terms;     /* one per cell of it */
-    /* Only the row in hand and the one below it are ever wanted, so two are
-     * kept however many rows the read has. */
+    /* Only the current row and the one below it are read, so two suffice
+     * however many rows the read has. */
     band_cell *backward;
-    /* What a pairing on the row below is worth, one per cell of the row in
-     * hand. The backward pass forms it and the deletion closing there is a
-     * product with it, so it is handed along rather than made twice. */
+    /* The value of a pairing on the row below, one per cell of the current
+     * row. The backward pass forms it and the deletion closing there is a
+     * product with it, so it is passed along instead of recomputed. */
     double    *pairings;
     double    *coverage;   /* the window handed back */
     double    *spanned;
@@ -92,20 +83,18 @@ struct phmm_scratch {
     size_t     window;       /* positions the last three are sized for */
 };
 
-/* A stretch of the reference, named by where it begins and how far it runs. */
+/* A stretch of the reference: where it begins and how far it runs. */
 typedef struct {
     hts_pos_t origin;
     size_t    len;
 } extent;
 
-/* Everything one read is marginalized against, gathered so that the passes read
- * as the recursions they are.
+/* Everything one read is marginalized against.
  *
- * What a caller hands over comes first and is fixed for the read. What follows
- * is worked out from it, and stands for nothing until prepare has run: a pass
- * reading it before then reads the band of whichever read came before. prepare
- * is the only thing that writes any of it, which is why every other function
- * here takes a context it may not modify. */
+ * The caller's inputs come first and are fixed for the read. The rest is
+ * derived from them and is undefined until prepare() has run; before that it
+ * holds the previous read's band. prepare() is the only writer, which is why
+ * every other function here takes a const context. */
 typedef struct {
     const phmm            *model;
     const phred           *quality;
@@ -162,11 +151,10 @@ void phmm_build(phmm *model, const phmm_params *params,
     model->deletion_to_match      = 1.0 - params->extend_deletion;
 }
 
-/* Two ways for a read base to disagree with the reference and one to agree with
- * it: the template may have been modified, and the read of it may be wrong.
- * Both are unlikely and neither is impossible, and it is the second alone that
- * a quality score speaks to. Agreement plus three disagreements comes to one,
- * which is what makes these a distribution over the four bases. */
+/* A read base can disagree with the reference two ways -- the template was
+ * modified, or the base was misread -- and only the second is what a quality
+ * score measures. Agreement plus three disagreements sums to one, which makes
+ * these a distribution over the four bases. */
 static double agreement_chance(double modification, double error)
 {
     return (1.0 - modification) * (1.0 - error)
@@ -179,13 +167,12 @@ static double disagreement_chance(double modification, double error)
          + modification * (1.0 - error / OTHER_BASES) / OTHER_BASES;
 }
 
-/* Having read what was read, the chance the template really differed from the
- * reference here.
+/* Given the base as read, the chance the template really differed here.
  *
- * A base agreeing with the reference may have been modified and then misread
- * back into agreement, and one disagreeing may be an unmodified base misread.
- * The first is negligible and the second is not, which is what makes a poorly
- * read disagreement worth less than a clean one. */
+ * A base agreeing with the reference may have been modified and misread back
+ * into agreement; a disagreeing one may be an unmodified base misread. The
+ * first is negligible, the second is not, which is why a poorly read
+ * disagreement counts for less than a clean one. */
 static double phmm_modification(const phmm *model, bool agree, double error)
 {
     double modification = model->params.modification;
@@ -201,9 +188,8 @@ static double phmm_modification(const phmm *model, bool agree, double error)
 /* One read base against the reference                                       */
 /* ------------------------------------------------------------------------ */
 
-/* A record storing no qualities weighs every base fully, there being nothing to
- * say otherwise, which leaves the modification rate alone to explain a
- * disagreement. */
+/* A record storing no qualities weighs every base fully, leaving the
+ * modification rate alone to explain a disagreement. */
 static double error_at(const context *ctx, int32_t query)
 {
     return ctx->read->qual
@@ -211,8 +197,8 @@ static double error_at(const context *ctx, int32_t query)
          : 0.0;
 }
 
-/* What a pairing that agreed, or one that did not, is worth, and how much of it
- * belongs to the template having really differed. */
+/* The emission of an agreeing or disagreeing pairing, and how much of it is
+ * attributable to a real difference in the template. */
 static cell_terms terms_from(const context *ctx, bool agree, double error)
 {
     double m = ctx->model->params.modification;
@@ -226,14 +212,12 @@ static cell_terms terms_from(const context *ctx, bool agree, double error)
 
 /* Every value a cell of one row can take.
  *
- * A row pairs one read base, which is read once and scored once, so the only
- * thing a cell of it settles is which of three the reference offers: the same
- * base, a different one, or nothing that can be compared at all. The three are
- * worked out when the row is entered and a cell picks among them, which is
- * what keeps the divisions a modification costs off the cell.
+ * A row pairs one read base, read and scored once, so a cell only selects among
+ * three cases: the reference offers the same base, a different one, or nothing
+ * comparable. All three are computed on entering the row, keeping the divisions
+ * a modification costs out of the per-cell path.
  *
- * A read that names no base here agrees with nothing and differs from nothing,
- * so all three are the same and a cell need not ask about the read again. */
+ * Where the read names no base, all three collapse to the same value. */
 typedef struct {
     cell_terms agree;
     cell_terms differ;
@@ -257,9 +241,8 @@ static row_terms row_terms_of(const context *ctx, size_t i)
     };
 }
 
-/* Cell (i, j) reads the row's base against reference base j - 1. A position
- * past either end of the reference has nothing to be compared with, which is a
- * thing not known rather than a disagreement. */
+/* Cell (i, j) compares the row's base against reference base j - 1. A position
+ * past either end of the reference is unknown, not a disagreement. */
 static cell_terms terms_at(const context *ctx, const row_terms *row,
                            hts_pos_t j)
 {
@@ -276,9 +259,8 @@ static cell_terms terms_at(const context *ctx, const row_terms *row,
     return theirs == row->ours ? row->agree : row->differ;
 }
 
-/* How far the base a row pairs is to be believed, whatever it turned out to be
- * set against: a base neither side could name was still read, and read as well
- * or as badly as its score says. */
+/* Confidence in the base a row pairs, whatever it was set against: a base
+ * neither side could name was still read, at the quality its score gives. */
 static double confidence_at(const context *ctx, size_t i)
 {
     return 1.0 - error_at(ctx, ctx->span.begin + (int32_t)i - 1);
@@ -288,40 +270,39 @@ static double confidence_at(const context *ctx, size_t i)
 /* The band                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* A forward row as the pass left it, which is not what the row stands for: see
+/* A forward row as stored, which is not the value it represents. See
  * scaled_row below before reading one. */
 static band_cell *row_of(const context *ctx, size_t i)
 {
     return ctx->scratch->forward + i * (size_t)ctx->widest;
 }
 
-/* The same row where a pass only reads it.
+/* The same row, for readers.
  *
- * A pointer to an array takes a qualifier of its own only from C23, so a row
- * meant to be read cannot simply be spelled const where it is taken. The cast
- * that says so lives here and in its backward twin rather than at each of the
- * places that would otherwise carry one. */
+ * A pointer to an array takes its own qualifier only from C23, so a read-only
+ * row cannot simply be declared const at each use. The cast lives here and in
+ * read_backward_row_of instead of at every call site. */
 static const band_cell *read_row_of(const context *ctx, size_t i)
 {
     return (const band_cell *)row_of(ctx, i);
 }
 
-/* A forward row together with what restores it.
+/* A forward row together with the factor that restores it.
  *
- * A row is left scaled by every divisor but its own, that last one having been
- * folded into the transitions leaving the row rather than walked over the row
- * again. So what is stored is the row's own total times what the row stands
- * for, and the two are a probability only together.
+ * A row is left scaled by every divisor except its own, that last one being
+ * folded into the transitions leaving the row instead of walked over the row a
+ * second time. What is stored is therefore the row's total times its true
+ * value; the two are a probability only together.
  *
- * Undoing it belongs here and nowhere else. Reading a forward row any other way
- * is the one mistake this file cannot catch: the numbers look like posteriors
- * and are wrong by a factor that changes from row to row, so nothing overflows,
- * nothing fails to sum, and the counts come out quietly wrong.
+ * Undo it here and nowhere else. Reading a forward row directly is the one
+ * error this file cannot detect: the numbers look like posteriors but are wrong
+ * by a per-row factor, so nothing overflows, nothing fails to sum, and the
+ * counts are silently wrong.
  *
- * A row and its divisor are fetched together, once, because a pass that laid
- * anything down between fetching them would have to fetch them both again: the
- * window it writes is doubles and so is a row, and no compiler may assume the
- * two do not overlap. */
+ * The row and its divisor are fetched together, once. A pass that wrote
+ * anything between the two fetches would have to repeat both: the window it
+ * writes is doubles, as is a row, and the compiler cannot assume they do not
+ * alias. */
 typedef struct {
     const band_cell *cell;
     double           scale;
@@ -335,7 +316,7 @@ static scaled_row scaled_row_of(const context *ctx, size_t i)
     };
 }
 
-/* What one cell of it stands for. */
+/* The true value of one cell. */
 static double forward_at(const scaled_row *row, hts_pos_t k, int state)
 {
     return row->cell[k][state] * row->scale;
@@ -346,31 +327,30 @@ static cell_terms *terms_of(const context *ctx, size_t i)
     return ctx->scratch->terms + i * (size_t)ctx->widest;
 }
 
-/* Which of the two a row lands in is its parity. */
+/* Row parity selects which of the two buffers it occupies. */
 static band_cell *backward_row_of(const context *ctx, size_t i)
 {
     return ctx->scratch->backward + (i & 1) * (size_t)ctx->widest;
 }
 
-/* The twin of read_row_of, for the same reason. */
+/* As read_row_of, for the backward buffers. */
 static const band_cell *read_backward_row_of(const context *ctx, size_t i)
 {
     return (const band_cell *)backward_row_of(ctx, i);
 }
 
-/* The reference a row's own base accounts for beyond the one it pairs with,
- * which is however much a deletion after it passes over. */
+/* Reference the row's base accounts for beyond the one it pairs with, which is
+ * whatever a deletion following it passes over. */
 static hts_pos_t skip_at(const context *ctx, size_t i)
 {
     return ctx->scratch->places[i].last - ctx->scratch->places[i].first;
 }
 
-/* A row covers everything the CIGAR path crosses on it and its half-width
- * either side of that, rather than a half-width either side of a point. The
- * distinction is the deletion: the path runs along a row to cross one, so a row
- * with a deletion after it is a stretch that a band of nothing still holds
- * whole. A read is never denied the alignment it arrived with, and the band
- * means room to depart from it and nothing else. */
+/* A row covers everything the CIGAR path crosses on it, plus a half-width
+ * either side -- not a half-width either side of a single point. Deletions are
+ * why: the path runs along a row to cross one, so a row with a deletion after
+ * it is a stretch that even a band of 0 holds whole. A read is never denied the
+ * alignment it arrived with; the band only adds room to depart from it. */
 static hts_pos_t width_at(const context *ctx, size_t i)
 {
     return skip_at(ctx, i) + 2 * (hts_pos_t)ctx->half[i] + 1;
@@ -389,21 +369,19 @@ static hts_pos_t position_of(const context *ctx, size_t i, hts_pos_t k)
 }
 
 /* What to add to a cell index to name the same position on another row. Rows
- * move with the CIGAR and may widen or narrow as they go, so what separates two
- * of them is the distance between their first cells. */
+ * follow the CIGAR and may widen or narrow, so the offset between two of them
+ * is the distance between their first cells. */
 static hts_pos_t shift_between(const context *ctx, size_t from, size_t to)
 {
     return origin_of(ctx, to) - origin_of(ctx, from);
 }
 
-/* Rows do not share a width, so a cell index means nothing apart from the row
- * it indexes, and it is that row's width the index has to be held against.
- * Holding it against another's is how the two passes would come to disagree
- * about which paths exist.
+/* Rows differ in width, so a cell index is meaningful only against its own
+ * row's width. Checking it against another row's is how the two passes would
+ * come to disagree about which paths exist.
  *
- * The width is handed in rather than looked up because a row does not change
- * width while it is being walked, and fetching it again for every cell of every
- * neighbour is most of what the test costs. */
+ * The width is a parameter because a row's width is fixed while it is walked,
+ * and re-fetching it per cell is most of what this test would cost. */
 static bool within(hts_pos_t k, hts_pos_t width)
 {
     return k >= 0 && k < width;
@@ -414,10 +392,9 @@ static bool within(hts_pos_t k, hts_pos_t width)
 /* ------------------------------------------------------------------------ */
 
 /* Nothing has been read yet, so each cell of the first row is the alignment
- * poised to begin at that reference position, none of them preferred over the
- * others. None has begun with a deletion: a reference base passed over before
- * the read starts is a base the read says nothing about, and its position could
- * never be recovered. */
+ * about to begin at that reference position, all equally likely. None begins
+ * with a deletion: reference passed over before the read starts carries no
+ * information and its position could never be recovered. */
 static double forward_first_row(const context *ctx)
 {
     band_cell *row   = row_of(ctx, 0);
@@ -437,21 +414,19 @@ static double forward_first_row(const context *ctx)
 }
 
 /* What each state of the row above contributes to a cell of this one, with
- * everything constant along the row multiplied out once: what the row above is
- * scaled by, and the flat emission an inserted base carries. What is left is
- * the pairing's own emission, that being the one thing a cell decides for
- * itself.
+ * everything constant along the row multiplied out once: the row above's scale
+ * factor, and the flat emission an inserted base carries. Only the pairing's
+ * own emission is left for the cell to supply.
  *
- * Folding the scaling in here is what spares the row a second walk. Dividing a
- * row by its total and stepping from it undivided leave the same numbers, but
- * the first costs a multiplication, a load and a store for every state of every
- * cell where this costs a handful of multiplications for the whole row.
+ * Folding the scaling in here saves a second walk over the row. Dividing the
+ * row by its total and stepping from it undivided give the same numbers, but
+ * that costs a multiply, load and store per state per cell, against a handful
+ * of multiplies for the whole row here.
  *
- * This is the one place that reads a forward row without going through
- * forward_at, and it is the same undoing by another route: a divisor that would
- * multiply every cell of the row above is carried instead by the five constants
- * every cell of it is met with. Everything else that reads a row goes through
- * forward_at, where what the undoing is for is written down. */
+ * This is the only place that reads a forward row without forward_at, and it
+ * performs the same correction by another route: the divisor that would
+ * multiply every cell above is carried instead by these five constants. See
+ * forward_at for why the correction is needed. */
 typedef struct {
     double match_to_match;
     double insertion_to_match;
@@ -476,7 +451,7 @@ static descent descent_into(const context *ctx, size_t i)
     };
 }
 
-/* The two states that take a read base, and so read from the row above. */
+/* The two states that consume a read base, and so read from the row above. */
 static double paired_from(const descent *step, const double *above,
                           double emission)
 {
@@ -491,9 +466,9 @@ static double inserted_from(const descent *step, const double *above)
          + step->insertion_to_insertion * above[STATE_INSERTION];
 }
 
-/* A deletion runs along the reference without the read moving, so it is the one
- * state whose row depends on itself: a cell takes from the cell to its left,
- * which must already hold this row's answer and not the last one's. */
+/* A deletion advances along the reference without the read moving, so it is the
+ * only state whose row depends on itself: a cell reads the cell to its left,
+ * which must already hold this row's value, not the previous row's. */
 static double deleted_from(const phmm *model, double left_match,
                            double left_deletion)
 {
@@ -501,28 +476,26 @@ static double deleted_from(const phmm *model, double left_match,
          + model->deletion_to_deletion * left_deletion;
 }
 
-/* A deletion may neither open a read nor close one: reference passed over
- * before the first read base or after the last is reference whose position
- * could never be recovered, and admitting it would leave the read carrying an
- * event nothing in it points at.
+/* A deletion may neither open nor close a read: reference passed over before
+ * the first read base or after the last has no recoverable position, and
+ * allowing it would attribute an event to nothing in the read.
  *
- * Both passes ask this rather than each forbidding it their own way. A step one
- * of them allows and the other does not is a disagreement about which paths
- * exist, and posteriors read off the two would not sum to one. */
+ * Both passes call this, rather than each enforcing the rule separately. A step
+ * one allows and the other forbids is a disagreement about which paths exist,
+ * and posteriors read off the two would not sum to one. */
 static bool deletions_live(const context *ctx, size_t i)
 {
     return i > 0 && i + 1 < ctx->rows;
 }
 
-/* One row of the forward pass, returning what it came to before it was scaled.
+/* One row of the forward pass, returning its unscaled total.
  *
- * Everything a cell wants is at hand by the time it is reached: its comparison
- * is made here, the two states that take a read base read the row above, and
- * the deletion reads the cell to the left, which this same loop wrote an
- * iteration ago. So it is one pass over the row rather than four, which at a
- * narrow band is most of what a row costs. The total is gathered as it goes,
- * and in the order the cells lie, so that the sum is the one the scaling
- * afterwards divides by. */
+ * Every input a cell needs is available when it is reached: its comparison is
+ * made here, the two read-consuming states read the row above, and the deletion
+ * reads the cell to the left, written one iteration ago. That makes this a
+ * single pass over the row instead of four, which at a narrow band is most of
+ * what a row costs. The total accumulates in cell order, so it is the same sum
+ * the scaling afterwards divides by. */
 static double forward_row(const context *ctx, size_t i)
 {
     const phmm      *model = ctx->model;
@@ -535,18 +508,17 @@ static double forward_row(const context *ctx, size_t i)
     hts_pos_t        width = width_at(ctx, i);
     hts_pos_t        above_width = width_at(ctx, i - 1);
     bool             live  = deletions_live(ctx, i);
-    /* The cell to the left, kept rather than read back out of the row just
-     * written: the deletion chain runs the width of the row, and a load that
-     * waits on the store before it makes every link of it longer. */
+    /* The cell to the left, held in registers instead of re-read from the row
+     * just written: the deletion chain runs the width of the row, and a load
+     * waiting on the preceding store lengthens every link of it. */
     double           left_match    = 0.0;
     double           left_deletion = 0.0;
-    /* One running sum per state, so the row is three addition chains as deep
-     * as it is wide rather than one chain three times that.
+    /* One running sum per state, making three addition chains as deep as the
+     * row is wide instead of one chain three times that.
      *
-     * This is the one place here that adds a row's numbers in an order other
-     * than the one they lie in. What comes of it is the divisor the row is
-     * scaled by, so the sum is the same sum and nothing downstream reads the
-     * order; it is not bit-exact in principle all the same. */
+     * This is the only place here that sums a row out of cell order. The result
+     * is the row's divisor, and nothing downstream depends on the order, though
+     * it is not bit-exact in principle. */
     double           total_paired   = 0.0;
     double           total_inserted = 0.0;
     double           total_deleted  = 0.0;
@@ -583,10 +555,10 @@ static double forward_row(const context *ctx, size_t i)
     return (total_paired + total_inserted) + total_deleted;
 }
 
-/* Every row is scaled by its own total, so that the numbers stay near one
- * however long the read: unscaled, a forward pass underflows a double within a
- * few hundred bases. The scaling itself is left to the descent out of the row,
- * so all that is kept here is what the descent will want. */
+/* Every row is scaled by its own total, keeping the numbers near one however
+ * long the read: unscaled, a forward pass underflows a double within a few
+ * hundred bases. The scaling itself happens in the descent out of the row, so
+ * only the factor it needs is stored here. */
 static bool record_total(const context *ctx, size_t i, double total)
 {
     if (!(total > 0.0) || !isfinite(total))
@@ -597,7 +569,7 @@ static bool record_total(const context *ctx, size_t i, double total)
     return true;
 }
 
-/* The first row is laid out rather than stepped into, having no row above it. */
+/* The first row is initialized directly, having no row above to step from. */
 static bool forward(const context *ctx)
 {
     if (!record_total(ctx, 0, forward_first_row(ctx)))
@@ -615,8 +587,8 @@ static bool forward(const context *ctx)
 /* ------------------------------------------------------------------------ */
 
 /* The alignment ends on the last row, having paired or inserted its final base
- * but not having passed over a reference base to do it. There is no row below
- * for a deletion to close on, so nothing is worth anything there. */
+ * without passing over a reference base. There is no row below for a deletion
+ * to close on, so that state is zero throughout. */
 static void backward_last_row(const context *ctx)
 {
     band_cell *row      = backward_row_of(ctx, ctx->rows - 1);
@@ -631,14 +603,13 @@ static void backward_last_row(const context *ctx)
     }
 }
 
-/* Everything reached from a cell, which for the two states that stay on this
- * row means the cell to its right. Only what crosses to the row below carries
- * that row's scaling, the deletion chain along this one having been scaled
- * already as it was written.
+/* Everything reachable from a cell. For the two states that stay on this row,
+ * that is the cell to its right. Only transitions crossing to the row below
+ * carry that row's scaling; the deletion chain along this row was scaled as it
+ * was written.
  *
- * What a pairing on the row below is worth is left behind for the accumulation,
- * the deletion closing there being a product with exactly this and nothing
- * else. */
+ * The value of a pairing on the row below is stored for the accumulation, the
+ * deletion closing there being a product with exactly that. */
 static void backward_row(const context *ctx, size_t i)
 {
     const phmm *model = ctx->model;
@@ -652,7 +623,7 @@ static void backward_row(const context *ctx, size_t i)
     double           *pairings = ctx->scratch->pairings;
     hts_pos_t         width    = width_at(ctx, i);
     hts_pos_t         below_width = width_at(ctx, i + 1);
-    /* The cell to the right, kept for the same reason the forward pass keeps
+    /* The cell to the right, held for the same reason the forward pass holds
      * the cell to its left. */
     double            right_deletion = 0.0;
 
@@ -693,23 +664,20 @@ static void backward_row(const context *ctx, size_t i)
 /* What a row says about the reference                                       */
 /* ------------------------------------------------------------------------ */
 
-/* The three fields of the window, each advanced to where a row's first cell
- * enters it, so that a cell is addressed by its own index and no position is
- * held against the window's bounds.
+/* The three window fields, each advanced to where a row's first cell enters
+ * the window, so a cell is addressed by its own index with no bounds check.
  *
- * A cell at k stands for reference prefix length j: it pairs the base before
- * it and lays an insertion at j itself, so a row enters the window over
- * [j0 - 1, j0 + width - 1] and nowhere else. Every one of those is a position
- * the window holds, window_of running it from one before the earliest position
- * any row names to the furthest any row names. A row is therefore a stretch of
- * the window at a fixed offset, and that is an invariant of window_of rather
- * than of anything here: a window covering less would not admit this.
+ * A cell at k denotes reference prefix length j: it pairs the base before it
+ * and lays an insertion at j, so a row touches the window over
+ * [j0 - 1, j0 + width - 1] and nowhere else. window_of sizes the window from
+ * one before the earliest position any row names to the furthest, so every
+ * such position is inside it. That a row is a contiguous stretch of the window
+ * at a fixed offset is an invariant of window_of, not of this function.
  *
- * A position past either end of the reference is not turned away. Some of what
- * the band names really does lie outside, a read placed near a boundary having
- * paths that leave it; which of them are worth keeping is the caller's to say,
- * and saying it twice would leave two places to look when the answer
- * changed. */
+ * Positions past either end of the reference are kept. Some of what the band
+ * names really does lie outside, since a read near a boundary has paths that
+ * leave it; the caller decides which to keep, and deciding it here as well
+ * would leave two places to change. */
 typedef struct {
     double *coverage;
     double *spanned;
@@ -729,21 +697,20 @@ static landing landing_of(const context *ctx, size_t i)
     };
 }
 
-/* What one event of each kind, believed to whatever degree a cell believes it,
- * is worth to the position it is laid at.
+/* What one event of each kind contributes to the position it is laid at, per
+ * unit of posterior.
  *
- * Each is the weight its kind carries and then everything the event's posterior
- * is a product with that a cell does not decide: for a deletion the step back
- * out of the run, and for an insertion the step into it and the flat emission
- * it carries. What is left for a cell is what a cell alone knows.
+ * Each is the kind's weight times every factor of the event's posterior that
+ * does not vary by cell: for a deletion, the step back out of the run; for an
+ * insertion, the step into it and the flat emission it carries.
  *
- * An insertion also carries the divisor of the row it opens on, every posterior
- * over a step between two rows doing so. That is the recursion and not the way
- * a row is stored -- what a row is stored as is undone by forward_at, and the
- * two would otherwise be easy to read as one thing.
+ * An insertion also carries the divisor of the row it opens on, as every
+ * posterior over a step between two rows does. That comes from the recursion,
+ * not from how a row is stored -- the latter is undone by forward_at, and the
+ * two are easily confused.
  *
- * Wanted only of a row that has one above it, an insertion opening on the first
- * row being an insertion nothing carried into. */
+ * Valid only for a row with one above it; an insertion on the first row is one
+ * nothing carried into. */
 typedef struct {
     double substitution;
     double deletion;
@@ -763,37 +730,33 @@ static weighing weighing_of(const context *ctx, size_t i)
     };
 }
 
-/* A pairing spans the position it pairs with and covers it as far as the base
- * is to be believed, and carries whatever of its posterior belongs to the
- * template having really differed. A deletion spans every position it passes
- * over, the read having reached them all, but covers none of them, there being
- * no base read there to believe; it is a modification only where it opened,
- * since one adduct stops one reverse transcriptase once, whatever length of
- * reference it then skipped. An insertion is counted the same way, at the
- * position it sits before, and neither spans nor covers anything.
+/* How each event contributes to the three per-position quantities.
  *
- * Every event laid down is then worth what its kind is worth, the three saying
- * different amounts about a modification whatever the posterior says about the
- * events themselves. The mutations alone are weighed: what a position was
- * reached by does not bear on its having been reached.
+ * A pairing spans the position it pairs with, covers it in proportion to the
+ * confidence in the base, and contributes the part of its posterior belonging
+ * to a real difference in the template. A deletion spans every position it
+ * passes over but covers none, there being no base read there; it counts as a
+ * modification only where it opened, one adduct stopping one reverse
+ * transcriptase once whatever length it then skipped. An insertion counts the
+ * same way, at the position it precedes, and neither spans nor covers.
  *
- * A deletion is laid where its run ends rather than where it begins because
- * reverse transcription reads the template from its 3' end, so the last base a
- * deletion passes over is the first the enzyme met, and the likeliest to carry
- * what stopped it. The two are the marginals of one joint over runs -- summing
- * either over the runs it can belong to gives the same expected number of
- * events -- so the choice moves where a deletion is counted and not how much of
- * it there is. What it ends against is the pairing on the row below, which the
- * backward pass left behind; what an insertion opens out of is the pairing on
- * the row above, which is still where the forward pass wrote it.
+ * Only the mutations are weighted by event kind. How a position was reached
+ * does not bear on whether it was reached.
  *
- * The row's own scaling is undone on the two states that are asked about, that
- * being cheaper than undoing it on the whole row as it was written.
+ * A deletion is laid at the end of its run, not its start, because reverse
+ * transcription reads the template from the 3' end: the last base a deletion
+ * passes over is the first the enzyme met and the likeliest to carry what
+ * stopped it. Both are marginals of one joint over runs, so the choice moves
+ * where a deletion is counted, not how much of it there is. A deletion ends
+ * against the pairing on the row below, left by the backward pass; an insertion
+ * opens out of the pairing on the row above, still where the forward pass
+ * wrote it.
  *
- * The first row is the alignment poised to begin and not yet begun. Its
- * posterior says where the read starts rather than what any base of it was set
- * against, and there is no base of it to ask about, so it contributes to
- * nothing. */
+ * The row's scaling is undone on the two states read here, which is cheaper
+ * than undoing it across the whole row as it was written.
+ *
+ * The first row is the alignment about to begin. Its posterior says where the
+ * read starts, not what any base was set against, so it contributes nothing. */
 static void accumulate_row(const context *ctx, size_t i)
 {
     phmm_scratch     *scratch  = ctx->scratch;
@@ -802,13 +765,11 @@ static void accumulate_row(const context *ctx, size_t i)
     const cell_terms *terms    = terms_of(ctx, i);
     const double     *pairings = scratch->pairings;
     hts_pos_t         width    = width_at(ctx, i);
-    /* An insertion belongs at the position its cell sits before, which is where
-     * the next cell lays what it pairs, so it is held here and laid on the
-     * iteration after. That leaves every cell entering one slot of the
-     * mutations and no other, where laying it ahead would have each cell read
-     * back a slot
-     * the cell before it had just written. The last cell has none after it, so
-     * its insertion is laid once the row is done. */
+    /* An insertion belongs at the position its cell precedes, which is where
+     * the next cell lays what it pairs. Carrying it to the following iteration
+     * keeps each cell writing one mutations slot and no other; laying it ahead
+     * would have every cell read back a slot the previous one just wrote. The
+     * last cell has no successor, so its insertion is laid after the loop. */
     double            carried  = 0.0;
     scaled_row        above;
     weighing          weight;
@@ -841,7 +802,7 @@ static void accumulate_row(const context *ctx, size_t i)
         at.coverage[k] += paired * confidence;
         at.spanned[k]  += paired + passed;
 
-        /* What the cell before this one opened, and then what this one lays. */
+        /* What the previous cell opened, then what this one lays. */
         at.mutations[k] += carried;
         at.mutations[k] += weight.substitution * paired * terms[k].modification
                          + weight.deletion * skipped * pairings[k];
@@ -852,9 +813,9 @@ static void accumulate_row(const context *ctx, size_t i)
     at.mutations[width] += carried;
 }
 
-/* Forward and backward have to describe the same set of paths, or what they
- * multiply out to are not posteriors at all. Every row coming to one is exactly
- * that statement, and it is cheap enough to make of one of them. */
+/* Forward and backward must describe the same set of paths, or their product
+ * is not a posterior. Every row summing to one is that statement, and checking
+ * a single row is cheap. */
 static bool normalized(const context *ctx)
 {
     scaled_row       front = scaled_row_of(ctx, 0);
@@ -907,14 +868,12 @@ void phmm_scratch_destroy(phmm_scratch *scratch)
     free(scratch);
 }
 
-/* Each buffer that grew is kept whether or not its neighbours did, so that a
- * scratch failing to grow is still the scratch it was, just larger in places
- * than it needs to be. Nothing here ever shrinks, a scratch being reused across
- * every read one worker sees.
+/* A buffer that grew is kept even if a later one fails, so a scratch that fails
+ * to grow is still usable, just larger in places than it needs to be. Nothing
+ * shrinks; a scratch is reused across every read one worker sees.
  *
- * The rows come first and alone, because how many there are is read off the
- * CIGAR, and the places must be somewhere to be written before they can say
- * how wide the widest row is. */
+ * The row buffers grow first and alone: their count comes from the CIGAR, and
+ * the places must be written before the widest row is known. */
 static int grow_rows(phmm_scratch *scratch, size_t rows)
 {
     aln_place *places;
@@ -939,8 +898,8 @@ static int grow_rows(phmm_scratch *scratch, size_t rows)
     return 0;
 }
 
-/* Sized by the rows and the widest row together, so a band wider than the last
- * read's regrows them however few rows this one needs. */
+/* Sized by rows times widest row, so a band wider than the previous read's
+ * triggers a regrow however few rows this one needs. */
 static int grow_band(phmm_scratch *scratch, size_t rows, size_t widest)
 {
     band_cell  *forward;
@@ -1010,9 +969,9 @@ static int grow_window(phmm_scratch *scratch, size_t window)
 /* ------------------------------------------------------------------------ */
 
 /* The widest row, which is the stride every row is stored at and the only width
- * the buffers have to answer for. One at least, so that a band asked for in bad
- * faith leaves a matrix that can be addressed rather than one that cannot; the
- * rows of it are then empty and the pass dies on the first of them. */
+ * the buffers must accommodate. At least one, so an absurd band still leaves an
+ * addressable matrix; its rows are then empty and the pass fails on the
+ * first. */
 static hts_pos_t widest_row(const context *ctx)
 {
     hts_pos_t widest = 1;
@@ -1027,11 +986,11 @@ static hts_pos_t widest_row(const context *ctx)
     return widest;
 }
 
-/* Every position a cell of any row can name, and the one before the earliest of
- * them, that being where the first cell of a row lays what it pairs. A row's
- * reach is what the CIGAR path crosses on it give or take its own half-width,
- * and a row further along may be narrower than one behind it, so neither end
- * belongs to a particular row and both are looked for. */
+/* Every position any cell can name, plus the one before the earliest, where a
+ * row's first cell lays what it pairs. A row reaches what the CIGAR path
+ * crosses on it, give or take its half-width, and a later row may be narrower
+ * than an earlier one, so neither end belongs to a fixed row and both are
+ * searched for. */
 static extent window_of(const context *ctx)
 {
     hts_pos_t first = origin_of(ctx, 0);
@@ -1053,8 +1012,8 @@ static extent window_of(const context *ctx)
     };
 }
 
-/* The window is added to and never assigned, so what one read leaves in it must
- * not reach the next. */
+/* The window is accumulated into, never assigned, so it must be cleared
+ * between reads. */
 static void clear_window(const context *ctx)
 {
     phmm_scratch *scratch = ctx->scratch;

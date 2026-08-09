@@ -4,8 +4,8 @@
  * records can be emitted in coordinate order however many there are and nothing
  * has to be sorted afterwards.
  *
- * What a reference looks like follows from the seed and its index alone, so one
- * of them is what it is whether or not the ones before it were asked for.
+ * A reference's content follows from the seed and its index alone, so any one
+ * of them is reproducible without generating those before it.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -22,7 +22,7 @@
 /* Bases per line of a FASTA record. */
 #define FASTA_LINE 60
 
-/* Names are generated rather than meaningful, so one bound serves them all. */
+/* Generated names, so one bound serves them all. */
 #define NAME_LEN 64
 
 #define PATH_LEN 4096
