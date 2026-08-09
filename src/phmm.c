@@ -112,7 +112,7 @@ typedef struct {
     aln_span               span;    /* the stretch of the read that is placed */
     size_t                 rows;    /* placed bases, and one row before them */
     hts_pos_t              widest;  /* cells the widest row holds */
-    extent                 window;  /* every position a cell of any row can name */
+    extent                 window;  /* every position a row lays anything at */
 } context;
 
 /* ------------------------------------------------------------------------ */
@@ -627,18 +627,39 @@ static void backward_row(const context *ctx, size_t i)
 /* What a row says about the reference                                       */
 /* ------------------------------------------------------------------------ */
 
-/* A position past either end of the reference is not turned away here. The
- * window is sized to hold every position the band can name and some of those
- * really do lie outside, a read placed near a boundary having paths that leave
- * it; which of them are worth keeping is the caller's to say, and saying it
- * twice would leave two places to look when the answer changed. */
-static void add_at(const context *ctx, double *field, hts_pos_t position,
-                   double value)
-{
-    hts_pos_t offset = position - ctx->window.origin;
+/* The three fields of the window, each advanced to where a row's first cell
+ * enters it, so that a cell is addressed by its own index and no position is
+ * held against the window's bounds.
+ *
+ * A cell at k stands for reference prefix length j: it pairs the base before
+ * it and lays an insertion at j itself, so a row enters the window over
+ * [j0 - 1, j0 + width - 1] and nowhere else. Every one of those is a position
+ * the window holds, window_of running it from one before the earliest position
+ * any row names to the furthest any row names. A row is therefore a stretch of
+ * the window at a fixed offset, and that is an invariant of window_of rather
+ * than of anything here: a window covering less would not admit this.
+ *
+ * A position past either end of the reference is not turned away. Some of what
+ * the band names really does lie outside, a read placed near a boundary having
+ * paths that leave it; which of them are worth keeping is the caller's to say,
+ * and saying it twice would leave two places to look when the answer changed. */
+typedef struct {
+    double *coverage;
+    double *spanned;
+    double *mutations;
+} landing;
 
-    if (offset >= 0 && (size_t)offset < ctx->window.len)
-        field[offset] += value;
+static landing landing_of(const context *ctx, size_t i)
+{
+    phmm_scratch *scratch = ctx->scratch;
+    size_t        at      = (size_t)(origin_of(ctx, i) - 1
+                                   - ctx->window.origin);
+
+    return (landing){
+        .coverage  = scratch->coverage + at,
+        .spanned   = scratch->spanned + at,
+        .mutations = scratch->mutations + at,
+    };
 }
 
 /* What one event of each kind, believed to whatever degree a cell believes it,
@@ -714,8 +735,16 @@ static void accumulate_row(const context *ctx, size_t i)
     const cell_terms *terms    = terms_of(ctx, i);
     const double     *pairings = scratch->pairings;
     hts_pos_t         width    = width_at(ctx, i);
+    /* An insertion belongs at the position its cell sits before, which is where
+     * the next cell lays what it pairs, so it is held here and laid on the
+     * iteration after. That leaves every cell entering one slot of the mutations
+     * and no other, where laying it ahead would have each cell read back a slot
+     * the cell before it had just written. The last cell has none after it, so
+     * its insertion is laid once the row is done. */
+    double            carried  = 0.0;
     scaled_row        above;
     weighing          weight;
+    landing           at;
     double            confidence;
     hts_pos_t         shift;
     hts_pos_t         above_width;
@@ -725,12 +754,12 @@ static void accumulate_row(const context *ctx, size_t i)
 
     above       = scaled_row_of(ctx, i - 1);
     weight      = weighing_of(ctx, i);
+    at          = landing_of(ctx, i);
     confidence  = confidence_at(ctx, i);
     shift       = shift_between(ctx, i - 1, i);
     above_width = width_at(ctx, i - 1);
 
     for (hts_pos_t k = 0; k < width; k++) {
-        hts_pos_t j       = position_of(ctx, i, k);
         hts_pos_t opening = k + shift;   /* this position, one row up */
         double    matched = forward_at(&front, k, STATE_MATCH);
         double    skipped = forward_at(&front, k, STATE_DELETION);
@@ -741,13 +770,18 @@ static void accumulate_row(const context *ctx, size_t i)
                           * back[k][STATE_INSERTION]
                           : 0.0;
 
-        add_at(ctx, scratch->coverage, j - 1, paired * confidence);
-        add_at(ctx, scratch->spanned, j - 1, paired + passed);
-        add_at(ctx, scratch->mutations, j - 1,
-               weight.substitution * paired * terms[k].modification
-             + weight.deletion * skipped * pairings[k]);
-        add_at(ctx, scratch->mutations, j, weight.insertion * opened);
+        at.coverage[k] += paired * confidence;
+        at.spanned[k]  += paired + passed;
+
+        /* What the cell before this one opened, and then what this one lays. */
+        at.mutations[k] += carried;
+        at.mutations[k] += weight.substitution * paired * terms[k].modification
+                         + weight.deletion * skipped * pairings[k];
+
+        carried = weight.insertion * opened;
     }
+
+    at.mutations[width] += carried;
 }
 
 /* Forward and backward have to describe the same set of paths, or what they
@@ -925,10 +959,11 @@ static hts_pos_t widest_row(const context *ctx)
     return widest;
 }
 
-/* Every position a cell of any row can name, from the one before the earliest
- * a band reaches to the last one does. A row's reach is its center give or take
- * its own half-width, and a row further along may be narrower than one behind
- * it, so neither end belongs to a particular row and both are looked for. */
+/* Every position a cell of any row can name, and the one before the earliest of
+ * them, that being where the first cell of a row lays what it pairs. A row's
+ * reach is what the CIGAR path crosses on it give or take its own half-width,
+ * and a row further along may be narrower than one behind it, so neither end
+ * belongs to a particular row and both are looked for. */
 static extent window_of(const context *ctx)
 {
     hts_pos_t first = origin_of(ctx, 0);
