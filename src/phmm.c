@@ -43,9 +43,9 @@ typedef double band_cell[N_STATES];
  * same of a row it has yet to reach, the deletion closing there wants it again,
  * and the accumulation wants how much of the pairing was a modification. All
  * four come of one comparison, which costs two nucleotide decodes and a quality
- * lookup, and which each of them used to make for itself. Kept for the whole
- * matrix rather than a row at a time: the backward pass reads a row the forward
- * pass wrote and left behind. */
+ * lookup, so it is made once and held rather than made again wherever it is
+ * wanted. Kept for the whole matrix rather than a row at a time: the backward
+ * pass reads a row the forward pass wrote and left behind. */
 typedef struct {
     double emission;
     double modification;
@@ -339,8 +339,8 @@ static hts_pos_t shift_between(const context *ctx, size_t from, size_t to)
     return origin_of(ctx, to) - origin_of(ctx, from);
 }
 
-/* Rows no longer share a width, so a cell index means nothing apart from the
- * row it indexes, and it is that row's width the index has to be held against.
+/* Rows do not share a width, so a cell index means nothing apart from the row
+ * it indexes, and it is that row's width the index has to be held against.
  * Holding it against another's is how the two passes would come to disagree
  * about which paths exist.
  *
