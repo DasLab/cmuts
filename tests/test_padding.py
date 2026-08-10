@@ -207,7 +207,7 @@ def test_a_reference_whose_reads_were_all_turned_away_is_zero(datasets, tmp_path
 
         for field, values in per_reference(handle).items():
             for name in reached:
-                assert values[row_of[name]] == 0 or field == "reads/filtered", \
+                assert values[row_of[name]] == 0 or field == "reads/rejected", \
                     f"{field}: {name} is not zero"
 
 

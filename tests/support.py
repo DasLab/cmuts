@@ -366,7 +366,7 @@ class Summary:
 def read_summary(path) -> Summary:
     with h5py.File(path, "r") as output:
         reads = output["reads/counted"][:]
-        rejected = output["reads/filtered"][:]
+        rejected = output["reads/rejected"][:]
 
         return Summary(
             kept=int(np.nansum(reads, dtype=np.float64)),

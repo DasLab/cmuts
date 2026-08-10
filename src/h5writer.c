@@ -45,7 +45,7 @@ typedef enum {
     OUT_ERROR,
     OUT_LENGTHS,
     OUT_READS,
-    OUT_FILTERED,
+    OUT_REJECTED,
     OUT_N_FIELDS,
 } out_field_id;
 
@@ -60,7 +60,7 @@ static const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     [OUT_ERROR]      = { "error",          ACCUM_MUTATIONS },
     [OUT_LENGTHS]    = { "reads/lengths",  ACCUM_LENGTHS   },
     [OUT_READS]      = { "reads/counted",  ACCUM_READS     },
-    [OUT_FILTERED]   = { "reads/filtered", ACCUM_FILTERED  },
+    [OUT_REJECTED]   = { "reads/rejected", ACCUM_FILTERED  },
 };
 
 #define RANK_SCALAR 1
