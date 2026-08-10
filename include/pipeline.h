@@ -19,6 +19,9 @@ typedef struct {
     const char        *fasta_path;
     const char        *output_path;
     bool               overwrite;
+    /* Evidence a position must carry before its rate is written rather than
+     * left NaN. Zero writes one wherever anything was spanned at all. */
+    double             min_depth;
     filter_config      filter_config;
     tally_config       tally_config;
     size_t      workers;         /* threads running the processing step */

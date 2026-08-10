@@ -17,7 +17,9 @@ import h5py
 import numpy as np
 import pytest
 
-from support import references_with_reads, rows_by_name, run_cmuts, sequences
+from support import (
+    RATES, references_with_reads, rows_by_name, run_cmuts, sequences,
+)
 
 # Higher than any mapping quality a read can carry, so every read is turned
 # away and the references themselves are all that is left.
@@ -34,6 +36,13 @@ PER_LENGTH = ("read_lengths",)
 def rectangular(output):
     """The arrays with a row per reference, whatever indexes the row."""
     return {name: output[name][:] for name in output if output[name].ndim == 2}
+
+
+def counts(output):
+    """The rows holding counts. The rates are NaN wherever the evidence did not
+    pass --min-depth, so NaN in them means that as well as padding, and what is
+    said below about padding alone is said of the counts."""
+    return {k: v for k, v in rectangular(output).items() if k not in RATES}
 
 
 def per_base(output):
@@ -97,7 +106,7 @@ def test_positions_within_a_reference_are_never_nan(ragged):
     with h5py.File(output, "r") as handle:
         row_of = rows_by_name(handle)
 
-        for field, values in rectangular(handle).items():
+        for field, values in counts(handle).items():
             width = values.shape[1]
             for name in reached:
                 within = values[row_of[name]][:row_extent(field, lengths[name], width)]
@@ -132,7 +141,7 @@ def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path
         assert any(lengths[name] < widest for name in missing), \
             "no uncovered reference is short enough to carry padding"
 
-        for field, values in rectangular(handle).items():
+        for field, values in counts(handle).items():
             width = values.shape[1]
             for name in missing:
                 row = values[row_of[name]]
@@ -165,7 +174,7 @@ def test_an_uncovered_reference_of_full_length_holds_no_nan(datasets, tmp_path):
         missing = [name for name in row_of if name not in reached]
         assert missing, "the shape under test covers every reference"
 
-        for field, values in rectangular(handle).items():
+        for field, values in counts(handle).items():
             for name in missing:
                 row = values[row_of[name]]
                 assert not np.isnan(row).any(), f"{field}: {name} holds a NaN"
@@ -189,7 +198,7 @@ def test_a_reference_whose_reads_were_all_turned_away_is_zero(datasets, tmp_path
     with h5py.File(output, "r") as handle:
         row_of = rows_by_name(handle)
 
-        for field, values in rectangular(handle).items():
+        for field, values in counts(handle).items():
             width = values.shape[1]
             for name in reached:
                 within = values[row_of[name]][:row_extent(field, lengths[name], width)]
@@ -200,3 +209,62 @@ def test_a_reference_whose_reads_were_all_turned_away_is_zero(datasets, tmp_path
             for name in reached:
                 assert values[row_of[name]] == 0 or field == "reads_filtered", \
                     f"{field}: {name} is not zero"
+
+
+# ---------------------------------------------------------------------------
+# What NaN means in a rate
+# ---------------------------------------------------------------------------
+
+
+def test_a_rate_is_nan_where_the_evidence_falls_short(datasets, tmp_path):
+    """The rates carry NaN for two reasons where the counts carry it for one: a
+    column outside its reference, and one inside it the evidence did not reach.
+
+    Coverage tells the two apart, being NaN for the first alone, and raising
+    --min-depth can only ever add the second.
+    """
+    data = datasets("patchy")
+    seen = {}
+
+    for depth in (0, 1, 5):
+        output = tmp_path / f"depth{depth}.h5"
+        run_cmuts(data, output, min_depth=depth)
+
+        with h5py.File(output, "r") as handle:
+            reactivity = handle["reactivity"][:]
+            error = handle["error"][:]
+            coverage = handle["coverage"][:]
+
+        assert np.array_equal(np.isnan(reactivity), np.isnan(error)), \
+            f"depth {depth}: the rate and its error disagree about what is known"
+
+        # Padding is not part of any reference, so no rate is had there either.
+        assert np.isnan(reactivity[np.isnan(coverage)]).all(), \
+            f"depth {depth}: a rate outside a reference is not NaN"
+
+        finite = reactivity[~np.isnan(reactivity)]
+        assert finite.size, f"depth {depth}: no position carries a rate at all"
+        assert ((finite >= 0) & (finite <= 1)).all(), \
+            f"depth {depth}: a rate is outside nought to one"
+
+        seen[depth] = np.isnan(reactivity)
+
+    assert (seen[1] >= seen[0]).all(), "asking for more evidence recovered a rate"
+    assert (seen[5] >= seen[1]).all(), "asking for more evidence recovered a rate"
+    assert seen[5].sum() > seen[0].sum(), "the depths under test ask the same thing"
+
+
+def test_a_whole_read_of_evidence_bounds_the_error(datasets, tmp_path):
+    """A standard error of a proportion over n cannot exceed a half, and does so
+    only where n is below one, which is what --min-depth exists to exclude."""
+    data = datasets("patchy")
+    output = tmp_path / "bounded.h5"
+    run_cmuts(data, output, min_depth=1)
+
+    with h5py.File(output, "r") as handle:
+        error = handle["error"][:]
+
+    finite = error[~np.isnan(error)]
+
+    assert finite.size, "no position carries an error at all"
+    assert finite.max() <= 0.5, f"an error of {finite.max()} over a whole read"

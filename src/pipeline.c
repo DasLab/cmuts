@@ -638,7 +638,7 @@ static int pipeline_open_output(pipeline *p, const pipeline_config *cfg,
                                 bool may_replace, char *error, size_t error_len)
 {
     p->out = h5writer_create(cfg->output_path, cm_bam_stream_nref(p->bam), p->ref_cap,
-                             may_replace);
+                             cfg->min_depth, may_replace);
     if (!p->out) {
         snprintf(error, error_len, "out of memory");
         return -1;

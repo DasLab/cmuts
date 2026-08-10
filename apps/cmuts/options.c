@@ -90,6 +90,20 @@ static const cli_option OPTIONS[] = {
                 "as written. Nothing bounds it above, and a band wide enough to "
                 "exhaust memory ends the run.",
       .minimum = 0, .maximum = CLI_UNBOUNDED },
+    { .group = "Counting", .name = "min-depth", .type = OPT_DOUBLE,
+      .offset = offsetof(cli_args, pipeline.min_depth), .metavar = "D",
+      .help = "evidence a position needs before its rate is written",
+      .detail = "A reactivity is the mutations at a position over the evidence "
+                "for them, and the error is what that evidence makes of it. "
+                "Below this both are left NaN: no rate can be had from nothing, "
+                "and one had from almost nothing is a number a caller would have "
+                "to know to distrust. The default of 0 writes a rate wherever "
+                "anything was spanned at all, and 1 asks for a whole read's "
+                "worth. Coverage is written whatever this says, so what a "
+                "position was reached by is there to be read even where no rate "
+                "is.",
+      .minimum = 0, .maximum = CLI_UNBOUNDED },
+
     { .group = "Counting", .name = "substitution-weight", .type = OPT_DOUBLE,
       .offset = offsetof(cli_args,
                          pipeline.tally_config.weights.weight[PHMM_SUBSTITUTION]),

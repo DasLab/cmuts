@@ -10,9 +10,13 @@
 /* The quantities every accumulator carries.
  *
  * This enum and ACCUM_FIELDS are the single source of truth for the layout:
- * allocation, zeroing, merging and output all derive from them, and nothing
- * else in the pipeline inspects an accumulator's contents. Adding a quantity
- * means adding one enumerator and one table row. */
+ * allocation, zeroing and merging all derive from them, and nothing else in the
+ * pipeline inspects an accumulator's contents. Adding a quantity means adding
+ * one enumerator and one table row.
+ *
+ * What is written is no longer this. The mutations and the span are the
+ * evidence a run gathers and the output holds the rate they come to, so
+ * h5writer keeps a table of its own and takes only its shapes from here. */
 typedef enum {
     ACCUM_COVERAGE,
     ACCUM_SPANNED,

@@ -418,7 +418,12 @@ def outputs_agree(first, second) -> bool:
         return set(a) == set(b) and all(_datasets_agree(a[k], b[k]) for k in a)
 
 
+# Rates, not counts: two files hold twice the reads and the same reactivity.
+RATES = ("reactivity", "error")
+
+
 def counted_fields(path):
     """The datasets holding counts, which are the ones arithmetic applies to."""
     with h5py.File(path, "r") as output:
-        return [k for k in output if np.issubdtype(output[k].dtype, np.floating)]
+        return [k for k in output
+                if np.issubdtype(output[k].dtype, np.floating) and k not in RATES]

@@ -35,18 +35,48 @@
 /* A scalar field is one value per reference; every other kind is a reference by
  * something, and so a row. Both shapes are described through the same arrays,
  * which are sized to the larger. */
+/* What the output holds, which is no longer what the accumulator holds. The
+ * mutations and the span are the evidence gathered; what a caller wants is the
+ * rate they come to and how far it is to be believed, so those are what is
+ * written and the two they are made of stay inside. */
+typedef enum {
+    OUT_COVERAGE,
+    OUT_REACTIVITY,
+    OUT_ERROR,
+    OUT_LENGTHS,
+    OUT_READS,
+    OUT_FILTERED,
+    OUT_N_FIELDS,
+} out_field_id;
+
+typedef struct {
+    const char    *name;
+    accum_field_id shape;   /* the accumulated field whose extent it takes */
+} out_field;
+
+static const out_field OUT_FIELDS[OUT_N_FIELDS] = {
+    [OUT_COVERAGE]   = { "coverage",       ACCUM_COVERAGE  },
+    [OUT_REACTIVITY] = { "reactivity",     ACCUM_MUTATIONS },
+    [OUT_ERROR]      = { "error",          ACCUM_MUTATIONS },
+    [OUT_LENGTHS]    = { "read_lengths",   ACCUM_LENGTHS   },
+    [OUT_READS]      = { "reads",          ACCUM_READS     },
+    [OUT_FILTERED]   = { "reads_filtered", ACCUM_FILTERED  },
+};
+
 #define RANK_SCALAR 1
 #define RANK_VECTOR 2
 #define RANK_MAX    RANK_VECTOR
 
 struct h5writer {
     hid_t   file;
-    hid_t   dataset[ACCUM_N_FIELDS];
+    hid_t   dataset[OUT_N_FIELDS];
     int32_t n_refs;
     size_t  ref_cap;
     /* NaN, as wide as the longest tail any row can have, so marking one is a
      * write and not a fill each time. */
     double *padding;
+    double *row;        /* what a derived field is worked out into */
+    double  min_depth;  /* below which a rate is not worth having */
     char    error[CM_ERROR_MAX];
 };
 
@@ -95,16 +125,22 @@ static hsize_t rows_per_chunk(const h5writer *w, size_t row_values)
     return rows;
 }
 
-static int field_rank(accum_field_id id)
+static size_t out_extent(out_field_id id, size_t len, size_t cap)
 {
-    return ACCUM_FIELDS[id].kind == ACCUM_SCALAR ? RANK_SCALAR : RANK_VECTOR;
+    return accum_extent(OUT_FIELDS[id].shape, len, cap);
+}
+
+static int field_rank(out_field_id id)
+{
+    return ACCUM_FIELDS[OUT_FIELDS[id].shape].kind == ACCUM_SCALAR
+         ? RANK_SCALAR : RANK_VECTOR;
 }
 
 /* The width of a row is the field's own extent at the longest reference, so a
  * field wider than one value per base is sized by the same rule as the rest. */
-static void field_shape(const h5writer *w, accum_field_id id, hsize_t *dims, hsize_t *chunk)
+static void field_shape(const h5writer *w, out_field_id id, hsize_t *dims, hsize_t *chunk)
 {
-    size_t width = accum_extent(id, w->ref_cap, w->ref_cap);
+    size_t width = out_extent(id, w->ref_cap, w->ref_cap);
 
     dims[0]  = (hsize_t)w->n_refs;
     chunk[0] = rows_per_chunk(w, width);
@@ -115,17 +151,28 @@ static void field_shape(const h5writer *w, accum_field_id id, hsize_t *dims, hsi
     }
 }
 
-/* Zero, for every field. A position no read reached was reached by no read,
+/* Zero for what is counted, and NaN for what is derived from it.
+ *
+ * A position no read reached was reached by no read, which is what a count of
+ * zero says. A rate is not a count: a reference no read named has no rate, and
+ * filling one with zero would say its every position was measured and found
+ * unmodified, which is the most confident thing the output can say and it would
+ * be saying it about nothing at all. */
+static float field_fill(out_field_id id)
+{
+    return id == OUT_REACTIVITY || id == OUT_ERROR ? (float)NAN : 0.0f;
+}
+
+/* Zero, for every counted field. A position no read reached was reached by no read,
  * which is what a count of zero says, and a reference no read named is only
  * that case for all of its bases at once. What zero must not be taken for is a
  * position outside the reference altogether; those are marked NaN as the row is
  * written, there being no second fill value to say it. */
 #define FILL_VALUE 0.0f
 
-static hid_t make_layout(const hsize_t *chunk, int rank)
+static hid_t make_layout(const hsize_t *chunk, int rank, float fill)
 {
-    hid_t dcpl  = untimed_plist(H5P_DATASET_CREATE);
-    float fill = FILL_VALUE;
+    hid_t dcpl = untimed_plist(H5P_DATASET_CREATE);
 
     if (dcpl < 0)
         return H5I_INVALID_HID;
@@ -162,7 +209,7 @@ static hid_t make_access(const hsize_t *chunk, int rank)
     return dapl;
 }
 
-static hid_t create_field(h5writer *w, accum_field_id id)
+static hid_t create_field(h5writer *w, out_field_id id)
 {
     hsize_t dims[RANK_MAX]  = { 0, 0 };
     hsize_t chunk[RANK_MAX] = { 0, 0 };
@@ -172,13 +219,13 @@ static hid_t create_field(h5writer *w, accum_field_id id)
     field_shape(w, id, dims, chunk);
 
     space = H5Screate_simple(rank, dims, NULL);
-    dcpl  = make_layout(chunk, rank);
+    dcpl  = make_layout(chunk, rank, field_fill(id));
     dapl  = make_access(chunk, rank);
 
     if (space < 0 || dcpl < 0 || dapl < 0) {
         dataset = H5I_INVALID_HID;
     } else {
-        dataset = H5Dcreate2(w->file, ACCUM_FIELDS[id].name, H5T_IEEE_F32LE,
+        dataset = H5Dcreate2(w->file, OUT_FIELDS[id].name, H5T_IEEE_F32LE,
                              space, H5P_DEFAULT, dcpl, dapl);
     }
 
@@ -194,7 +241,7 @@ static hid_t create_field(h5writer *w, accum_field_id id)
 /* ------------------------------------------------------------------------ */
 
 h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
-                          bool overwrite)
+                          double min_depth, bool overwrite)
 {
     hid_t     fcpl;
     h5writer *w = calloc(1, sizeof *w);
@@ -207,9 +254,11 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
 
     w->n_refs  = n_refs;
     w->ref_cap = ref_cap;
-    w->padding = calloc(ref_cap ? ref_cap : 1, sizeof *w->padding);
+    w->min_depth = min_depth;
+    w->padding   = calloc(ref_cap ? ref_cap : 1, sizeof *w->padding);
+    w->row       = calloc(ref_cap ? ref_cap : 1, sizeof *w->row);
 
-    if (!w->padding) {
+    if (!w->padding || !w->row) {
         fail(w, "out of memory");
         return w;
     }
@@ -217,7 +266,7 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
     for (size_t i = 0; i < ref_cap; i++)
         w->padding[i] = (double)NAN;
 
-    for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++)
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++)
         w->dataset[id] = H5I_INVALID_HID;
 
     fcpl = untimed_plist(H5P_FILE_CREATE);
@@ -237,7 +286,7 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
         return w;
     }
 
-    for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++) {
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
         w->dataset[id] = create_field(w, id);
         if (w->dataset[id] < 0) {
             fail(w, "unable to create a dataset");
@@ -253,13 +302,14 @@ void h5writer_close(h5writer *w)
     if (!w)
         return;
 
-    for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++)
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++)
         if (w->dataset[id] >= 0)
             H5Dclose(w->dataset[id]);
 
     if (w->file >= 0)
         H5Fclose(w->file);
 
+    free(w->row);
     free(w->padding);
     free(w);
 }
@@ -300,7 +350,7 @@ static int select_row(hid_t dataset, int32_t tid, size_t from, size_t width,
     return 0;
 }
 
-static int write_part(h5writer *w, accum_field_id id, int32_t tid, size_t from,
+static int write_part(h5writer *w, out_field_id id, int32_t tid, size_t from,
                       size_t n, const double *values)
 {
     hid_t  filespace, memspace;
@@ -326,13 +376,66 @@ static int write_part(h5writer *w, accum_field_id id, int32_t tid, size_t from,
  * returning to it later costs reading, inflating and deflating that chunk
  * again. Where a reference is as long as the longest there is no tail, which on
  * a library of one length is every reference. */
-static int write_field(h5writer *w, accum_field_id id, int32_t tid, size_t len,
+/* The rate a position's mutations come to against the evidence for them, and
+ * how far that rate is to be believed.
+ *
+ * Both are NaN where the evidence does not pass min_depth. No rate can be had
+ * from nothing at all, and one had from almost nothing is a number a caller
+ * would have to know to distrust; NaN is the value nothing reads as a
+ * measurement. It is the one place NaN means two things in this output -- a
+ * position outside its reference, and one inside it that nothing reached --
+ * and coverage tells them apart, being NaN for the first alone.
+ *
+ * The standard error is that of a proportion over the evidence standing as its
+ * count. The rate cannot exceed one, every weight being a share of an event and
+ * an insertion spanning what it lays, so the root is of nothing negative.
+ */
+static const double *derived(h5writer *w, out_field_id id, const accum *acc,
+                             size_t len)
+{
+    const double *mutations = accum_const_data(acc, ACCUM_MUTATIONS);
+    const double *spanned   = accum_const_data(acc, ACCUM_SPANNED);
+
+    for (size_t i = 0; i < len; i++) {
+        double evidence = spanned[i];
+        double rate     = evidence > 0 ? mutations[i] / evidence : 0.0;
+
+        if (rate > 1.0)
+            rate = 1.0;
+
+        w->row[i] = evidence > w->min_depth
+                  ? (id == OUT_REACTIVITY
+                        ? rate
+                        : sqrt(rate * (1.0 - rate) / evidence))
+                  : (double)NAN;
+    }
+
+    return w->row;
+}
+
+static const double *values(h5writer *w, out_field_id id, const accum *acc,
+                            size_t len)
+{
+    if (id == OUT_REACTIVITY || id == OUT_ERROR)
+        return derived(w, id, acc, len);
+
+    return accum_const_data(acc, OUT_FIELDS[id].shape);
+}
+
+/* The reference's own values, and then the mark for the columns past them.
+ *
+ * The tail is written with the row rather than swept up at the end: a row and
+ * its tail share a chunk, so marking it now costs a chunk already in hand where
+ * returning to it later costs reading, inflating and deflating that chunk
+ * again. Where a reference is as long as the longest there is no tail, which on
+ * a library of one length is every reference. */
+static int write_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
                        const accum *acc)
 {
-    size_t extent = accum_extent(id, len, w->ref_cap);
-    size_t width  = accum_extent(id, w->ref_cap, w->ref_cap);
+    size_t extent = out_extent(id, len, w->ref_cap);
+    size_t width  = out_extent(id, w->ref_cap, w->ref_cap);
 
-    if (write_part(w, id, tid, 0, extent, accum_const_data(acc, id)) < 0)
+    if (write_part(w, id, tid, 0, extent, values(w, id, acc, extent)) < 0)
         return -1;
 
     if (extent == width)
@@ -349,7 +452,7 @@ int h5writer_row(h5writer *w, int32_t tid, size_t len, const accum *acc)
     if (len == 0)
         return 0;
 
-    for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++)
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++)
         if (write_field(w, id, tid, len, acc) < 0)
             return -1;
 

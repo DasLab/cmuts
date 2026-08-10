@@ -138,4 +138,4 @@ def test_a_band_narrower_than_the_gap_leaves_the_placements_apart(tmp_path, case
 
     narrow = written_rows(tmp_path / "narrow.h5", len(cigars))
 
-    assert spread(narrow["mutations"]) > DIVIDED
+    assert spread(narrow["reactivity"]) > DIVIDED
