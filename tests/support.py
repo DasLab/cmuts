@@ -443,5 +443,7 @@ def datasets_of(handle) -> dict:
 def counted_fields(path):
     """The datasets holding counts, which are the ones arithmetic applies to."""
     with h5py.File(path, "r") as output:
+        # Counts are unsigned and coverage is a float; both are added over. The
+        # rates are neither, two files holding twice the reads and one rate.
         return [k for k, d in datasets_of(output).items()
-                if np.issubdtype(d.dtype, np.floating) and k not in RATES]
+                if d.ndim >= 1 and k not in RATES and k != "reference"]

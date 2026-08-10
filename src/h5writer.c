@@ -49,18 +49,24 @@ typedef enum {
     OUT_N_FIELDS,
 } out_field_id;
 
+/* A count is whole however it was accumulated: the arena is doubles throughout,
+ * so that any two accumulators merge, and what is only ever a tally of ones
+ * comes back out of it as one. Written as a float it would round above two to
+ * the twenty-fourth, which a deeply read reference passes. What is fractional
+ * in its own right -- the coverage, the rate, its error -- stays float. */
 typedef struct {
     const char    *name;
     accum_field_id shape;   /* the accumulated field whose extent it takes */
+    bool           counted; /* whole, and written as an unsigned */
 } out_field;
 
 static const out_field OUT_FIELDS[OUT_N_FIELDS] = {
-    [OUT_COVERAGE]   = { "coverage",       ACCUM_COVERAGE  },
-    [OUT_REACTIVITY] = { "reactivity",     ACCUM_MUTATIONS },
-    [OUT_ERROR]      = { "error",          ACCUM_MUTATIONS },
-    [OUT_LENGTHS]    = { "reads/lengths",  ACCUM_LENGTHS   },
-    [OUT_READS]      = { "reads/counted",  ACCUM_READS     },
-    [OUT_REJECTED]   = { "reads/rejected", ACCUM_FILTERED  },
+    [OUT_COVERAGE]   = { "coverage",       ACCUM_COVERAGE, false },
+    [OUT_REACTIVITY] = { "reactivity",     ACCUM_MUTATIONS, false },
+    [OUT_ERROR]      = { "error",          ACCUM_MUTATIONS, false },
+    [OUT_LENGTHS]    = { "reads/lengths",  ACCUM_LENGTHS, true },
+    [OUT_READS]      = { "reads/counted",  ACCUM_READS, true },
+    [OUT_REJECTED]   = { "reads/rejected", ACCUM_FILTERED, true },
 };
 
 #define RANK_SCALAR 1
@@ -159,9 +165,25 @@ static void field_shape(const h5writer *w, out_field_id id, hsize_t *dims, hsize
  * filling one with zero would say its every position was measured and found
  * unmodified, which is the most confident thing the output can say and it would
  * be saying it about nothing at all. */
-static float field_fill(out_field_id id)
+static hid_t field_type(out_field_id id)
 {
-    return id == OUT_REACTIVITY || id == OUT_ERROR ? (float)NAN : 0.0f;
+    return OUT_FIELDS[id].counted ? H5T_STD_U64LE : H5T_IEEE_F32LE;
+}
+
+/* Zero for a count and for what is measured, NaN for a rate that was not. A
+ * count has no NaN to be had, being an unsigned, and needs none: nothing it is
+ * written for has padding. */
+static const void *field_fill(out_field_id id)
+{
+    static const uint64_t none = 0;
+    static const float    zero = 0.0f;
+    static const float    nan  = (float)NAN;
+
+    if (OUT_FIELDS[id].counted)
+        return &none;
+
+    return id == OUT_REACTIVITY || id == OUT_ERROR ? (const void *)&nan
+                                                   : (const void *)&zero;
 }
 
 /* Zero, for every counted field. A position no read reached was reached by no read,
@@ -171,7 +193,8 @@ static float field_fill(out_field_id id)
  * written, there being no second fill value to say it. */
 #define FILL_VALUE 0.0f
 
-static hid_t make_layout(const hsize_t *chunk, int rank, float fill)
+static hid_t make_layout(const hsize_t *chunk, int rank, hid_t type,
+                         const void *fill)
 {
     hid_t dcpl = untimed_plist(H5P_DATASET_CREATE);
 
@@ -179,7 +202,7 @@ static hid_t make_layout(const hsize_t *chunk, int rank, float fill)
         return H5I_INVALID_HID;
 
     if (H5Pset_chunk(dcpl, rank, chunk) < 0 ||
-        H5Pset_fill_value(dcpl, H5T_NATIVE_FLOAT, &fill) < 0 ||
+        H5Pset_fill_value(dcpl, type, fill) < 0 ||
         H5Pset_fill_time(dcpl, H5D_FILL_TIME_ALLOC) < 0 ||
         H5Pset_shuffle(dcpl) < 0 ||
         H5Pset_deflate(dcpl, DEFLATE_LEVEL) < 0) {
@@ -220,13 +243,13 @@ static hid_t create_field(h5writer *w, out_field_id id)
     field_shape(w, id, dims, chunk);
 
     space = H5Screate_simple(rank, dims, NULL);
-    dcpl  = make_layout(chunk, rank, field_fill(id));
+    dcpl  = make_layout(chunk, rank, field_type(id), field_fill(id));
     dapl  = make_access(chunk, rank);
 
     if (space < 0 || dcpl < 0 || dapl < 0) {
         dataset = H5I_INVALID_HID;
     } else {
-        dataset = H5Dcreate2(w->file, OUT_FIELDS[id].name, H5T_IEEE_F32LE,
+        dataset = H5Dcreate2(w->file, OUT_FIELDS[id].name, field_type(id),
                              space, H5P_DEFAULT, dcpl, dapl);
     }
 

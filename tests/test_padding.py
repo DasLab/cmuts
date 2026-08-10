@@ -60,7 +60,7 @@ def per_reference(output):
     return {
         k: d[:]
         for k, d in datasets_of(output).items()
-        if d.ndim == 1 and np.issubdtype(d.dtype, np.floating)
+        if d.ndim == 1 and k != "reference"
     }
 
 
