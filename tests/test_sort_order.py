@@ -8,7 +8,7 @@ import subprocess
 
 import pytest
 
-from support import Dataset, reheadered, try_cmuts
+from support import counted, reheadered, try_cmuts
 
 
 def test_a_coordinate_sorted_file_is_accepted(data, tmp_path):
@@ -21,10 +21,7 @@ def test_a_name_sorted_file_is_refused(data, tmp_path):
         subprocess.run(["samtools", "sort", "-n", str(data.bam)],
                        check=True, stdout=handle, stderr=subprocess.DEVNULL)
 
-    attempt = try_cmuts(
-        Dataset(bams=(bam,), fasta=data.fasta, mapped=0, unmapped=0, touched=0),
-        tmp_path / "out.h5",
-    )
+    attempt = try_cmuts(counted((bam,), data.fasta), tmp_path / "out.h5")
 
     assert attempt.returncode != 0
     assert "not coordinate sorted" in attempt.stderr

@@ -2,12 +2,12 @@
 
 import contextlib
 import os
+from dataclasses import replace
 
 import pytest
 
 from conftest import SHAPES
 from support import (
-    Dataset,
     assert_counts_agree,
     converted,
     outputs_agree,
@@ -117,8 +117,7 @@ def test_cram_decodes_against_the_reference_it_was_given(datasets, tmp_path):
 
     moved = tmp_path / "elsewhere.fasta"
     moved.write_bytes(data.fasta.read_bytes())
-    hidden = Dataset(bams=data.bams, fasta=moved, mapped=data.mapped,
-                     unmapped=data.unmapped, touched=data.touched)
+    hidden = replace(data, fasta=moved)
 
     run_cmuts(datasets("plain"), tmp_path / "bam.h5")
 

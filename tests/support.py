@@ -65,6 +65,24 @@ class Dataset:
         return bam
 
 
+def counted(bams, fasta) -> Dataset:
+    """A dataset whose totals are measured from the files rather than stated
+    about them, so that a caller cannot state one that is not so.
+
+    For the transforms below the totals carry over by construction and are kept
+    rather than counted again, which on a CRAM is not cheap.
+    """
+    bams = tuple(bams)
+
+    return Dataset(
+        bams=bams,
+        fasta=fasta,
+        mapped=sum(_count(bam, "-F", 4) for bam in bams),
+        unmapped=sum(_count(bam, "-f", 4) for bam in bams),
+        touched=len({name for bam in bams for name in references_with_reads(bam)}),
+    )
+
+
 def generate(directory, name: str, **parameters) -> Dataset:
     prefix = Path(directory) / name
     command = [CMUTS_GEN, "-o", prefix]
@@ -74,14 +92,7 @@ def generate(directory, name: str, **parameters) -> Dataset:
 
     _run(command)
 
-    bam = Path(f"{prefix}.bam")
-    return Dataset(
-        bams=(bam,),
-        fasta=Path(f"{prefix}.fasta"),
-        mapped=_count(bam, "-F", 4),
-        unmapped=_count(bam, "-f", 4),
-        touched=len(references_with_reads(bam)),
-    )
+    return counted((Path(f"{prefix}.bam"),), Path(f"{prefix}.fasta"))
 
 
 def converted(data: Dataset, directory, fmt: str) -> Dataset:
@@ -109,12 +120,12 @@ def dealt_out(data: Dataset, directory, parts: int) -> Dataset:
     Nothing is added or lost, so the totals carry over.
     """
     header = _run(["samtools", "view", "-H", data.bam]).stdout
-    records = _records(data.bam)
+    lines = records(data.bam)
     written = []
 
     for i in range(parts):
         sam = Path(directory) / f"part{i}.sam"
-        sam.write_text(header + "".join(line + "\n" for line in records[i::parts]))
+        sam.write_text(header + "".join(line + "\n" for line in lines[i::parts]))
 
         bam = Path(directory) / f"part{i}.bam"
         _run(["samtools", "view", "-b", "-o", bam, sam])
@@ -133,7 +144,7 @@ def with_secondary(data: Dataset, directory, every: int):
     marked = 0
     lines = []
 
-    for i, record in enumerate(_records(data.bam)):
+    for i, record in enumerate(records(data.bam)):
         columns = record.split("\t")
         flag = int(columns[1])
 
@@ -238,12 +249,13 @@ def _count(bam, *flags) -> int:
     return int(_run(["samtools", "view", "-c", *flags, bam]).stdout)
 
 
-def _records(bam, *flags):
+def records(bam, *flags):
+    """Every alignment of a file, as the lines samtools prints for it."""
     return [line for line in _run(["samtools", "view", *flags, bam]).stdout.splitlines() if line]
 
 
 def references_with_reads(bam) -> set:
-    return {line.split("\t")[2] for line in _records(bam, "-F", "4")}
+    return {line.split("\t")[2] for line in records(bam, "-F", "4")}
 
 
 def samtools_kept(
@@ -258,7 +270,7 @@ def samtools_kept(
     are excluded here as cmuts excludes them, whatever the criteria.
     """
     flags = ("-F", "0x104", "-q", str(min_mapq), *STRAND_FLAGS[strand])
-    lengths = (len(line.split("\t")[9]) for line in _records(data.bam, *flags))
+    lengths = (len(line.split("\t")[9]) for line in records(data.bam, *flags))
 
     return sum(
         1
@@ -280,7 +292,7 @@ def samtools_length_histogram(
     flags = ("-F", "0x104", "-q", str(min_mapq), *STRAND_FLAGS[strand])
     counts = defaultdict(Counter)
 
-    for line in _records(data.bam, *flags):
+    for line in records(data.bam, *flags):
         columns = line.split("\t")
         counts[columns[2]][len(columns[9])] += 1
 
@@ -319,7 +331,7 @@ def md_and_nm_tags(bam):
     """The MD and NM of every record, in file order."""
     return [
         tuple(tag for tag in line.split("\t")[11:] if tag.startswith(("MD:", "NM:")))
-        for line in _records(bam)
+        for line in records(bam)
     ]
 
 
