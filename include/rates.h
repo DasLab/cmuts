@@ -29,8 +29,13 @@ rate_config rate_defaults(void);
  * Both are NaN where the evidence falls short, which is the one thing a caller
  * cannot mistake for a measurement. Which positions those are is the same for
  * the two, so a caller reading one knows what the other holds.
+ *
+ * out is written as the accumulator is read, so it must not be one of the
+ * accumulator's own arrays: a position's evidence is wanted after the position
+ * before it has been written. Somewhere of the caller's own, which is what
+ * restrict says and what the writer's scratch row is.
  */
 void rate_reactivity(const rate_config *cfg, const accum *acc, size_t len,
-                     double *out);
+                     double *restrict out);
 void rate_error(const rate_config *cfg, const accum *acc, size_t len,
-                double *out);
+                double *restrict out);
