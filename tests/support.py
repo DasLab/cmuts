@@ -4,6 +4,10 @@ samtools is the oracle: it decides independently how many reads should survive
 a set of criteria, and the tests ask only whether cmuts agrees. Nothing here
 inspects what the processing step computed, so these tests stay valid however
 that changes.
+
+Alignments built here by hand have no oracle. They carry an ambiguity the
+reference cannot resolve, and what is asked of them is that cmuts answers it the
+same way however the ambiguity was written down.
 """
 
 from __future__ import annotations
@@ -163,6 +167,52 @@ def reheadered(data: Dataset, directory, transform) -> Dataset:
                        check=True, stdout=handle, stderr=subprocess.DEVNULL)
 
     return replace(data, bams=(bam,))
+
+
+# ---------------------------------------------------------------------------
+# Hand-built alignments
+# ---------------------------------------------------------------------------
+
+# Clear of every bound the filter applies by default, so a hand-built read is
+# dropped only where a test asks for it.
+MAPQ = 60
+
+# One score for every base, high enough that a misread is not what explains a
+# difference from the reference.
+BASE_QUALITY = "I"
+
+
+def placements(directory, name, reference, read, cigars) -> Dataset:
+    """The same read against the same reference under each CIGAR, one reference
+    per CIGAR so that a single run scores them all.
+
+    Every reference holds the same sequence and carries one read, so the rows of
+    the output differ only in how the alignment was written. Each is named after
+    the CIGAR it carries, which is what a failure has to report.
+
+    SAM is written directly: cmuts reads it as it reads BAM, and neither an
+    index nor a conversion is needed for a file this size.
+    """
+    prefix = Path(directory) / name
+    fasta = Path(f"{prefix}.fasta")
+    sam = Path(f"{prefix}.sam")
+
+    fasta.write_text("".join(f">{cigar}\n{reference}\n" for cigar in cigars))
+
+    lines = ["@HD\tVN:1.6\tSO:coordinate"]
+    lines += [f"@SQ\tSN:{cigar}\tLN:{len(reference)}" for cigar in cigars]
+    lines += [
+        f"r\t0\t{cigar}\t1\t{MAPQ}\t{cigar}\t*\t0\t0\t{read}"
+        f"\t{BASE_QUALITY * len(read)}"
+        for cigar in cigars
+    ]
+
+    sam.write_text("".join(line + "\n" for line in lines))
+
+    return Dataset(
+        bams=(sam,), fasta=fasta,
+        mapped=len(cigars), unmapped=0, touched=len(cigars),
+    )
 
 
 # ---------------------------------------------------------------------------
