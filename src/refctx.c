@@ -160,16 +160,22 @@ void ctxpool_destroy(ctxpool *p)
     free(p);
 }
 
+/* The queue carries a void *, and one is converted to and from a refctx *
+ * through a slot of its own rather than by reading this pointer as though it
+ * were one. Only void * and char * are promised the same representation as
+ * every other object pointer, so the two are not the same thing to alias. */
 refctx *ctxpool_take(ctxpool *p)
 {
-    refctx *ctx = NULL;
+    void *slot = NULL;
 
-    return queue_pop(p->available, (void **)&ctx, 1) == 1 ? ctx : NULL;
+    return queue_pop(p->available, &slot, 1) == 1 ? slot : NULL;
 }
 
 void ctxpool_give(ctxpool *p, refctx *ctx)
 {
+    void *slot = ctx;
+
     accum_zero(&ctx->acc, ctx->len);
     ctx->len = 0;
-    queue_push_all(p->available, (void *const *)&ctx, 1);
+    queue_push_all(p->available, &slot, 1);
 }

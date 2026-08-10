@@ -94,7 +94,8 @@ typedef struct {
     refctx        *held;    /* reference the shadow holds a handle for, or NULL */
     accum          shadow;
     tally_scratch *scratch; /* what the processing step works in */
-    void         **slots;   /* batch buffer, allocated before the thread starts */
+    void         **slots;   /* a batch of workitems, allocated before the
+                               thread starts */
     pthread_t      thread;
 } worker;
 
@@ -127,6 +128,14 @@ static void worker_switch_shadow(worker *w, refctx *ctx)
     w->held = ctx;
 }
 
+/* Every slot of a batch is a workitem. The batches are void * because the
+ * queue and the pool that fill them carry void *, and converting one back is
+ * said here rather than at each place a slot is read. */
+static const workitem *item_at(void *const *slots, size_t i)
+{
+    return slots[i];
+}
+
 /* Every read of a run, into the worker's own shadow. A read the tally cannot
  * count is one no later read would fare better on, so what it found is put
  * where the loader will see it and the batch is seen through regardless. */
@@ -134,7 +143,7 @@ static void worker_count_run(worker *w, void **slots, size_t n,
                       const cm_fasta_record *ref)
 {
     for (size_t i = 0; i < n; i++) {
-        const workitem *item = slots[i];
+        const workitem *item = item_at(slots, i);
         cm_bam_record   read;
         phmm_status     status;
 
@@ -151,8 +160,7 @@ static void worker_count_run(worker *w, void **slots, size_t n,
  * whole run cost a single handle release. */
 static void worker_process_run(worker *w, void **slots, size_t n)
 {
-    workitem       *first = slots[0];
-    refctx         *ctx   = first->ctx;
+    refctx         *ctx   = item_at(slots, 0)->ctx;
     cm_fasta_record ref;
 
     worker_switch_shadow(w, ctx);
@@ -181,7 +189,7 @@ static void worker_process_batch(worker *w, void **slots, size_t n)
         const workitem *head = slots[i];
         size_t          run  = 1;
 
-        while (i + run < n && ((const workitem *)slots[i + run])->ctx == head->ctx)
+        while (i + run < n && item_at(slots, i + run)->ctx == head->ctx)
             run++;
 
         worker_process_run(w, slots + i, run);
@@ -232,10 +240,10 @@ typedef struct {
     refctx *reference;  /* the one being filled, or none yet */
     size_t  rejected;   /* its reads the filter turned away */
 
-    void  **batch;      /* reads bound for the workers */
+    void  **batch;      /* workitems bound for the workers */
     size_t  queued;
 
-    void  **spare;      /* carriers drawn from the pool, not yet spent */
+    void  **spare;      /* workitem carriers drawn from the pool, unspent */
     size_t  held;
 
     int32_t owed;       /* the first reference not yet accounted for */
