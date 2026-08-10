@@ -467,6 +467,12 @@ static int loader_main(const pipeline *p, const failure_flag *f,
         }
     }
 
+    /* The reference in hand goes back before the ones the reader never reached
+     * are opened. Holding it while asking the pool for another is a wait on
+     * itself where the pool holds one context, which is what --live-refs 1
+     * asks for. */
+    loader_leave_reference(&l);
+
     /* Whatever the reader stopped short of received nothing, as surely as the
      * references it passed over between reads. */
     if (result == 0 && status == CM_ITER_EOF
