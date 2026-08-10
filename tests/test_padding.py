@@ -108,10 +108,53 @@ def test_positions_within_a_reference_are_never_nan(ragged):
 # ---------------------------------------------------------------------------
 
 
-def test_a_reference_no_read_named_is_nan_throughout(datasets, tmp_path):
-    """Thirty per cent covered, so most references are named by nothing."""
-    data = datasets("sparse")
-    output = tmp_path / "sparse.h5"
+def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path):
+    """Ragged and sparsely covered, so a reference no alignment named has
+    padding of its own to be told apart from what it counted.
+
+    Nothing counted is what a zero says; a column outside the reference is what
+    NaN says. A reference no read named is the first over all of its bases and
+    the second past them, which is what one whose reads were all rejected also
+    holds."""
+    data = datasets("patchy")
+    output = tmp_path / "patchy.h5"
+    run_cmuts(data, output)
+
+    lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
+    widest = max(lengths.values())
+    reached = references_with_reads(data.bam)
+
+    with h5py.File(output, "r") as handle:
+        row_of = rows_by_name(handle)
+        missing = [name for name in row_of if name not in reached]
+        assert missing, "the shape under test covers every reference"
+        assert any(lengths[name] < widest for name in missing), \
+            "no uncovered reference is short enough to carry padding"
+
+        for field, values in rectangular(handle).items():
+            width = values.shape[1]
+            for name in missing:
+                row = values[row_of[name]]
+                extent = row_extent(field, lengths[name], width)
+
+                assert (row[:extent] == 0).all(), \
+                    f"{field}: {name} was named by nothing and is not zero"
+                assert np.isnan(row[extent:]).all(), \
+                    f"{field}: {name} has padding that is not NaN"
+
+        # A count of reads is zero where no read arrived, there being nothing
+        # a count could mean by NaN that zero does not say.
+        for field, values in per_reference(handle).items():
+            for name in missing:
+                assert values[row_of[name]] == 0, \
+                    f"{field}: {name} was never named but is not zero"
+
+
+def test_an_uncovered_reference_of_full_length_holds_no_nan(datasets, tmp_path):
+    """One length throughout, which is the ordinary shape of a library, so no
+    reference has padding and an uncovered row is what the fill alone says."""
+    data = datasets("flat")
+    output = tmp_path / "flat.h5"
     run_cmuts(data, output)
 
     reached = references_with_reads(data.bam)
@@ -123,15 +166,9 @@ def test_a_reference_no_read_named_is_nan_throughout(datasets, tmp_path):
 
         for field, values in rectangular(handle).items():
             for name in missing:
-                assert np.isnan(values[row_of[name]]).all(), \
-                    f"{field}: {name} was never named but is not NaN"
-
-        # A count of reads is zero where no read arrived, there being nothing
-        # a count could mean by NaN that zero does not say.
-        for field, values in per_reference(handle).items():
-            for name in missing:
-                assert values[row_of[name]] == 0, \
-                    f"{field}: {name} was never named but is not zero"
+                row = values[row_of[name]]
+                assert not np.isnan(row).any(), f"{field}: {name} holds a NaN"
+                assert (row == 0).all(), f"{field}: {name} is not zero"
 
 
 def test_a_reference_whose_reads_were_all_turned_away_is_zero(datasets, tmp_path):

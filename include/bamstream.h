@@ -58,6 +58,7 @@ uint64_t cm_bam_stream_span(const cm_bam_stream *stream);
  * FASTA makes on each. */
 const char *cm_bam_stream_refname(const cm_bam_stream *stream, int32_t tid);
 int32_t     cm_bam_stream_nref(const cm_bam_stream *stream);
+hts_pos_t   cm_bam_stream_reflen(const cm_bam_stream *stream, int32_t tid);
 hts_pos_t   cm_bam_stream_max_reflen(const cm_bam_stream *stream);
 
 /* The files themselves, for the checks that must reach each header in turn. */

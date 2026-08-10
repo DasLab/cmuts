@@ -302,6 +302,11 @@ int32_t cm_bam_stream_nref(const cm_bam_stream *stream)
     return cm_bam_nref(first_header(stream));
 }
 
+hts_pos_t cm_bam_stream_reflen(const cm_bam_stream *stream, int32_t tid)
+{
+    return cm_bam_reflen(first_header(stream), tid);
+}
+
 hts_pos_t cm_bam_stream_max_reflen(const cm_bam_stream *stream)
 {
     return cm_bam_max_reflen(first_header(stream));

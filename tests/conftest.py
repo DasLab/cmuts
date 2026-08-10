@@ -14,8 +14,10 @@ from support import CMUTS, CMUTS_GEN, generate
 # one reference deeply covered, lengths ranging sixtyfold, reads whose stored
 # length far exceeds the span they align to through soft clipping and again
 # through long insertions, a file where every read falls below any useful
-# threshold, one with no differences from the reference at all, and one whose
-# reads run past twice the length of the reference they are placed on.
+# threshold, one with no differences from the reference at all, one whose reads
+# run past twice the length of the reference they are placed on, and one that is
+# both ragged and sparsely covered, so that a reference with padding and no
+# reads at all is among them.
 SHAPES = {
     "plain":   dict(seed=101, references=40, ref_length="150:600", reads_per_ref=25),
     "sparse":  dict(seed=102, references=800, covered=0.3, reads_per_ref="1:6",
@@ -32,6 +34,10 @@ SHAPES = {
     "overflowing": dict(seed=109, references=12, ref_length=60, reads_per_ref=20,
                         read_length="40:60", soft_clips="0:2",
                         soft_clip_length="20:150"),
+    "patchy":  dict(seed=110, references=60, ref_length="60:900", covered=0.4,
+                    reads_per_ref="5:20"),
+    "flat":    dict(seed=111, references=120, ref_length=300, covered=0.4,
+                    reads_per_ref="5:20"),
 }
 
 

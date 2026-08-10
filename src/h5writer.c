@@ -44,6 +44,9 @@ struct h5writer {
     hid_t   dataset[ACCUM_N_FIELDS];
     int32_t n_refs;
     size_t  ref_cap;
+    /* NaN, as wide as the longest tail any row can have, so marking one is a
+     * write and not a fill each time. */
+    double *padding;
     char    error[CM_ERROR_MAX];
 };
 
@@ -112,18 +115,17 @@ static void field_shape(const h5writer *w, accum_field_id id, hsize_t *dims, hsi
     }
 }
 
-/* A scalar field is a count of reads, and a reference no read named has none,
- * so nothing distinguishes that from a count of zero and the fill says zero.
- * The wider fields keep NaN, which on those marks a row never written and, on
- * a per-base field, the positions past a reference's own end. */
-static float field_fill(accum_field_id id)
-{
-    return ACCUM_FIELDS[id].kind == ACCUM_SCALAR ? 0.0f : (float)NAN;
-}
+/* Zero, for every field. A position no read reached was reached by no read,
+ * which is what a count of zero says, and a reference no read named is only
+ * that case for all of its bases at once. What zero must not be taken for is a
+ * position outside the reference altogether; those are marked NaN as the row is
+ * written, there being no second fill value to say it. */
+#define FILL_VALUE 0.0f
 
-static hid_t make_layout(const hsize_t *chunk, int rank, float fill)
+static hid_t make_layout(const hsize_t *chunk, int rank)
 {
-    hid_t dcpl = untimed_plist(H5P_DATASET_CREATE);
+    hid_t dcpl  = untimed_plist(H5P_DATASET_CREATE);
+    float fill = FILL_VALUE;
 
     if (dcpl < 0)
         return H5I_INVALID_HID;
@@ -170,7 +172,7 @@ static hid_t create_field(h5writer *w, accum_field_id id)
     field_shape(w, id, dims, chunk);
 
     space = H5Screate_simple(rank, dims, NULL);
-    dcpl  = make_layout(chunk, rank, field_fill(id));
+    dcpl  = make_layout(chunk, rank);
     dapl  = make_access(chunk, rank);
 
     if (space < 0 || dcpl < 0 || dapl < 0) {
@@ -205,6 +207,15 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
 
     w->n_refs  = n_refs;
     w->ref_cap = ref_cap;
+    w->padding = calloc(ref_cap ? ref_cap : 1, sizeof *w->padding);
+
+    if (!w->padding) {
+        fail(w, "out of memory");
+        return w;
+    }
+
+    for (size_t i = 0; i < ref_cap; i++)
+        w->padding[i] = (double)NAN;
 
     for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++)
         w->dataset[id] = H5I_INVALID_HID;
@@ -249,6 +260,7 @@ void h5writer_close(h5writer *w)
     if (w->file >= 0)
         H5Fclose(w->file);
 
+    free(w->padding);
     free(w);
 }
 
@@ -263,10 +275,10 @@ const char *h5writer_error(const h5writer *w)
 
 /* Selects the part of a dataset belonging to one reference: the whole row for
  * a scalar field, its first len values for a per-base field. */
-static int select_row(hid_t dataset, int32_t tid, size_t width, int rank,
-                      hid_t *filespace, hid_t *memspace)
+static int select_row(hid_t dataset, int32_t tid, size_t from, size_t width,
+                      int rank, hid_t *filespace, hid_t *memspace)
 {
-    hsize_t start[RANK_MAX] = { (hsize_t)tid, 0 };
+    hsize_t start[RANK_MAX] = { (hsize_t)tid, (hsize_t)from };
     hsize_t count[RANK_MAX] = { 1, (hsize_t)width };
     hsize_t extent          = rank == RANK_VECTOR ? (hsize_t)width : 1;
 
@@ -288,24 +300,45 @@ static int select_row(hid_t dataset, int32_t tid, size_t width, int rank,
     return 0;
 }
 
-static int write_field(h5writer *w, accum_field_id id, int32_t tid, size_t len,
-                       const accum *acc)
+static int write_part(h5writer *w, accum_field_id id, int32_t tid, size_t from,
+                      size_t n, const double *values)
 {
-    int   rank = field_rank(id);
-    hid_t filespace, memspace;
+    hid_t  filespace, memspace;
     herr_t status;
 
-    if (select_row(w->dataset[id], tid, accum_extent(id, len, w->ref_cap), rank,
+    if (select_row(w->dataset[id], tid, from, n, field_rank(id),
                    &filespace, &memspace) < 0)
         return fail(w, "unable to select an output row");
 
     status = H5Dwrite(w->dataset[id], H5T_NATIVE_DOUBLE, memspace, filespace,
-                      H5P_DEFAULT, accum_const_data(acc, id));
+                      H5P_DEFAULT, values);
 
     H5Sclose(memspace);
     H5Sclose(filespace);
 
     return status < 0 ? fail(w, "unable to write an output row") : 0;
+}
+
+/* The reference's own values, and then the mark for the columns past them.
+ *
+ * The tail is written with the row rather than swept up at the end: a row and
+ * its tail share a chunk, so marking it now costs a chunk already in hand where
+ * returning to it later costs reading, inflating and deflating that chunk
+ * again. Where a reference is as long as the longest there is no tail, which on
+ * a library of one length is every reference. */
+static int write_field(h5writer *w, accum_field_id id, int32_t tid, size_t len,
+                       const accum *acc)
+{
+    size_t extent = accum_extent(id, len, w->ref_cap);
+    size_t width  = accum_extent(id, w->ref_cap, w->ref_cap);
+
+    if (write_part(w, id, tid, 0, extent, accum_const_data(acc, id)) < 0)
+        return -1;
+
+    if (extent == width)
+        return 0;
+
+    return write_part(w, id, tid, extent, width - extent, w->padding);
 }
 
 int h5writer_row(h5writer *w, int32_t tid, size_t len, const accum *acc)

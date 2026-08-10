@@ -216,6 +216,8 @@ typedef struct {
 
     void  **spare;      /* carriers drawn from the pool, not yet spent */
     size_t  held;
+
+    int32_t owed;       /* the first reference not yet accounted for */
 } loader;
 
 static int loader_open(loader *l, pipeline *p)
@@ -281,6 +283,40 @@ static refctx *open_reference(pipeline *p, int32_t tid)
     return ctx;
 }
 
+/* A reference the reader passed over received nothing, and its row is what the
+ * fill already says: zero everywhere. That is the whole of the answer only
+ * where the reference is as long as the longest, which on a library of one
+ * length is every one of them. A shorter one has columns past its own end that
+ * the fill calls zero and are not part of it, so it is opened and closed
+ * unread, for the sake of the mark its tail carries. */
+static bool loader_emit_empty(loader *l, int32_t tid)
+{
+    refctx *ctx = open_reference(l->pipe, tid);
+
+    if (!ctx)
+        return false;
+
+    if (refctx_release(ctx, 1))
+        finish_reference(l->pipe, ctx);
+
+    return true;
+}
+
+static bool loader_account_through(loader *l, int32_t upto)
+{
+    pipeline *p = l->pipe;
+
+    while (l->owed < upto) {
+        int32_t tid = l->owed++;
+
+        if ((size_t)cm_bam_stream_reflen(p->bam, tid) < p->ref_cap
+            && !loader_emit_empty(l, tid))
+            return false;
+    }
+
+    return true;
+}
+
 /* Moves to the reference a read belongs to, unless it is already the one in
  * hand. This happens before the filter is applied, so a rejected read is still
  * counted against its reference: one whose reads were all filtered out is
@@ -291,7 +327,12 @@ static bool loader_on_reference(loader *l, int32_t tid)
         return true;
 
     loader_leave_reference(l);
+
+    if (!loader_account_through(l, tid))
+        return false;
+
     l->reference = open_reference(l->pipe, tid);
+    l->owed      = tid + 1;
 
     return l->reference != NULL;
 }
@@ -390,6 +431,14 @@ static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_
             result = -1;
             break;
         }
+    }
+
+    /* Whatever the reader stopped short of received nothing, as surely as the
+     * references it passed over between reads. */
+    if (result == 0 && status == CM_ITER_EOF
+        && !loader_account_through(&l, cm_bam_stream_nref(p->bam))) {
+        snprintf(error, error_len, "%s", refseq_error(p->refs));
+        result = -1;
     }
 
     progress_follow(p->bar);
