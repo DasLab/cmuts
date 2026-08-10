@@ -48,11 +48,10 @@ typedef struct {
     h5writer      *out;
     progress      *bar;
     tally_tables   tally_tables;
-    /* The first way a worker found to stop, which every worker writes and the
-     * loader reads: one failure is enough, and which of them arrived first is
-     * all the run has to report. */
+    /* The first way a worker found to stop, which every worker offers and the
+     * loader reads: one failure is enough, and the first to arrive is all the
+     * run has to report. */
     _Atomic int    failure;   /* a phmm_status */
-    bool           may_replace;
     filter_config  filter_config;
     size_t         batch;
     size_t         ref_cap;    /* longest reference, sizing every accumulator */
@@ -63,6 +62,15 @@ static void finish_reference(pipeline *p, refctx *ctx)
     void *handle = ctx;
 
     queue_push_all(p->completed, &handle, 1);
+}
+
+/* Keeps the first failure offered and discards the rest, so that what the run
+ * reports is the one that stopped it and not whichever worker stored last. */
+static void record_failure(pipeline *p, phmm_status status)
+{
+    int unfailed = PHMM_OK;
+
+    atomic_compare_exchange_strong(&p->failure, &unfailed, (int)status);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -123,7 +131,7 @@ static void count_run(worker *w, void **slots, size_t n,
                        &w->shadow);
 
         if (status != PHMM_OK)
-            atomic_store(&w->pipe->failure, status);
+            record_failure(w->pipe, status);
     }
 }
 
@@ -150,9 +158,9 @@ static void process_run(worker *w, void **slots, size_t n)
      * already been processed. */
     itempool_give_many(w->pipe->items, slots, n);
 
-    /* Cannot be the last handle: the shadow holds one on this reference. */
-    if (refctx_release(ctx, (int)n))
-        finish_reference(w->pipe, ctx);
+    /* Never the last handle, the shadow having taken one on this reference
+     * before the run was counted, so the reference cannot be finished here. */
+    refctx_release(ctx, (int)n);
 }
 
 static void process_batch(worker *w, void **slots, size_t n)
@@ -236,7 +244,11 @@ static int loader_open(loader *l, pipeline *p)
 }
 
 /* Hands what is queued to the workers, taking a handle on the reference for
- * each read so that it cannot be finished while any of them is in transit. */
+ * each read so that it cannot be finished while any of them is in transit.
+ *
+ * A read names its reference when it is taken and holds no handle on it until
+ * here. The loader's own handle covers that gap: it is held from the moment the
+ * reference is opened until after the last of its reads has been dispatched. */
 static void loader_dispatch(loader *l)
 {
     if (l->queued == 0)
@@ -524,8 +536,9 @@ static bool holds_data(const char *path)
 }
 
 /* Checked before anything is opened, so a mistyped path costs nothing and no
- * previous result is at risk while the inputs are still being read. */
-static int check_output(pipeline *p, const pipeline_config *cfg,
+ * previous result is at risk while the inputs are still being read. Reports
+ * through may_replace whether the create may replace what is there. */
+static int check_output(const pipeline_config *cfg, bool *may_replace,
                         char *error, size_t error_len)
 {
     if (!cfg->overwrite && holds_data(cfg->output_path)) {
@@ -538,7 +551,7 @@ static int check_output(pipeline *p, const pipeline_config *cfg,
     /* Where nothing is at the path, the create stays exclusive, so a file
      * appearing in between is not quietly replaced. Where an empty one is
      * already there it has to be truncated instead. */
-    p->may_replace = cfg->overwrite || access(cfg->output_path, F_OK) == 0;
+    *may_replace = cfg->overwrite || access(cfg->output_path, F_OK) == 0;
     return 0;
 }
 
@@ -591,10 +604,11 @@ static int build_buffers(pipeline *p, const pipeline_config *cfg, char *error, s
     return 0;
 }
 
-static int open_output(pipeline *p, const pipeline_config *cfg, char *error, size_t error_len)
+static int open_output(pipeline *p, const pipeline_config *cfg, bool may_replace,
+                       char *error, size_t error_len)
 {
     p->out = h5writer_create(cfg->output_path, cm_bam_stream_nref(p->bam), p->ref_cap,
-                             p->may_replace);
+                             may_replace);
     if (!p->out) {
         snprintf(error, error_len, "out of memory");
         return -1;
@@ -649,6 +663,7 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
 {
     pipeline  p        = { 0 };
     consumer  cons     = { 0 };
+    bool      may_replace = false;
     size_t    unmapped = 0;
     worker   *workers  = calloc(cfg->workers, sizeof *workers);
     size_t    started  = 0;
@@ -659,10 +674,10 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
         return -1;
     }
 
-    if (check_output(&p, cfg, error, error_len) < 0 ||
+    if (check_output(cfg, &may_replace, error, error_len) < 0 ||
         open_inputs(&p, cfg, error, error_len) < 0 ||
         build_buffers(&p, cfg, error, error_len) < 0 ||
-        open_output(&p, cfg, error, error_len) < 0)
+        open_output(&p, cfg, may_replace, error, error_len) < 0)
         goto done;
 
     tally_tables_build(&p.tally_tables, &cfg->tally_config);
