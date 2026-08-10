@@ -374,7 +374,7 @@ def read_summary(path) -> Summary:
             # The counts are zero-filled, so a reference the run wrote a row
             # for is one that some read reached, kept or rejected.
             rows=int(((reads + rejected) > 0).sum()),
-            unmapped=int(output.attrs["reads_unmapped"]),
+            unmapped=int(output["reads/unmapped"][()]),
         )
 
 
@@ -404,7 +404,8 @@ def try_cmuts(data: Dataset, output, workers: int = 4, **options):
 def _datasets_agree(a, b) -> bool:
     # NaN marks a reference no read reached, so two outputs agree where both
     # hold one. Only the counting datasets can carry it; the names cannot.
-    return np.array_equal(a[:], b[:], equal_nan=np.issubdtype(a.dtype, np.floating))
+    # [()] rather than [:], a run total being a scalar that cannot be sliced.
+    return np.array_equal(a[()], b[()], equal_nan=np.issubdtype(a.dtype, np.floating))
 
 
 def outputs_agree(first, second) -> bool:

@@ -7,7 +7,8 @@
 
 #include <stdlib.h>
 
-#define ATTRIBUTE_READS_UNMAPPED "reads_unmapped"
+/* Named within the group, which supplies the reads the name drops. */
+#define DATASET_READS_UNMAPPED "unmapped"
 
 int metadata_write_names(h5writer *out, const cm_bam_stream *bam)
 {
@@ -30,5 +31,5 @@ int metadata_write_names(h5writer *out, const cm_bam_stream *bam)
 
 int metadata_write_run(h5writer *out, size_t reads_unmapped)
 {
-    return h5writer_count(out, ATTRIBUTE_READS_UNMAPPED, reads_unmapped);
+    return h5writer_count(out, DATASET_READS_UNMAPPED, reads_unmapped);
 }

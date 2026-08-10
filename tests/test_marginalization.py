@@ -84,7 +84,9 @@ def written_rows(output, placements: int) -> dict:
     taken over fewer and be narrower.
     """
     with h5py.File(output, "r") as handle:
-        rows = {k: d[:] for k, d in datasets_of(handle).items() if k != "reference"}
+        # A run total has no rows to compare, being one number for the file.
+        rows = {k: d[:] for k, d in datasets_of(handle).items()
+                if k != "reference" and d.ndim >= 1}
 
     for name, values in rows.items():
         assert len(values) == placements, \

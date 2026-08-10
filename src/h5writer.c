@@ -534,22 +534,33 @@ int h5writer_names(h5writer *w, const char *const *names, int32_t n_refs)
     return status < 0 ? fail(w, "unable to write the reference names") : 0;
 }
 
+/* A run total, as a scalar beside the per-reference counts it belongs with.
+ *
+ * A dataset and not an attribute on the group: h5ls lists a dataset and passes
+ * an attribute over unless asked for one, and a figure nothing shows is a
+ * figure nobody finds. It keeps the exact type it is counted in rather than
+ * the float its neighbours are narrowed to, being counted whole in the loader
+ * and never accumulated. */
 int h5writer_count(h5writer *w, const char *name, size_t value)
 {
     uint64_t stored  = value;
     hid_t    space   = H5Screate(H5S_SCALAR);
-    hid_t    attr    = H5I_INVALID_HID;
+    hid_t    dcpl    = untimed_plist(H5P_DATASET_CREATE);
+    hid_t    dataset = H5I_INVALID_HID;
     herr_t   status  = -1;
 
-    if (space >= 0)
-        attr = H5Acreate2(w->file, name, H5T_NATIVE_UINT64, space,
-                          H5P_DEFAULT, H5P_DEFAULT);
+    if (space >= 0 && dcpl >= 0)
+        dataset = H5Dcreate2(w->reads, name, H5T_STD_U64LE, space,
+                             H5P_DEFAULT, dcpl, H5P_DEFAULT);
 
-    if (attr >= 0)
-        status = H5Awrite(attr, H5T_NATIVE_UINT64, &stored);
+    if (dataset >= 0)
+        status = H5Dwrite(dataset, H5T_NATIVE_UINT64, H5S_ALL, H5S_ALL,
+                          H5P_DEFAULT, &stored);
 
-    if (attr >= 0)
-        H5Aclose(attr);
+    if (dataset >= 0)
+        H5Dclose(dataset);
+    if (dcpl >= 0)
+        H5Pclose(dcpl);
     if (space >= 0)
         H5Sclose(space);
 
