@@ -101,7 +101,7 @@ static int field_rank(accum_field_id id)
  * field wider than one value per base is sized by the same rule as the rest. */
 static void field_shape(const h5writer *w, accum_field_id id, hsize_t *dims, hsize_t *chunk)
 {
-    size_t width = accum_extent(id, w->ref_cap);
+    size_t width = accum_extent(id, w->ref_cap, w->ref_cap);
 
     dims[0]  = (hsize_t)w->n_refs;
     chunk[0] = rows_per_chunk(w, width);
@@ -112,10 +112,18 @@ static void field_shape(const h5writer *w, accum_field_id id, hsize_t *dims, hsi
     }
 }
 
-static hid_t make_layout(const hsize_t *chunk, int rank)
+/* A scalar field is a count of reads, and a reference no read named has none,
+ * so nothing distinguishes that from a count of zero and the fill says zero.
+ * The wider fields keep NaN, which on those marks a row never written and, on
+ * a per-base field, the positions past a reference's own end. */
+static float field_fill(accum_field_id id)
+{
+    return ACCUM_FIELDS[id].kind == ACCUM_SCALAR ? 0.0f : (float)NAN;
+}
+
+static hid_t make_layout(const hsize_t *chunk, int rank, float fill)
 {
     hid_t dcpl = untimed_plist(H5P_DATASET_CREATE);
-    float fill = (float)NAN;
 
     if (dcpl < 0)
         return H5I_INVALID_HID;
@@ -162,7 +170,7 @@ static hid_t create_field(h5writer *w, accum_field_id id)
     field_shape(w, id, dims, chunk);
 
     space = H5Screate_simple(rank, dims, NULL);
-    dcpl  = make_layout(chunk, rank);
+    dcpl  = make_layout(chunk, rank, field_fill(id));
     dapl  = make_access(chunk, rank);
 
     if (space < 0 || dcpl < 0 || dapl < 0) {
@@ -287,7 +295,7 @@ static int write_field(h5writer *w, accum_field_id id, int32_t tid, size_t len,
     hid_t filespace, memspace;
     herr_t status;
 
-    if (select_row(w->dataset[id], tid, accum_extent(id, len), rank,
+    if (select_row(w->dataset[id], tid, accum_extent(id, len, w->ref_cap), rank,
                    &filespace, &memspace) < 0)
         return fail(w, "unable to select an output row");
 

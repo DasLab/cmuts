@@ -26,18 +26,24 @@ REJECTS_EVERYTHING = 61
 
 # Two kinds of row are written, indexed by different things, so which one an
 # array is has to be named rather than read off its shape. Everything not
-# listed here is indexed by reference position.
+# listed here is indexed by reference position, and runs only as far as its own
+# reference; a length is not a position, so those rows are data throughout.
 PER_LENGTH = ("read_lengths",)
-
-
-def row_extent(field, ref_len):
-    """Columns of a row that belong to the reference; the rest is padding."""
-    return 2 * ref_len + 1 if field in PER_LENGTH else ref_len
 
 
 def rectangular(output):
     """The arrays with a row per reference, whatever indexes the row."""
     return {name: output[name][:] for name in output if output[name].ndim == 2}
+
+
+def per_base(output):
+    """The arrays a reference's own length bounds, which are the padded ones."""
+    return {k: v for k, v in rectangular(output).items() if k not in PER_LENGTH}
+
+
+def row_extent(field, ref_len, width):
+    """Columns of a row that hold data; the rest is padding."""
+    return width if field in PER_LENGTH else ref_len
 
 
 def per_reference(output):
@@ -70,13 +76,13 @@ def test_positions_past_a_reference_are_nan(ragged):
     with h5py.File(output, "r") as handle:
         row_of = rows_by_name(handle)
 
-        for field, values in rectangular(handle).items():
+        for field, values in per_base(handle).items():
             width = values.shape[1]
-            shorter = [n for n, ln in lengths.items() if row_extent(field, ln) < width]
+            shorter = [n for n, ln in lengths.items() if ln < width]
             assert shorter, f"{field}: no reference is narrower than the widest"
 
             for name in shorter:
-                tail = values[row_of[name]][row_extent(field, lengths[name]):]
+                tail = values[row_of[name]][lengths[name]:]
                 assert np.isnan(tail).all(), f"{field}: {name} is padded with {tail[:4]}"
 
 
@@ -91,8 +97,9 @@ def test_positions_within_a_reference_are_never_nan(ragged):
         row_of = rows_by_name(handle)
 
         for field, values in rectangular(handle).items():
+            width = values.shape[1]
             for name in reached:
-                within = values[row_of[name]][:row_extent(field, lengths[name])]
+                within = values[row_of[name]][:row_extent(field, lengths[name], width)]
                 assert not np.isnan(within).any(), f"{field}: {name} has a hole in it"
 
 
@@ -114,10 +121,17 @@ def test_a_reference_no_read_named_is_nan_throughout(datasets, tmp_path):
         missing = [name for name in row_of if name not in reached]
         assert missing, "the shape under test covers every reference"
 
-        for field, values in {**rectangular(handle), **per_reference(handle)}.items():
+        for field, values in rectangular(handle).items():
             for name in missing:
                 assert np.isnan(values[row_of[name]]).all(), \
                     f"{field}: {name} was never named but is not NaN"
+
+        # A count of reads is zero where no read arrived, there being nothing
+        # a count could mean by NaN that zero does not say.
+        for field, values in per_reference(handle).items():
+            for name in missing:
+                assert values[row_of[name]] == 0, \
+                    f"{field}: {name} was never named but is not zero"
 
 
 def test_a_reference_whose_reads_were_all_turned_away_is_zero(datasets, tmp_path):
@@ -137,8 +151,9 @@ def test_a_reference_whose_reads_were_all_turned_away_is_zero(datasets, tmp_path
         row_of = rows_by_name(handle)
 
         for field, values in rectangular(handle).items():
+            width = values.shape[1]
             for name in reached:
-                within = values[row_of[name]][:row_extent(field, lengths[name])]
+                within = values[row_of[name]][:row_extent(field, lengths[name], width)]
                 assert not np.isnan(within).any(), f"{field}: {name} went to NaN"
                 assert (within == 0).all(), f"{field}: {name} counted something"
 

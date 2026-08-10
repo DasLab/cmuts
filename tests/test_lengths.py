@@ -1,10 +1,11 @@
 """The read-length histogram, against what samtools makes of the same file.
 
-One bin per stored length from zero to twice the reference. A read longer than
-that is counted in no bin, so a row sums to the reads it holds and the reads
-total says how many fell outside. What is counted is what survived the filter,
-so the oracle is given the criteria cmuts was given and measures the sequence
-column itself.
+One bin per stored length from zero to twice the longest reference, the same
+bins in every row: a length is not a position, so a column means one length
+whatever reference the row belongs to. A read longer than the range is counted
+in no bin, so a row sums to the reads it holds and the reads total says how
+many fell outside. What is counted is what survived the filter, so the oracle
+is given the criteria cmuts was given and measures the sequence column itself.
 """
 
 import h5py
@@ -40,15 +41,17 @@ def compare(output, data, min_mapq):
     with h5py.File(output, "r") as handle:
         row_of = rows_by_name(handle)
         written = handle["read_lengths"][:]
+        width = written.shape[1]
+
+        assert width == 2 * max(lengths.values()) + 1, "the row is not the widest reference"
 
         for name, histogram in expected.items():
-            extent = 2 * lengths[name] + 1
             row = written[row_of[name]]
 
-            assert np.array_equal(row[:extent], expected_row(histogram, extent)), \
+            assert np.array_equal(row, expected_row(histogram, width)), \
                 f"{name}: histogram disagrees with samtools"
 
-            outside += sum(c for n, c in histogram.items() if n >= extent)
+            outside += sum(c for n, c in histogram.items() if n >= width)
 
     return outside
 
@@ -91,9 +94,9 @@ def test_the_histogram_sums_to_the_reads_it_holds(datasets, tmp_path):
 
 
 def test_a_read_longer_than_the_range_is_counted_by_the_total_alone(datasets, tmp_path):
-    """Soft-clipped bases are stored but align nowhere, so a read can be far
-    longer than twice the reference it was placed on. No bin holds it, and what
-    says it was there is the reads total standing above the row's own sum."""
+    """A read can be longer than twice the longest reference, soft-clipped bases
+    being stored while aligning nowhere. No bin holds it, and what says it was
+    there is the reads total standing above the row's own sum."""
     data = datasets("overflowing")
     output = tmp_path / "overflowing.h5"
     run_cmuts(data, output, min_mapq=0)

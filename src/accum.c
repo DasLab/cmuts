@@ -24,21 +24,21 @@ const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS] = {
 };
 
 /* With len == cap this also gives the field's stride in the arena. */
-size_t accum_extent(accum_field_id id, size_t len)
+size_t accum_extent(accum_field_id id, size_t len, size_t cap)
 {
     switch (ACCUM_FIELDS[id].kind) {
         case ACCUM_PER_BASE:   return len;
-        case ACCUM_PER_LENGTH: return ACCUM_LENGTH_BINS(len);
+        case ACCUM_PER_LENGTH: return ACCUM_LENGTH_BINS(cap);
         default:               return 1;
     }
 }
 
-static size_t arena_extent(size_t len)
+static size_t arena_extent(size_t cap)
 {
     size_t total = 0;
 
     for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++)
-        total += accum_extent(id, len);
+        total += accum_extent(id, cap, cap);
 
     return total;
 }
@@ -49,7 +49,7 @@ static void bind_slots(accum *acc)
 
     for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++) {
         acc->slot[id] = cursor;
-        cursor += accum_extent(id, acc->cap);
+        cursor += accum_extent(id, acc->cap, acc->cap);
     }
 }
 
@@ -73,7 +73,8 @@ void accum_free(accum *acc)
 void accum_zero(accum *acc, size_t len)
 {
     for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++)
-        memset(acc->slot[id], 0, accum_extent(id, len) * sizeof *acc->arena);
+        memset(acc->slot[id], 0,
+               accum_extent(id, len, acc->cap) * sizeof *acc->arena);
 }
 
 void accum_add(accum *dst, const accum *src, size_t len)
@@ -81,7 +82,7 @@ void accum_add(accum *dst, const accum *src, size_t len)
     for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++) {
         const double *from = src->slot[id];
         double       *into = dst->slot[id];
-        size_t        n    = accum_extent(id, len);
+        size_t        n    = accum_extent(id, len, dst->cap);
 
         for (size_t i = 0; i < n; i++)
             into[i] += from[i];

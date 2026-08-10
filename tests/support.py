@@ -288,7 +288,9 @@ def read_summary(path) -> Summary:
         return Summary(
             kept=int(np.nansum(reads, dtype=np.float64)),
             rejected=int(np.nansum(rejected, dtype=np.float64)),
-            rows=int((~np.isnan(reads)).sum()),
+            # The counts are zero-filled, so a reference the run wrote a row
+            # for is one that some read reached, kept or rejected.
+            rows=int(((reads + rejected) > 0).sum()),
             unmapped=int(output.attrs["reads_unmapped"]),
         )
 

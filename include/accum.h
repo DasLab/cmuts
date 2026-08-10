@@ -29,17 +29,20 @@ typedef enum {
     ACCUM_SCALAR,      /* one value per reference */
 } accum_kind;
 
-/* Bins a read-length histogram covers for a reference of len bases: one for
- * every length from 0 to twice the reference. The range reaches past len
+/* Bins a read-length histogram covers, given the longest reference in the run:
+ * one for every length from 0 to twice it. The range reaches past a reference
  * because a read carrying insertions or soft-clipped ends is longer than the
- * reference it aligns to, which on the libraries measured is where most of
- * them fall.
+ * one it aligns to, which on the libraries measured is where most of them fall.
  *
- * A read longer than the range is counted in no bin at all. There is no
- * overflow bin, so column j means a read of length j whatever reference the
- * row belongs to, and columns may be summed across a ragged library. How many
- * reads fell outside is the reads total less the row's own sum. */
-#define ACCUM_LENGTH_BINS(len) (2 * (len) + 1)
+ * Every row is this wide, whatever its own reference measures. A read length is
+ * not a position in a reference, so a column that a short reference has no
+ * reads for is a count of zero and not padding; sizing rows individually would
+ * leave the same column meaning different things in different rows, and reads
+ * uncounted where the array had room for them all along.
+ *
+ * A read longer than the range is counted in no bin. How many there were is the
+ * reads total less the row's own sum. */
+#define ACCUM_LENGTH_BINS(cap) (2 * (cap) + 1)
 
 typedef struct {
     const char *name;  /* also the name of the dataset this field is written to */
@@ -48,10 +51,11 @@ typedef struct {
 
 extern const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS];
 
-/* Values one field occupies for a reference of len bases. Allocation, zeroing,
- * merging, the output row and the dataset's own width all derive from this, so
- * a new kind of field is described here and nowhere else. */
-size_t accum_extent(accum_field_id id, size_t len);
+/* Values one field occupies for a reference of len bases, in a run whose
+ * longest is cap. Allocation, zeroing, merging, the output row and the
+ * dataset's own width all derive from this, so a new kind of field is described
+ * here and nowhere else. */
+size_t accum_extent(accum_field_id id, size_t len, size_t cap);
 
 /* Accumulated values for a single reference.
  *
