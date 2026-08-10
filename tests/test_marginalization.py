@@ -36,6 +36,12 @@ TOLERANCE = 1e-3
 # smallest departure measured, which is a third of a mutation.
 DIVIDED = 0.1
 
+# Insertions carry no weight by default, which would leave every insertion case
+# reading an array of zeros and agreeing with itself. What is under test is
+# where an event is counted, not what a run chooses to count, so both kinds are
+# given a weight here.
+WEIGHTED = dict(insertion_weight=1)
+
 CASES = [(kind, gap, run) for kind in KINDS for gap in GAPS for run in RUNS]
 CONTROLS = [(kind, gap, RUNS[0]) for kind in KINDS for gap in GAPS]
 
@@ -101,7 +107,7 @@ def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
     reference, read, cigars = homopolymer(kind, gap, run)
     data = placements(tmp_path, "ambiguous", reference, read, cigars)
 
-    run_cmuts(data, tmp_path / "banded.h5", band=gap)
+    run_cmuts(data, tmp_path / "banded.h5", band=gap, **WEIGHTED)
     written = written_rows(tmp_path / "banded.h5", len(cigars))
 
     # Rows of zeros would agree with one another, so the comparison says nothing
@@ -128,7 +134,7 @@ def test_a_band_narrower_than_the_gap_leaves_the_placements_apart(tmp_path, case
     reference, read, cigars = homopolymer(kind, gap, run)
     data = placements(tmp_path, "ambiguous", reference, read, cigars)
 
-    run_cmuts(data, tmp_path / "narrow.h5", band=gap - 1)
+    run_cmuts(data, tmp_path / "narrow.h5", band=gap - 1, **WEIGHTED)
 
     narrow = written_rows(tmp_path / "narrow.h5", len(cigars))
 

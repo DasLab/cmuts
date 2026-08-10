@@ -11,6 +11,7 @@
 #include <stddef.h>
 
 #include "filter.h"
+#include "phmm.h"
 
 static const cli_choice STRAND_CHOICES[] = {
     { "both",    FILTER_STRAND_BOTH    },
@@ -88,6 +89,34 @@ static const cli_option OPTIONS[] = {
                 "marginal to the CIGAR, leaving every read with an indel counted "
                 "as written. Nothing bounds it above, and a band wide enough to "
                 "exhaust memory ends the run.",
+      .minimum = 0, .maximum = CLI_UNBOUNDED },
+    { .group = "Counting", .name = "substitution-weight", .type = OPT_DOUBLE,
+      .offset = offsetof(cli_args,
+                         pipeline.tally_config.weights.weight[PHMM_SUBSTITUTION]),
+      .metavar = "W",
+      .help = "what a substitution counts towards the mutation total",
+      .detail = "Scales what a substitution contributes to the mutations written. "
+                "Absolute rather than relative to the other two: raising every "
+                "weight raises the total. Coverage, the positions spanned, and "
+                "the alignment are unaffected.",
+      .minimum = 0, .maximum = CLI_UNBOUNDED },
+    { .group = "Counting", .name = "deletion-weight", .type = OPT_DOUBLE,
+      .offset = offsetof(cli_args,
+                         pipeline.tally_config.weights.weight[PHMM_DELETION]),
+      .metavar = "W",
+      .help = "what a deletion counts towards the mutation total",
+      .detail = "Scales what a deletion contributes to the mutations written, once "
+                "per deleted run rather than once per base skipped. Otherwise as "
+                "--substitution-weight.",
+      .minimum = 0, .maximum = CLI_UNBOUNDED },
+    { .group = "Counting", .name = "insertion-weight", .type = OPT_DOUBLE,
+      .offset = offsetof(cli_args,
+                         pipeline.tally_config.weights.weight[PHMM_INSERTION]),
+      .metavar = "W",
+      .help = "what an insertion counts towards the mutation total",
+      .detail = "Scales what an insertion contributes to the mutations written, "
+                "once per inserted run. Otherwise as --substitution-weight. The "
+                "default of 0 leaves insertions out of the total.",
       .minimum = 0, .maximum = CLI_UNBOUNDED },
 
     { .group = "Performance", .name = "workers", .key = 'j', .type = OPT_SIZE,

@@ -51,9 +51,11 @@ typedef enum {
  * the event happened.
  *
  * These reach the accumulation only. Neither pass reads them, so the alignment
- * does not depend on them. They are relative: a factor common to all three
- * rescales every rate the run reports and changes nothing else. Each defaults
- * to 1, and they are uncalibrated.
+ * does not depend on them. They are absolute: the mutation total is in units of
+ * them, so a factor common to all three scales it, while the coverage and the
+ * positions spanned stay as they were. Substitutions and deletions default to 1
+ * and insertions to 0, which leaves insertions out of the total, and none of
+ * the three is calibrated.
  *
  * Indexed by kind so that a finer breakdown, by reference base for example, is
  * another index rather than another field. */

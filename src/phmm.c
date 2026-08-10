@@ -131,7 +131,7 @@ phmm_weights phmm_default_weights(void)
         .weight = {
             [PHMM_SUBSTITUTION] = 1.0,
             [PHMM_DELETION]     = 1.0,
-            [PHMM_INSERTION]    = 1.0,
+            [PHMM_INSERTION]    = 0.0,
         },
     };
 }
