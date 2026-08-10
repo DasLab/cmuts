@@ -294,6 +294,27 @@ def rows_by_name(output) -> dict:
     return {name: i for i, name in enumerate(names)}
 
 
+def assert_counts_agree(summary, data: Dataset, criteria: dict):
+    """Every claim a run makes about how many reads there were: against
+    samtools, and against itself.
+
+    Held here so that the matrix of fixed shapes and the fuzz test are checking
+    the same thing, rather than two lists that happen to look alike.
+    """
+    assert summary.kept == samtools_kept(data, **criteria), "surviving reads"
+
+    # Every mapped read is either kept or rejected; nothing goes missing and
+    # nothing is counted twice.
+    assert summary.kept + summary.rejected == data.mapped, "reads accounted for"
+
+    # Unmapped reads align nowhere, so no filter can touch them.
+    assert summary.unmapped == data.unmapped, "unmapped reads"
+
+    # A reference that received any mapped read gets a row, whether or not
+    # anything survived the filter.
+    assert summary.rows == data.touched, "references written"
+
+
 def md_and_nm_tags(bam):
     """The MD and NM of every record, in file order."""
     return [

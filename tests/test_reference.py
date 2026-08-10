@@ -17,11 +17,6 @@ from support import outputs_agree, reheadered, run_cmuts, sequences, try_cmuts
 COMPLEMENT = str.maketrans("ACGT", "TGCA")
 
 
-@pytest.fixture
-def data(datasets):
-    return datasets("plain")
-
-
 # ---------------------------------------------------------------------------
 # Rewriting a reference, and what the header says about it
 # ---------------------------------------------------------------------------

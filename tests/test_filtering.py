@@ -8,6 +8,7 @@ import pytest
 from conftest import SHAPES
 from support import (
     Dataset,
+    assert_counts_agree,
     converted,
     outputs_agree,
     run_cmuts,
@@ -65,18 +66,7 @@ def test_matches_samtools(datasets, tmp_path, shape, filters):
     data = datasets(shape)
     summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))
 
-    assert summary.kept == samtools_kept(data, **criteria(filters)), "surviving reads"
-
-    # Every mapped read is either kept or rejected; nothing goes missing and
-    # nothing is counted twice.
-    assert summary.kept + summary.rejected == data.mapped, "reads accounted for"
-
-    # Unmapped reads align nowhere, so no filter can touch them.
-    assert summary.unmapped == data.unmapped, "unmapped reads"
-
-    # A reference that received any mapped read gets a row, whether or not
-    # anything survived the filter.
-    assert summary.rows == data.touched, "references written"
+    assert_counts_agree(summary, data, criteria(filters))
 
 
 @pytest.mark.parametrize("shape", ["plain", "lowqual"])
@@ -112,10 +102,7 @@ def test_every_format_gives_the_same_answer(datasets, tmp_path, fmt, filters):
     data = converted(plain, tmp_path, fmt)
     summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))
 
-    assert summary.kept == samtools_kept(data, **criteria(filters))
-    assert summary.kept + summary.rejected == data.mapped
-    assert summary.unmapped == data.unmapped
-    assert summary.rows == data.touched
+    assert_counts_agree(summary, data, criteria(filters))
 
     run_cmuts(plain, tmp_path / "bam.h5", **criteria(filters))
     assert outputs_agree(tmp_path / "out.h5", tmp_path / "bam.h5")

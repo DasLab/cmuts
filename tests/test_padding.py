@@ -92,6 +92,7 @@ def test_positions_within_a_reference_are_never_nan(ragged):
     data, output = ragged
     lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
     reached = references_with_reads(data.bam)
+    assert reached, "the shape under test has no reference any read reached"
 
     with h5py.File(output, "r") as handle:
         row_of = rows_by_name(handle)
@@ -183,6 +184,7 @@ def test_a_reference_whose_reads_were_all_turned_away_is_zero(datasets, tmp_path
 
     lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
     reached = references_with_reads(data.bam)
+    assert reached, "the shape under test has no reference any read reached"
 
     with h5py.File(output, "r") as handle:
         row_of = rows_by_name(handle)

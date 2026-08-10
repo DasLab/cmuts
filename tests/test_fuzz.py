@@ -11,7 +11,7 @@ import os
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from support import generate, run_cmuts, samtools_kept
+from support import assert_counts_agree, generate, run_cmuts
 
 EXAMPLES = int(os.environ.get("FUZZ_EXAMPLES", "25"))
 
@@ -74,7 +74,4 @@ def test_random_data_matches_samtools(tmp_path_factory, shape, filters):
     data = generate(work, "fuzz", **shape)
     summary = run_cmuts(data, work / "out.h5", **filters)
 
-    assert summary.kept == samtools_kept(data, **filters), "surviving reads"
-    assert summary.kept + summary.rejected == data.mapped, "reads accounted for"
-    assert summary.unmapped == data.unmapped, "unmapped reads"
-    assert summary.rows == data.touched, "references written"
+    assert_counts_agree(summary, data, filters)

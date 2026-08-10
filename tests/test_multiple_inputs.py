@@ -16,11 +16,6 @@ from support import (
 )
 
 
-@pytest.fixture
-def data(datasets):
-    return datasets("plain")
-
-
 def values(path, field):
     with h5py.File(path, "r") as output:
         return output[field][:]

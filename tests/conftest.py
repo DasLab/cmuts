@@ -8,7 +8,11 @@ import shutil
 
 import pytest
 
-from support import CMUTS, CMUTS_GEN, generate
+# support carries assertions of its own, and pytest rewrites them only where it
+# is told to before the module is first imported.
+pytest.register_assert_rewrite("support")
+
+from support import CMUTS, CMUTS_GEN, generate  # noqa: E402
 
 # Each shape is one that is easy to get wrong: many references barely covered,
 # one reference deeply covered, lengths ranging sixtyfold, reads whose stored
@@ -62,3 +66,10 @@ def datasets(tmp_path_factory):
         return built[name]
 
     return get
+
+
+@pytest.fixture
+def data(datasets):
+    """The everyday shape, for a test that wants a dataset rather than a
+    particular one."""
+    return datasets("plain")

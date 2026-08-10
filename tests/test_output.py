@@ -6,12 +6,7 @@ result is something to ask for rather than something to discover afterwards.
 
 import pytest
 
-from support import read_summary, run_cmuts, try_cmuts
-
-
-@pytest.fixture
-def data(datasets):
-    return datasets("plain")
+from support import outputs_agree, run_cmuts, try_cmuts
 
 
 def test_refuses_to_replace_an_existing_file(data, tmp_path):
@@ -27,10 +22,17 @@ def test_refuses_to_replace_an_existing_file(data, tmp_path):
 
 
 def test_overwrite_replaces_it(data, tmp_path):
+    """Not that the second run succeeds, but that what is left at the path is
+    its result and not the first's. The two are made to differ, or agreeing
+    with either would say nothing."""
     output = tmp_path / "out.h5"
-    run_cmuts(data, output)
+    first = run_cmuts(data, output)
 
-    assert run_cmuts(data, output, overwrite=True) == read_summary(output)
+    second = run_cmuts(data, output, overwrite=True, min_mapq=60)
+    alone = run_cmuts(data, tmp_path / "alone.h5", min_mapq=60)
+
+    assert second != first, "the two runs under test count the same"
+    assert outputs_agree(output, tmp_path / "alone.h5")
 
 
 def test_a_run_that_would_fail_destroys_nothing(data, datasets, tmp_path):

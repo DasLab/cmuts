@@ -11,11 +11,6 @@ import pytest
 from support import Dataset, reheadered, try_cmuts
 
 
-@pytest.fixture
-def data(datasets):
-    return datasets("plain")
-
-
 def test_a_coordinate_sorted_file_is_accepted(data, tmp_path):
     assert try_cmuts(data, tmp_path / "out.h5").returncode == 0
 
@@ -40,7 +35,10 @@ def test_a_header_without_an_hd_line_is_refused(data, tmp_path):
                           lambda text: "".join(line + "\n" for line in text.splitlines()
                                                if not line.startswith("@HD")))
 
-    assert try_cmuts(stripped, tmp_path / "out.h5").returncode != 0
+    attempt = try_cmuts(stripped, tmp_path / "out.h5")
+
+    assert attempt.returncode != 0
+    assert "not coordinate sorted" in attempt.stderr
 
 
 def test_a_sort_order_that_merely_starts_the_same_is_refused(data, tmp_path):
@@ -48,7 +46,10 @@ def test_a_sort_order_that_merely_starts_the_same_is_refused(data, tmp_path):
     altered = reheadered(data, tmp_path,
                          lambda text: text.replace("SO:coordinate", "SO:coordinated"))
 
-    assert try_cmuts(altered, tmp_path / "out.h5").returncode != 0
+    attempt = try_cmuts(altered, tmp_path / "out.h5")
+
+    assert attempt.returncode != 0
+    assert "not coordinate sorted" in attempt.stderr
 
 
 def test_other_tags_on_the_hd_line_do_not_confuse_it(data, tmp_path):
@@ -67,8 +68,10 @@ def test_an_hd_line_without_a_sort_order_is_refused(data, tmp_path):
     it is sorted."""
     altered = reheadered(data, tmp_path,
                          lambda text: text.replace("\tSO:coordinate", ""))
+    attempt = try_cmuts(altered, tmp_path / "out.h5")
 
-    assert try_cmuts(altered, tmp_path / "out.h5").returncode != 0
+    assert attempt.returncode != 0
+    assert "not coordinate sorted" in attempt.stderr
 
 
 def test_a_sort_order_on_a_line_that_is_not_hd_is_not_believed(data, tmp_path):
@@ -80,5 +83,7 @@ def test_a_sort_order_on_a_line_that_is_not_hd_is_not_believed(data, tmp_path):
         lines[0] = lines[0].replace("@SQ\t", "@SQ\tSO:coordinate\t", 1)
         return "".join(line + "\n" for line in lines)
 
-    assert try_cmuts(reheadered(data, tmp_path, rewrite),
-                     tmp_path / "out.h5").returncode != 0
+    attempt = try_cmuts(reheadered(data, tmp_path, rewrite), tmp_path / "out.h5")
+
+    assert attempt.returncode != 0
+    assert "not coordinate sorted" in attempt.stderr
