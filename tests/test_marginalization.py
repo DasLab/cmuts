@@ -65,11 +65,23 @@ def homopolymer(kind: str, gap: int, run: int):
     return reference, read, cigars
 
 
-def written_rows(output) -> dict:
+def written_rows(output, placements: int) -> dict:
     """Every dataset a row can be read from, by name. The reference names label
-    the rows and differ by construction, so they are not among them."""
+    the rows and differ by construction, so they are not among them.
+
+    One row per placement, in every dataset. Nothing below would say otherwise:
+    the rows are asserted equal to one another, so a dataset short of a row
+    would be compared over fewer and agree, and the spread of one would be
+    taken over fewer and be narrower.
+    """
     with h5py.File(output, "r") as handle:
-        return {name: handle[name][:] for name in handle if name != "reference"}
+        rows = {name: handle[name][:] for name in handle if name != "reference"}
+
+    for name, values in rows.items():
+        assert len(values) == placements, \
+            f"{name}: {len(values)} rows for {placements} placements"
+
+    return rows
 
 
 def spread(rows) -> float:
@@ -90,7 +102,7 @@ def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
     data = placements(tmp_path, "ambiguous", reference, read, cigars)
 
     run_cmuts(data, tmp_path / "banded.h5", band=gap)
-    written = written_rows(tmp_path / "banded.h5")
+    written = written_rows(tmp_path / "banded.h5", len(cigars))
 
     # Rows of zeros would agree with one another, so the comparison says nothing
     # unless every placement counted the read it was given.
@@ -118,4 +130,6 @@ def test_a_band_narrower_than_the_gap_leaves_the_placements_apart(tmp_path, case
 
     run_cmuts(data, tmp_path / "narrow.h5", band=gap - 1)
 
-    assert spread(written_rows(tmp_path / "narrow.h5")["mutations"]) > DIVIDED
+    narrow = written_rows(tmp_path / "narrow.h5", len(cigars))
+
+    assert spread(narrow["mutations"]) > DIVIDED
