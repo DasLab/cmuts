@@ -35,15 +35,16 @@ static void add_at(const context *ctx, accum_field_id field, hts_pos_t pos,
 }
 
 /* The read's own stored length, which is what the length filters are applied
- * to and so counts inserted and soft-clipped bases. Anything past the range the
- * bins cover lands in the last of them. */
+ * to and so counts inserted and soft-clipped bases. A read longer than the
+ * range the bins cover is counted in none of them; the reads total is what
+ * says how many those were. */
 static void add_length(const context *ctx)
 {
-    double *bins     = accum_data(ctx->target, ACCUM_LENGTHS);
-    size_t  overflow = ACCUM_LENGTH_BINS(ctx->ref->len) - 1;
-    size_t  length   = (size_t)ctx->read->l_qseq;
+    double *bins   = accum_data(ctx->target, ACCUM_LENGTHS);
+    size_t  length = (size_t)ctx->read->l_qseq;
 
-    bins[length < overflow ? length : overflow] += 1.0;
+    if (length < ACCUM_LENGTH_BINS(ctx->ref->len))
+        bins[length] += 1.0;
 }
 
 static void add_window(const context *ctx, const phmm_window *window)

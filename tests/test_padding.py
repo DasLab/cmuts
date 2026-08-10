@@ -32,7 +32,7 @@ PER_LENGTH = ("read_lengths",)
 
 def row_extent(field, ref_len):
     """Columns of a row that belong to the reference; the rest is padding."""
-    return 2 * ref_len + 2 if field in PER_LENGTH else ref_len
+    return 2 * ref_len + 1 if field in PER_LENGTH else ref_len
 
 
 def rectangular(output):

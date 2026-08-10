@@ -1,8 +1,10 @@
 """The read-length histogram, against what samtools makes of the same file.
 
-One bin per stored length from zero to twice the reference, and a last bin for
-anything longer. What is counted is what survived the filter, so the oracle is
-given the criteria cmuts was given and measures the sequence column itself.
+One bin per stored length from zero to twice the reference. A read longer than
+that is counted in no bin, so a row sums to the reads it holds and the reads
+total says how many fell outside. What is counted is what survived the filter,
+so the oracle is given the criteria cmuts was given and measures the sequence
+column itself.
 """
 
 import h5py
@@ -15,14 +17,14 @@ from support import (
 )
 
 
-def expected_row(histogram, ref_len, width):
-    """The row samtools implies: every length in its own bin, and everything
-    past the range gathered into the last one."""
+def expected_row(histogram, width):
+    """The row samtools implies: every length it reports in its own bin, and
+    nothing at all for a length the row has no bin for."""
     row = np.zeros(width)
-    overflow = 2 * ref_len + 1
 
     for length, count in histogram.items():
-        row[min(length, overflow)] += count
+        if length < width:
+            row[length] += count
 
     return row
 
@@ -33,23 +35,22 @@ def compare(output, data, min_mapq):
     left to a default, the two not sharing one."""
     expected = samtools_length_histogram(data, min_mapq=min_mapq)
     lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
-    overflowed = 0
+    outside = 0
 
     with h5py.File(output, "r") as handle:
         row_of = rows_by_name(handle)
         written = handle["read_lengths"][:]
 
         for name, histogram in expected.items():
-            ref_len = lengths[name]
-            extent = 2 * ref_len + 2
+            extent = 2 * lengths[name] + 1
             row = written[row_of[name]]
 
-            assert np.array_equal(row[:extent], expected_row(histogram, ref_len, extent)), \
+            assert np.array_equal(row[:extent], expected_row(histogram, extent)), \
                 f"{name}: histogram disagrees with samtools"
 
-            overflowed += sum(n for n in histogram if n > 2 * ref_len + 1)
+            outside += sum(c for n, c in histogram.items() if n >= extent)
 
-    return overflowed
+    return outside
 
 
 @pytest.mark.parametrize("shape", sorted(SHAPES))
@@ -72,10 +73,14 @@ def test_histogram_matches_samtools_under_a_filter(datasets, tmp_path, shape):
     compare(output, data, min_mapq=30)
 
 
-def test_the_histogram_sums_to_the_reads_counted(datasets, tmp_path):
+def test_the_histogram_sums_to_the_reads_it_holds(datasets, tmp_path):
+    """Every read of a shape whose lengths are all in range is binned, so the
+    rows come to the reads total exactly."""
     data = datasets("ragged")
     output = tmp_path / "sums.h5"
     run_cmuts(data, output, min_mapq=0)
+
+    assert compare(output, data, min_mapq=0) == 0, "this shape overflows the range"
 
     with h5py.File(output, "r") as handle:
         reads = handle["reads"][:]
@@ -85,14 +90,24 @@ def test_the_histogram_sums_to_the_reads_counted(datasets, tmp_path):
         assert np.array_equal(np.nansum(written[reached], axis=1), reads[reached])
 
 
-def test_a_read_longer_than_the_range_lands_in_the_overflow_bin(datasets, tmp_path):
+def test_a_read_longer_than_the_range_is_counted_by_the_total_alone(datasets, tmp_path):
     """Soft-clipped bases are stored but align nowhere, so a read can be far
-    longer than twice the reference it was placed on. The last bin is where
-    those go, and nothing past it exists to hold them."""
+    longer than twice the reference it was placed on. No bin holds it, and what
+    says it was there is the reads total standing above the row's own sum."""
     data = datasets("overflowing")
     output = tmp_path / "overflowing.h5"
     run_cmuts(data, output, min_mapq=0)
 
-    overflowed = compare(output, data, min_mapq=0)
+    outside = compare(output, data, min_mapq=0)
+    assert outside, "the shape under test produced no read past the range"
 
-    assert overflowed, "the shape under test produced no read past the range"
+    with h5py.File(output, "r") as handle:
+        reads = handle["reads"][:]
+        written = handle["read_lengths"][:]
+        reached = ~np.isnan(reads)
+
+        missing = reads[reached] - np.nansum(written[reached], axis=1)
+
+        assert (missing >= 0).all(), "a row holds more reads than were counted"
+        assert missing.sum() == outside, \
+            "the reads outside the range are not what the total is short by"

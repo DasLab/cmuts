@@ -30,11 +30,16 @@ typedef enum {
 } accum_kind;
 
 /* Bins a read-length histogram covers for a reference of len bases: one for
- * every length from 0 to twice the reference, and a last one for anything
- * longer. The range reaches past len because a read carrying insertions or
- * soft-clipped ends is longer than the reference it aligns to, which on the
- * libraries measured is where most of them fall. */
-#define ACCUM_LENGTH_BINS(len) (2 * (len) + 2)
+ * every length from 0 to twice the reference. The range reaches past len
+ * because a read carrying insertions or soft-clipped ends is longer than the
+ * reference it aligns to, which on the libraries measured is where most of
+ * them fall.
+ *
+ * A read longer than the range is counted in no bin at all. There is no
+ * overflow bin, so column j means a read of length j whatever reference the
+ * row belongs to, and columns may be summed across a ragged library. How many
+ * reads fell outside is the reads total less the row's own sum. */
+#define ACCUM_LENGTH_BINS(len) (2 * (len) + 1)
 
 typedef struct {
     const char *name;  /* also the name of the dataset this field is written to */
