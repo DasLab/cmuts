@@ -645,11 +645,9 @@ static int pipeline_open_output(pipeline *p, const pipeline_config *cfg,
         return -1;
     }
 
-    if (h5writer_error(p->out) || metadata_write_names(p->out, p->bam) < 0) {
-        const char *cause = h5writer_error(p->out);
-
+    if (h5writer_error(p->out)) {
         snprintf(error, error_len, "%s: %s", cfg->output_path,
-                 cause ? cause : "unable to write the reference names");
+                 h5writer_error(p->out));
         return -1;
     }
 

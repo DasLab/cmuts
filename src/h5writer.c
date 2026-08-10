@@ -14,8 +14,6 @@
 #include "error.h"
 #include "rates.h"
 
-#define DATASET_REFERENCE "reference"
-
 /* Chunks are sized by bytes rather than rows so that a file of few long
  * references and one of many short references both land near this figure. */
 #define TARGET_CHUNK_BYTES (1u << 20)
@@ -477,51 +475,8 @@ int h5writer_row(h5writer *w, int32_t tid, size_t len, const accum *acc)
 }
 
 /* ------------------------------------------------------------------------ */
-/* Names and totals                                                          */
+/* Totals                                                                    */
 /* ------------------------------------------------------------------------ */
-
-static hid_t make_string_type(void)
-{
-    hid_t type = H5Tcopy(H5T_C_S1);
-
-    if (type < 0)
-        return H5I_INVALID_HID;
-
-    if (H5Tset_size(type, H5T_VARIABLE) < 0 || H5Tset_cset(type, H5T_CSET_UTF8) < 0) {
-        H5Tclose(type);
-        return H5I_INVALID_HID;
-    }
-
-    return type;
-}
-
-int h5writer_names(h5writer *w, const char *const *names, int32_t n_refs)
-{
-    hsize_t dims    = (hsize_t)n_refs;
-    hid_t   type    = make_string_type();
-    hid_t   space   = H5Screate_simple(1, &dims, NULL);
-    hid_t   dcpl    = untimed_plist(H5P_DATASET_CREATE);
-    hid_t   dataset = H5I_INVALID_HID;
-    herr_t  status  = -1;
-
-    if (type >= 0 && space >= 0 && dcpl >= 0)
-        dataset = H5Dcreate2(w->file, DATASET_REFERENCE, type, space,
-                             H5P_DEFAULT, dcpl, H5P_DEFAULT);
-
-    if (dataset >= 0)
-        status = H5Dwrite(dataset, type, H5S_ALL, H5S_ALL, H5P_DEFAULT, names);
-
-    if (dataset >= 0)
-        H5Dclose(dataset);
-    if (dcpl >= 0)
-        H5Pclose(dcpl);
-    if (space >= 0)
-        H5Sclose(space);
-    if (type >= 0)
-        H5Tclose(type);
-
-    return status < 0 ? fail(w, "unable to write the reference names") : 0;
-}
 
 /* A run total, as a scalar beside the per-reference counts it belongs with.
  *

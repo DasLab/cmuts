@@ -57,11 +57,7 @@ def row_extent(field, ref_len, width):
 
 def per_reference(output):
     """The arrays with one value for each reference."""
-    return {
-        k: d[:]
-        for k, d in datasets_of(output).items()
-        if d.ndim == 1 and k != "reference"
-    }
+    return {k: d[:] for k, d in datasets_of(output).items() if d.ndim == 1}
 
 
 @pytest.fixture
@@ -81,10 +77,9 @@ def ragged(datasets, tmp_path):
 def test_positions_past_a_reference_are_nan(ragged):
     data, output = ragged
     lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
+    row_of = rows_by_name(data.fasta)
 
     with h5py.File(output, "r") as handle:
-        row_of = rows_by_name(handle)
-
         for field, values in per_base(handle).items():
             width = values.shape[1]
             shorter = [n for n, ln in lengths.items() if ln < width]
@@ -101,11 +96,10 @@ def test_positions_within_a_reference_are_never_nan(ragged):
     data, output = ragged
     lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
     reached = references_with_reads(data.bam)
+    row_of = rows_by_name(data.fasta)
     assert reached, "the shape under test has no reference any read reached"
 
     with h5py.File(output, "r") as handle:
-        row_of = rows_by_name(handle)
-
         for field, values in counts(handle).items():
             width = values.shape[1]
             for name in reached:
@@ -133,14 +127,14 @@ def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path
     lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
     widest = max(lengths.values())
     reached = references_with_reads(data.bam)
+    row_of = rows_by_name(data.fasta)
+    missing = [name for name in row_of if name not in reached]
+
+    assert missing, "the shape under test covers every reference"
+    assert any(lengths[name] < widest for name in missing), \
+        "no uncovered reference is short enough to carry padding"
 
     with h5py.File(output, "r") as handle:
-        row_of = rows_by_name(handle)
-        missing = [name for name in row_of if name not in reached]
-        assert missing, "the shape under test covers every reference"
-        assert any(lengths[name] < widest for name in missing), \
-            "no uncovered reference is short enough to carry padding"
-
         for field, values in counts(handle).items():
             width = values.shape[1]
             for name in missing:
@@ -168,12 +162,12 @@ def test_an_uncovered_reference_of_full_length_holds_no_nan(datasets, tmp_path):
     run_cmuts(data, output)
 
     reached = references_with_reads(data.bam)
+    row_of = rows_by_name(data.fasta)
+    missing = [name for name in row_of if name not in reached]
+
+    assert missing, "the shape under test covers every reference"
 
     with h5py.File(output, "r") as handle:
-        row_of = rows_by_name(handle)
-        missing = [name for name in row_of if name not in reached]
-        assert missing, "the shape under test covers every reference"
-
         for field, values in counts(handle).items():
             for name in missing:
                 row = values[row_of[name]]
@@ -193,11 +187,10 @@ def test_a_reference_whose_reads_were_all_turned_away_is_zero(datasets, tmp_path
 
     lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
     reached = references_with_reads(data.bam)
+    row_of = rows_by_name(data.fasta)
     assert reached, "the shape under test has no reference any read reached"
 
     with h5py.File(output, "r") as handle:
-        row_of = rows_by_name(handle)
-
         for field, values in counts(handle).items():
             width = values.shape[1]
             for name in reached:

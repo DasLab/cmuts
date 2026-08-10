@@ -36,15 +36,14 @@ def compare(output, data, min_mapq):
     left to a default, the two not sharing one."""
     expected = samtools_length_histogram(data, min_mapq=min_mapq)
     lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
+    row_of = rows_by_name(data.fasta)
     outside = 0
 
     # A criterion that admits nothing leaves nothing to compare, and every
     # assertion below would hold of an output that counted the wrong thing.
     assert expected, "no read survives the criterion under test"
 
-
     with h5py.File(output, "r") as handle:
-        row_of = rows_by_name(handle)
         written = handle["reads/lengths"][:]
         width = written.shape[1]
 

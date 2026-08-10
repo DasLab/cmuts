@@ -75,8 +75,7 @@ def homopolymer(kind: str, gap: int, run: int):
 
 
 def written_rows(output, placements: int) -> dict:
-    """Every dataset a row can be read from, by name. The reference names label
-    the rows and differ by construction, so they are not among them.
+    """Every dataset a row can be read from, by name.
 
     One row per placement, in every dataset. Nothing below would say otherwise:
     the rows are asserted equal to one another, so a dataset short of a row
@@ -85,8 +84,7 @@ def written_rows(output, placements: int) -> dict:
     """
     with h5py.File(output, "r") as handle:
         # A run total has no rows to compare, being one number for the file.
-        rows = {k: d[:] for k, d in datasets_of(handle).items()
-                if k != "reference" and d.ndim >= 1}
+        rows = {k: d[:] for k, d in datasets_of(handle).items() if d.ndim >= 1}
 
     for name, values in rows.items():
         assert len(values) == placements, \

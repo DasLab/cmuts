@@ -299,11 +299,15 @@ def samtools_length_histogram(
     return counts
 
 
-def rows_by_name(output) -> dict:
-    """Which row of an open output each reference was written to."""
-    names = [name.decode() if isinstance(name, bytes) else str(name)
-             for name in output["reference"][:]]
-    return {name: i for i, name in enumerate(names)}
+def rows_by_name(fasta) -> dict:
+    """Which row of an output each reference is written to.
+
+    Rows are identified by position alone: the FASTA and the header must
+    declare the references in the same order, so a reference's row is where it
+    sits in the FASTA. Taken from the FASTA rather than from the output, that
+    being the mapping a caller has to hand and so the one under test.
+    """
+    return {name: i for i, name in enumerate(sequences(fasta))}
 
 
 def assert_counts_agree(summary, data: Dataset, criteria: dict):
@@ -403,8 +407,8 @@ def try_cmuts(data: Dataset, output, workers: int = 4, **options):
 
 def _datasets_agree(a, b) -> bool:
     # NaN marks a reference no read reached, so two outputs agree where both
-    # hold one. Only the counting datasets can carry it; the names cannot.
-    # [()] rather than [:], a run total being a scalar that cannot be sliced.
+    # hold one. [()] rather than [:], a run total being a scalar that cannot be
+    # sliced.
     return np.array_equal(a[()], b[()], equal_nan=np.issubdtype(a.dtype, np.floating))
 
 
@@ -446,4 +450,4 @@ def counted_fields(path):
         # Counts are unsigned and coverage is a float; both are added over. The
         # rates are neither, two files holding twice the reads and one rate.
         return [k for k, d in datasets_of(output).items()
-                if d.ndim >= 1 and k not in RATES and k != "reference"]
+                if d.ndim >= 1 and k not in RATES]

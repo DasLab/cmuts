@@ -13,7 +13,12 @@
 #include "rates.h"
 
 /* Writes one dataset per accumulator field: (n_refs, ref_cap) for per-base
- * fields, (n_refs,) for scalars, alongside the reference names.
+ * fields, (n_refs,) for scalars.
+ *
+ * A row is identified by its position and nothing else: row i belongs to the
+ * reference the header declares i-th, which is the i-th record of the FASTA,
+ * the two being required to agree. The names themselves are not written, the
+ * FASTA already holding them in that order.
  *
  * Every row exists from the outset, since the reference count is known from
  * the BAM header, so rows may be written in any order and no dataset ever has
@@ -29,9 +34,6 @@ typedef struct h5writer h5writer;
 h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
                           rate_config rates, bool overwrite);
 void      h5writer_close(h5writer *w);
-
-/* Records the name of every reference, in header order. */
-int h5writer_names(h5writer *w, const char *const *names, int32_t n_refs);
 
 /* Writes one reference's row, narrowing the accumulated doubles to float.
  * Values past len are left at the fill value. */
