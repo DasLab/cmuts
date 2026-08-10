@@ -95,29 +95,37 @@ static const cli_option OPTIONS[] = {
                          pipeline.tally_config.weights.weight[PHMM_SUBSTITUTION]),
       .metavar = "W",
       .help = "what a substitution counts towards the mutation total",
-      .detail = "Scales what a substitution contributes to the mutations written. "
-                "Absolute rather than relative to the other two: raising every "
-                "weight raises the total. Coverage, the positions spanned, and "
-                "the alignment are unaffected.",
-      .minimum = 0, .maximum = CLI_UNBOUNDED },
+      .detail = "How much of a modification a substitution is taken to be. Only "
+                "the three weights relative to one another decide anything, a "
+                "factor common to them rescaling every rate the run reports and "
+                "changing nothing else, so one apiece is the widest they need to "
+                "be. Nothing above one is accepted: a weight is a share of an "
+                "event and a share above the whole would leave the mutations at "
+                "a position above the evidence for them. The alignment is "
+                "unaffected, no weight reaching either pass.",
+      .minimum = 0, .maximum = 1 },
     { .group = "Counting", .name = "deletion-weight", .type = OPT_DOUBLE,
       .offset = offsetof(cli_args,
                          pipeline.tally_config.weights.weight[PHMM_DELETION]),
       .metavar = "W",
       .help = "what a deletion counts towards the mutation total",
-      .detail = "Scales what a deletion contributes to the mutations written, once "
-                "per deleted run rather than once per base skipped. Otherwise as "
-                "--substitution-weight.",
-      .minimum = 0, .maximum = CLI_UNBOUNDED },
+      .detail = "How much of a modification a deletion is taken to be, counted "
+                "once per deleted run rather than once per base skipped. "
+                "Otherwise as --substitution-weight.",
+      .minimum = 0, .maximum = 1 },
     { .group = "Counting", .name = "insertion-weight", .type = OPT_DOUBLE,
       .offset = offsetof(cli_args,
                          pipeline.tally_config.weights.weight[PHMM_INSERTION]),
       .metavar = "W",
       .help = "what an insertion counts towards the mutation total",
-      .detail = "Scales what an insertion contributes to the mutations written, "
-                "once per inserted run. Otherwise as --substitution-weight. The "
-                "default of 0 leaves insertions out of the total.",
-      .minimum = 0, .maximum = CLI_UNBOUNDED },
+      .detail = "How much of a modification an insertion is taken to be, counted "
+                "once per inserted run. Unlike the other two it decides how far "
+                "the insertion bears on the position at all: an inserted base "
+                "answers to no reference position, so it enters the evidence for "
+                "one only as far as this says it does, and at the default of 0 it "
+                "is left out of both the mutations and what they are taken "
+                "against. Otherwise as --substitution-weight.",
+      .minimum = 0, .maximum = 1 },
 
     { .group = "Performance", .name = "workers", .key = 'j', .type = OPT_SIZE,
       .offset = offsetof(cli_args, pipeline.workers), .metavar = "N",

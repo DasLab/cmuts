@@ -51,11 +51,15 @@ typedef enum {
  * the event happened.
  *
  * These reach the accumulation only. Neither pass reads them, so the alignment
- * does not depend on them. They are absolute: the mutation total is in units of
- * them, so a factor common to all three scales it, while the coverage and the
- * positions spanned stay as they were. Substitutions and deletions default to 1
- * and insertions to 0, which leaves insertions out of the total, and none of
- * the three is calibrated.
+ * does not depend on them. Each is a share of an event, at most the whole of
+ * one, and only the three relative to one another decide anything: a factor
+ * common to them rescales every rate the run reports and changes nothing else.
+ *
+ * The insertion weight does one thing more, deciding how far an insertion bears
+ * on the position it precedes at all, so it scales what the mutations are taken
+ * against as well as the mutations. Substitutions and deletions default to 1
+ * and insertions to 0, which leaves insertions out of both, and none of the
+ * three is calibrated.
  *
  * Indexed by kind so that a finer breakdown, by reference base for example, is
  * another index rather than another field. */

@@ -742,10 +742,15 @@ static weighing weighing_of(const context *ctx, size_t i)
  * passes over but covers none, there being no base read there; it counts as a
  * modification only where it opened, one adduct stopping one reverse
  * transcriptase once whatever length it then skipped. An insertion counts the
- * same way, at the position it precedes, and neither spans nor covers.
+ * same way, at the position it precedes, and covers nothing.
  *
- * Only the mutations are weighted by event kind. How a position was reached
- * does not bear on whether it was reached.
+ * A pairing and a deletion span whatever their posterior says, the one having
+ * read the base and the other having reached it, and the weights do not touch
+ * that. An insertion spans what its weight says it does, the same quantity it
+ * lays as a mutation: an inserted base answers to no reference position, so how
+ * far it bears on one is exactly how far it is taken to be a modification
+ * there. Spanning it unweighted would make a weight of nothing say a modifi-
+ * cation was less likely rather than saying nothing about it.
  *
  * A deletion is laid at the end of its run, not its start, because reverse
  * transcription reads the template from the 3' end: the last base a deletion
@@ -804,9 +809,9 @@ static void accumulate_row(const context *ctx, size_t i)
                           : 0.0;
 
         at.coverage[k] += paired * confidence;
-        at.spanned[k]  += paired + passed;
 
         /* What the previous cell opened, then what this one lays. */
+        at.spanned[k]   += paired + passed + carried;
         at.mutations[k] += carried;
         at.mutations[k] += weight.substitution * paired * terms[k].modification
                          + weight.deletion * skipped * pairings[k];
@@ -814,6 +819,7 @@ static void accumulate_row(const context *ctx, size_t i)
         carried = weight.insertion * opened;
     }
 
+    at.spanned[width]   += carried;
     at.mutations[width] += carried;
 }
 
