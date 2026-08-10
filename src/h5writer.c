@@ -32,12 +32,12 @@
 
 #define DEFLATE_LEVEL 3
 
-/* A per-base field is a reference by position, a scalar field one value for the
- * reference. Both are described through the same arrays, which are sized to the
- * larger of the two. */
-#define RANK_SCALAR   1
-#define RANK_PER_BASE 2
-#define RANK_MAX      RANK_PER_BASE
+/* A scalar field is one value per reference; every other kind is a reference by
+ * something, and so a row. Both shapes are described through the same arrays,
+ * which are sized to the larger. */
+#define RANK_SCALAR 1
+#define RANK_VECTOR 2
+#define RANK_MAX    RANK_VECTOR
 
 struct h5writer {
     hid_t   file;
@@ -79,9 +79,9 @@ static hid_t untimed_plist(hid_t class_id)
 /* Dataset construction                                                      */
 /* ------------------------------------------------------------------------ */
 
-static hsize_t rows_per_chunk(const h5writer *w)
+static hsize_t rows_per_chunk(const h5writer *w, size_t row_values)
 {
-    size_t  row_bytes = w->ref_cap * sizeof(float);
+    size_t  row_bytes = row_values * sizeof(float);
     hsize_t rows      = row_bytes ? TARGET_CHUNK_BYTES / row_bytes : (hsize_t)w->n_refs;
 
     if (rows < 1)
@@ -94,18 +94,21 @@ static hsize_t rows_per_chunk(const h5writer *w)
 
 static int field_rank(accum_field_id id)
 {
-    return ACCUM_FIELDS[id].kind == ACCUM_PER_BASE ? RANK_PER_BASE
-                                                   : RANK_SCALAR;
+    return ACCUM_FIELDS[id].kind == ACCUM_SCALAR ? RANK_SCALAR : RANK_VECTOR;
 }
 
+/* The width of a row is the field's own extent at the longest reference, so a
+ * field wider than one value per base is sized by the same rule as the rest. */
 static void field_shape(const h5writer *w, accum_field_id id, hsize_t *dims, hsize_t *chunk)
 {
-    dims[0]  = (hsize_t)w->n_refs;
-    chunk[0] = rows_per_chunk(w);
+    size_t width = accum_extent(id, w->ref_cap);
 
-    if (field_rank(id) == RANK_PER_BASE) {
-        dims[1]  = w->ref_cap;
-        chunk[1] = w->ref_cap;
+    dims[0]  = (hsize_t)w->n_refs;
+    chunk[0] = rows_per_chunk(w, width);
+
+    if (field_rank(id) == RANK_VECTOR) {
+        dims[1]  = width;
+        chunk[1] = width;
     }
 }
 
@@ -252,12 +255,12 @@ const char *h5writer_error(const h5writer *w)
 
 /* Selects the part of a dataset belonging to one reference: the whole row for
  * a scalar field, its first len values for a per-base field. */
-static int select_row(hid_t dataset, int32_t tid, size_t len, int rank,
+static int select_row(hid_t dataset, int32_t tid, size_t width, int rank,
                       hid_t *filespace, hid_t *memspace)
 {
     hsize_t start[RANK_MAX] = { (hsize_t)tid, 0 };
-    hsize_t count[RANK_MAX] = { 1, (hsize_t)len };
-    hsize_t extent          = rank == RANK_PER_BASE ? (hsize_t)len : 1;
+    hsize_t count[RANK_MAX] = { 1, (hsize_t)width };
+    hsize_t extent          = rank == RANK_VECTOR ? (hsize_t)width : 1;
 
     *filespace = H5Dget_space(dataset);
     if (*filespace < 0)
@@ -284,7 +287,8 @@ static int write_field(h5writer *w, accum_field_id id, int32_t tid, size_t len,
     hid_t filespace, memspace;
     herr_t status;
 
-    if (select_row(w->dataset[id], tid, len, rank, &filespace, &memspace) < 0)
+    if (select_row(w->dataset[id], tid, accum_extent(id, len), rank,
+                   &filespace, &memspace) < 0)
         return fail(w, "unable to select an output row");
 
     status = H5Dwrite(w->dataset[id], H5T_NATIVE_DOUBLE, memspace, filespace,

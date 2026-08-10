@@ -17,15 +17,24 @@ typedef enum {
     ACCUM_COVERAGE,
     ACCUM_SPANNED,
     ACCUM_MUTATIONS,
+    ACCUM_LENGTHS,
     ACCUM_READS,
     ACCUM_FILTERED,
     ACCUM_N_FIELDS,
 } accum_field_id;
 
 typedef enum {
-    ACCUM_PER_BASE,  /* one value per reference base */
-    ACCUM_SCALAR,    /* one value per reference */
+    ACCUM_PER_BASE,    /* one value per reference base */
+    ACCUM_PER_LENGTH,  /* one value per read length, plus an overflow bin */
+    ACCUM_SCALAR,      /* one value per reference */
 } accum_kind;
+
+/* Bins a read-length histogram covers for a reference of len bases: one for
+ * every length from 0 to twice the reference, and a last one for anything
+ * longer. The range reaches past len because a read carrying insertions or
+ * soft-clipped ends is longer than the reference it aligns to, which on the
+ * libraries measured is where most of them fall. */
+#define ACCUM_LENGTH_BINS(len) (2 * (len) + 2)
 
 typedef struct {
     const char *name;  /* also the name of the dataset this field is written to */
@@ -33,6 +42,11 @@ typedef struct {
 } accum_field;
 
 extern const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS];
+
+/* Values one field occupies for a reference of len bases. Allocation, zeroing,
+ * merging, the output row and the dataset's own width all derive from this, so
+ * a new kind of field is described here and nowhere else. */
+size_t accum_extent(accum_field_id id, size_t len);
 
 /* Accumulated values for a single reference.
  *

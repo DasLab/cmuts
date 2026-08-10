@@ -1,8 +1,9 @@
 """What a value of NaN means in the output.
 
-The per-base arrays are rectangular and the references are not, so every row
-runs to the length of the longest. NaN is what tells the difference: a position
-past the end of its own reference, and a reference no alignment ever named.
+The arrays with a row per reference are rectangular and the references are not,
+so every row runs to the width the longest reference needs. NaN is what tells
+the difference: a column past what its own reference needs, and a reference no
+alignment ever named.
 
 A zero is a measurement and says something else entirely -- that the position
 was reached and nothing was counted there. The two must not be confused, since
@@ -23,8 +24,19 @@ from support import references_with_reads, run_cmuts, sequences
 REJECTS_EVERYTHING = 61
 
 
-def per_base(output):
-    """The arrays with a value for every reference position."""
+# Two kinds of row are written, indexed by different things, so which one an
+# array is has to be named rather than read off its shape. Everything not
+# listed here is indexed by reference position.
+PER_LENGTH = ("read_lengths",)
+
+
+def row_extent(field, ref_len):
+    """Columns of a row that belong to the reference; the rest is padding."""
+    return 2 * ref_len + 2 if field in PER_LENGTH else ref_len
+
+
+def rectangular(output):
+    """The arrays with a row per reference, whatever indexes the row."""
     return {name: output[name][:] for name in output if output[name].ndim == 2}
 
 
@@ -64,15 +76,14 @@ def test_positions_past_a_reference_are_nan(ragged):
 
     with h5py.File(output, "r") as handle:
         row_of = rows_by_name(handle)
-        arrays = per_base(handle)
-        width = next(iter(arrays.values())).shape[1]
 
-        shorter = [name for name, n in lengths.items() if n < width]
-        assert shorter, "the shape under test has no reference shorter than the widest"
+        for field, values in rectangular(handle).items():
+            width = values.shape[1]
+            shorter = [n for n, ln in lengths.items() if row_extent(field, ln) < width]
+            assert shorter, f"{field}: no reference is narrower than the widest"
 
-        for field, values in arrays.items():
             for name in shorter:
-                tail = values[row_of[name]][lengths[name]:]
+                tail = values[row_of[name]][row_extent(field, lengths[name]):]
                 assert np.isnan(tail).all(), f"{field}: {name} is padded with {tail[:4]}"
 
 
@@ -86,9 +97,9 @@ def test_positions_within_a_reference_are_never_nan(ragged):
     with h5py.File(output, "r") as handle:
         row_of = rows_by_name(handle)
 
-        for field, values in per_base(handle).items():
+        for field, values in rectangular(handle).items():
             for name in reached:
-                within = values[row_of[name]][:lengths[name]]
+                within = values[row_of[name]][:row_extent(field, lengths[name])]
                 assert not np.isnan(within).any(), f"{field}: {name} has a hole in it"
 
 
@@ -110,7 +121,7 @@ def test_a_reference_no_read_named_is_nan_throughout(datasets, tmp_path):
         missing = [name for name in row_of if name not in reached]
         assert missing, "the shape under test covers every reference"
 
-        for field, values in {**per_base(handle), **per_reference(handle)}.items():
+        for field, values in {**rectangular(handle), **per_reference(handle)}.items():
             for name in missing:
                 assert np.isnan(values[row_of[name]]).all(), \
                     f"{field}: {name} was never named but is not NaN"
@@ -132,9 +143,9 @@ def test_a_reference_whose_reads_were_all_turned_away_is_zero(datasets, tmp_path
     with h5py.File(output, "r") as handle:
         row_of = rows_by_name(handle)
 
-        for field, values in per_base(handle).items():
+        for field, values in rectangular(handle).items():
             for name in reached:
-                within = values[row_of[name]][:lengths[name]]
+                within = values[row_of[name]][:row_extent(field, lengths[name])]
                 assert not np.isnan(within).any(), f"{field}: {name} went to NaN"
                 assert (within == 0).all(), f"{field}: {name} counted something"
 
