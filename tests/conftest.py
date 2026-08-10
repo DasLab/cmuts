@@ -14,7 +14,8 @@ from support import CMUTS, CMUTS_GEN, generate
 # one reference deeply covered, lengths ranging sixtyfold, reads whose stored
 # length far exceeds the span they align to through soft clipping and again
 # through long insertions, a file where every read falls below any useful
-# threshold, and one with no differences from the reference at all.
+# threshold, one with no differences from the reference at all, and one whose
+# reads run past twice the length of the reference they are placed on.
 SHAPES = {
     "plain":   dict(seed=101, references=40, ref_length="150:600", reads_per_ref=25),
     "sparse":  dict(seed=102, references=800, covered=0.3, reads_per_ref="1:6",
@@ -28,6 +29,9 @@ SHAPES = {
     "lowqual": dict(seed=107, references=15, reads_per_ref=20, mapq=0),
     "clean":   dict(seed=108, references=15, reads_per_ref=20, mismatch_rate=0,
                     insertions=0, deletions=0, soft_clips=0),
+    "overflowing": dict(seed=109, references=12, ref_length=60, reads_per_ref=20,
+                        read_length="40:60", soft_clips="0:2",
+                        soft_clip_length="20:150"),
 }
 
 

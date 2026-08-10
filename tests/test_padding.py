@@ -17,7 +17,7 @@ import h5py
 import numpy as np
 import pytest
 
-from support import references_with_reads, run_cmuts, sequences
+from support import references_with_reads, rows_by_name, run_cmuts, sequences
 
 # Higher than any mapping quality a read can carry, so every read is turned
 # away and the references themselves are all that is left.
@@ -47,13 +47,6 @@ def per_reference(output):
         for name in output
         if output[name].ndim == 1 and np.issubdtype(output[name].dtype, np.floating)
     }
-
-
-def rows_by_name(output):
-    """Which row of the output each reference was written to."""
-    names = [name.decode() if isinstance(name, bytes) else str(name)
-             for name in output["reference"][:]]
-    return {name: i for i, name in enumerate(names)}
 
 
 @pytest.fixture

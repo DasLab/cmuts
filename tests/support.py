@@ -9,6 +9,7 @@ that changes.
 from __future__ import annotations
 
 import subprocess
+from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -214,6 +215,33 @@ def samtools_kept(
         for n in lengths
         if (min_length == 0 or n >= min_length) and (max_length == 0 or n <= max_length)
     )
+
+
+def samtools_length_histogram(
+    data: Dataset, min_mapq: int = 0, strand: str = "both",
+) -> dict:
+    """The stored length of every surviving read, counted per reference.
+
+    Measured from the sequence column, as samtools_kept measures it. samtools
+    has no per-reference length histogram of its own: `samtools stats` reports
+    one for the file as a whole, and there its -q is a trimming parameter and
+    not a bound on mapping quality, so it counts reads this filter would drop.
+    """
+    flags = ("-F", "0x104", "-q", str(min_mapq), *STRAND_FLAGS[strand])
+    counts = defaultdict(Counter)
+
+    for line in _records(data.bam, *flags):
+        columns = line.split("\t")
+        counts[columns[2]][len(columns[9])] += 1
+
+    return counts
+
+
+def rows_by_name(output) -> dict:
+    """Which row of an open output each reference was written to."""
+    names = [name.decode() if isinstance(name, bytes) else str(name)
+             for name in output["reference"][:]]
+    return {name: i for i, name in enumerate(names)}
 
 
 def md_and_nm_tags(bam):
