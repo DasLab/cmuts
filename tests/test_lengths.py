@@ -45,7 +45,7 @@ def compare(output, data, min_mapq):
 
     with h5py.File(output, "r") as handle:
         row_of = rows_by_name(handle)
-        written = handle["read_lengths"][:]
+        written = handle["reads/lengths"][:]
         width = written.shape[1]
 
         assert width == 2 * max(lengths.values()) + 1, "the row is not the widest reference"
@@ -91,8 +91,8 @@ def test_the_histogram_sums_to_the_reads_it_holds(datasets, tmp_path):
     assert compare(output, data, min_mapq=0) == 0, "this shape overflows the range"
 
     with h5py.File(output, "r") as handle:
-        reads = handle["reads"][:]
-        written = handle["read_lengths"][:]
+        reads = handle["reads/counted"][:]
+        written = handle["reads/lengths"][:]
         reached = ~np.isnan(reads)
 
         assert np.array_equal(np.nansum(written[reached], axis=1), reads[reached])
@@ -110,8 +110,8 @@ def test_a_read_longer_than_the_range_is_counted_by_the_total_alone(datasets, tm
     assert outside, "the shape under test produced no read past the range"
 
     with h5py.File(output, "r") as handle:
-        reads = handle["reads"][:]
-        written = handle["read_lengths"][:]
+        reads = handle["reads/counted"][:]
+        written = handle["reads/lengths"][:]
         reached = ~np.isnan(reads)
 
         missing = reads[reached] - np.nansum(written[reached], axis=1)

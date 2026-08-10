@@ -58,9 +58,9 @@ static const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     [OUT_COVERAGE]   = { "coverage",       ACCUM_COVERAGE  },
     [OUT_REACTIVITY] = { "reactivity",     ACCUM_MUTATIONS },
     [OUT_ERROR]      = { "error",          ACCUM_MUTATIONS },
-    [OUT_LENGTHS]    = { "read_lengths",   ACCUM_LENGTHS   },
-    [OUT_READS]      = { "reads",          ACCUM_READS     },
-    [OUT_FILTERED]   = { "reads_filtered", ACCUM_FILTERED  },
+    [OUT_LENGTHS]    = { "reads/lengths",  ACCUM_LENGTHS   },
+    [OUT_READS]      = { "reads/counted",  ACCUM_READS     },
+    [OUT_FILTERED]   = { "reads/filtered", ACCUM_FILTERED  },
 };
 
 #define RANK_SCALAR 1
@@ -74,6 +74,7 @@ struct h5writer {
     size_t  ref_cap;
     /* NaN, as wide as the longest tail any row can have, so marking one is a
      * write and not a fill each time. */
+    hid_t   reads;      /* the group the per-run counts are gathered in */
     double *padding;
     double *row;        /* what a derived field is worked out into */
     double  min_depth;  /* below which a rate is not worth having */
@@ -243,7 +244,7 @@ static hid_t create_field(h5writer *w, out_field_id id)
 h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
                           double min_depth, bool overwrite)
 {
-    hid_t     fcpl;
+    hid_t     fcpl, gcpl;
     h5writer *w = calloc(1, sizeof *w);
     if (!w)
         return NULL;
@@ -269,6 +270,8 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++)
         w->dataset[id] = H5I_INVALID_HID;
 
+    w->reads = H5I_INVALID_HID;
+
     fcpl = untimed_plist(H5P_FILE_CREATE);
     if (fcpl < 0) {
         fail(w, "unable to prepare the output file");
@@ -283,6 +286,23 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
 
     if (w->file < 0) {
         fail(w, "unable to create the output file");
+        return w;
+    }
+
+    /* Named before any dataset inside it, so a path names a group that is
+     * already there. Untimed as the file and the datasets are, or two runs over
+     * one input would differ by the moment this was made. */
+    gcpl = untimed_plist(H5P_GROUP_CREATE);
+    if (gcpl < 0) {
+        fail(w, "unable to prepare the output");
+        return w;
+    }
+
+    w->reads = H5Gcreate2(w->file, "reads", H5P_DEFAULT, gcpl, H5P_DEFAULT);
+    H5Pclose(gcpl);
+
+    if (w->reads < 0) {
+        fail(w, "unable to create a group");
         return w;
     }
 
@@ -305,6 +325,9 @@ void h5writer_close(h5writer *w)
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++)
         if (w->dataset[id] >= 0)
             H5Dclose(w->dataset[id]);
+
+    if (w->reads >= 0)
+        H5Gclose(w->reads);
 
     if (w->file >= 0)
         H5Fclose(w->file);

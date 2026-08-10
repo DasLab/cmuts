@@ -24,12 +24,12 @@
  * it would have been evidence against a modification rather than no evidence
  * either way. */
 const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS] = {
-    [ACCUM_COVERAGE]  = { "coverage",       ACCUM_PER_BASE },
-    [ACCUM_SPANNED]   = { "spanned",        ACCUM_PER_BASE },
-    [ACCUM_MUTATIONS] = { "mutations",      ACCUM_PER_BASE },
-    [ACCUM_LENGTHS]   = { "read_lengths",   ACCUM_PER_LENGTH },
-    [ACCUM_READS]     = { "reads",          ACCUM_SCALAR   },
-    [ACCUM_FILTERED]  = { "reads_filtered", ACCUM_SCALAR   },
+    [ACCUM_COVERAGE]  = { ACCUM_PER_BASE },
+    [ACCUM_SPANNED]   = { ACCUM_PER_BASE },
+    [ACCUM_MUTATIONS] = { ACCUM_PER_BASE },
+    [ACCUM_LENGTHS]   = { ACCUM_PER_LENGTH },
+    [ACCUM_READS]     = { ACCUM_SCALAR },
+    [ACCUM_FILTERED]  = { ACCUM_SCALAR },
 };
 
 /* With len == cap this also gives the field's stride in the arena. */

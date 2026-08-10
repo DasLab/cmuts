@@ -48,9 +48,10 @@ typedef enum {
  * reads total less the row's own sum. */
 #define ACCUM_LENGTH_BINS(cap) (2 * (cap) + 1)
 
+/* What a field is, which is all the accumulator needs of it. What it is called
+ * in the output, and whether it is written at all, is h5writer's to say. */
 typedef struct {
-    const char *name;  /* also the name of the dataset this field is written to */
-    accum_kind  kind;
+    accum_kind kind;
 } accum_field;
 
 extern const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS];

@@ -11,7 +11,7 @@ import h5py
 import numpy as np
 import pytest
 
-from support import placements, run_cmuts
+from support import datasets_of, placements, run_cmuts
 
 KINDS = ("D", "I")
 GAPS = (1, 2, 3)
@@ -84,7 +84,7 @@ def written_rows(output, placements: int) -> dict:
     taken over fewer and be narrower.
     """
     with h5py.File(output, "r") as handle:
-        rows = {name: handle[name][:] for name in handle if name != "reference"}
+        rows = {k: d[:] for k, d in datasets_of(handle).items() if k != "reference"}
 
     for name, values in rows.items():
         assert len(values) == placements, \

@@ -365,8 +365,8 @@ class Summary:
 
 def read_summary(path) -> Summary:
     with h5py.File(path, "r") as output:
-        reads = output["reads"][:]
-        rejected = output["reads_filtered"][:]
+        reads = output["reads/counted"][:]
+        rejected = output["reads/filtered"][:]
 
         return Summary(
             kept=int(np.nansum(reads, dtype=np.float64)),
@@ -415,15 +415,32 @@ def outputs_agree(first, second) -> bool:
     checked by nothing.
     """
     with h5py.File(first, "r") as a, h5py.File(second, "r") as b:
-        return set(a) == set(b) and all(_datasets_agree(a[k], b[k]) for k in a)
+        left, right = datasets_of(a), datasets_of(b)
+
+        return set(left) == set(right) and all(
+            _datasets_agree(left[k], right[k]) for k in left
+        )
 
 
 # Rates, not counts: two files hold twice the reads and the same reactivity.
 RATES = ("reactivity", "error")
 
 
+def datasets_of(handle) -> dict:
+    """Every dataset of an output, by path. The counts about reads sit in a
+    group of their own, so a name is a path and not a key."""
+    found = {}
+
+    handle.visititems(
+        lambda name, obj: found.update({name: obj})
+        if isinstance(obj, h5py.Dataset) else None
+    )
+
+    return found
+
+
 def counted_fields(path):
     """The datasets holding counts, which are the ones arithmetic applies to."""
     with h5py.File(path, "r") as output:
-        return [k for k in output
-                if np.issubdtype(output[k].dtype, np.floating) and k not in RATES]
+        return [k for k, d in datasets_of(output).items()
+                if np.issubdtype(d.dtype, np.floating) and k not in RATES]

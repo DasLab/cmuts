@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 
 from support import (
-    RATES, references_with_reads, rows_by_name, run_cmuts, sequences,
+    RATES, datasets_of, references_with_reads, rows_by_name, run_cmuts, sequences,
 )
 
 # Higher than any mapping quality a read can carry, so every read is turned
@@ -30,12 +30,12 @@ REJECTS_EVERYTHING = 61
 # array is has to be named rather than read off its shape. Everything not
 # listed here is indexed by reference position, and runs only as far as its own
 # reference; a length is not a position, so those rows are data throughout.
-PER_LENGTH = ("read_lengths",)
+PER_LENGTH = ("reads/lengths",)
 
 
 def rectangular(output):
     """The arrays with a row per reference, whatever indexes the row."""
-    return {name: output[name][:] for name in output if output[name].ndim == 2}
+    return {k: d[:] for k, d in datasets_of(output).items() if d.ndim == 2}
 
 
 def counts(output):
@@ -58,9 +58,9 @@ def row_extent(field, ref_len, width):
 def per_reference(output):
     """The arrays with one value for each reference."""
     return {
-        name: output[name][:]
-        for name in output
-        if output[name].ndim == 1 and np.issubdtype(output[name].dtype, np.floating)
+        k: d[:]
+        for k, d in datasets_of(output).items()
+        if d.ndim == 1 and np.issubdtype(d.dtype, np.floating)
     }
 
 
@@ -207,7 +207,7 @@ def test_a_reference_whose_reads_were_all_turned_away_is_zero(datasets, tmp_path
 
         for field, values in per_reference(handle).items():
             for name in reached:
-                assert values[row_of[name]] == 0 or field == "reads_filtered", \
+                assert values[row_of[name]] == 0 or field == "reads/filtered", \
                     f"{field}: {name} is not zero"
 
 
