@@ -210,9 +210,9 @@ static cell_terms terms_from(const context *ctx, bool agree, double error)
     };
 }
 
-/* Every value a cell of one row can take.
+/* Every value a cell that names a reference position can take.
  *
- * A row pairs one read base, read and scored once, so a cell only selects among
+ * A row pairs one read base, read and scored once, so such a cell selects among
  * three cases: the reference offers the same base, a different one, or nothing
  * comparable. All three are computed on entering the row, keeping the divisions
  * a modification costs out of the per-cell path.
@@ -241,15 +241,19 @@ static row_terms row_terms_of(const context *ctx, size_t i)
     };
 }
 
-/* Cell (i, j) compares the row's base against reference base j - 1. A position
- * past either end of the reference is unknown, not a disagreement. */
+/* Cell (i, j) compares the row's base against reference base j - 1.
+ *
+ * The reference is the whole molecule, so a position past either end holds no
+ * base a read base could have been templated from, and the pairing is not an
+ * alignment. A position the reference names ambiguously is a real base of
+ * unknown identity, and carries the uninformative emission instead. */
 static cell_terms terms_at(const context *ctx, const row_terms *row,
                            hts_pos_t j)
 {
     nuc theirs;
 
     if (j < 1 || (size_t)j > ctx->ref->len)
-        return row->neither;
+        return (cell_terms){ .emission = 0.0, .modification = 0.0 };
 
     theirs = nuc_from_char(ctx->ref->seq[j - 1]);
 
@@ -674,10 +678,10 @@ static void backward_row(const context *ctx, size_t i)
  * such position is inside it. That a row is a contiguous stretch of the window
  * at a fixed offset is an invariant of window_of, not of this function.
  *
- * Positions past either end of the reference are kept. Some of what the band
- * names really does lie outside, since a read near a boundary has paths that
- * leave it; the caller decides which to keep, and deciding it here as well
- * would leave two places to change. */
+ * Positions past either end of the reference are addressed like any other. The
+ * band is not clamped, so a row near a boundary names a few, and nothing is
+ * ever laid at them; bounding the window here as well as in the caller would
+ * leave two places to change. */
 typedef struct {
     double *coverage;
     double *spanned;

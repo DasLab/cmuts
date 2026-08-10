@@ -97,8 +97,10 @@ void          phmm_scratch_destroy(phmm_scratch *scratch);
  * spread over each placement the band allowed, and must be added to a target
  * rather than assigned.
  *
- * The window may extend past either end of the reference: a read placed near a
- * boundary has paths that leave it. Discarding those is the caller's job. */
+ * The window is sized from the band, which is not clamped, so it may extend
+ * past either end of the reference. Nothing is ever laid there, but the
+ * positions are present, and the caller must keep them out of anything it
+ * indexes by reference position. */
 typedef struct {
     hts_pos_t     origin;      /* reference position of value 0 */
     size_t        len;
