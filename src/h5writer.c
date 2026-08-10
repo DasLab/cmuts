@@ -12,6 +12,7 @@
 #include <hdf5.h>
 
 #include "error.h"
+#include "rates.h"
 
 #define DATASET_REFERENCE "reference"
 
@@ -82,8 +83,8 @@ struct h5writer {
      * write and not a fill each time. */
     hid_t   reads;      /* the group the per-run counts are gathered in */
     double *padding;
-    double *row;        /* what a derived field is worked out into */
-    double  min_depth;  /* below which a rate is not worth having */
+    double     *row;    /* what a derived field is worked out into */
+    rate_config rates;
     char    error[CM_ERROR_MAX];
 };
 
@@ -265,7 +266,7 @@ static hid_t create_field(h5writer *w, out_field_id id)
 /* ------------------------------------------------------------------------ */
 
 h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
-                          double min_depth, bool overwrite)
+                          rate_config rates, bool overwrite)
 {
     hid_t     fcpl, gcpl;
     h5writer *w = calloc(1, sizeof *w);
@@ -278,7 +279,7 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
 
     w->n_refs  = n_refs;
     w->ref_cap = ref_cap;
-    w->min_depth = min_depth;
+    w->rates     = rates;
     w->padding   = calloc(ref_cap ? ref_cap : 1, sizeof *w->padding);
     w->row       = calloc(ref_cap ? ref_cap : 1, sizeof *w->row);
 
@@ -422,55 +423,20 @@ static int write_part(h5writer *w, out_field_id id, int32_t tid, size_t from,
  * returning to it later costs reading, inflating and deflating that chunk
  * again. Where a reference is as long as the longest there is no tail, which on
  * a library of one length is every reference. */
-/* The rate a position's mutations come to against the evidence for them, and
- * how far that rate is to be believed.
- *
- * Both are NaN where the evidence falls short of min_depth, which it meets by
- * reaching it. No rate can be had
- * from nothing at all, and one had from almost nothing is a number a caller
- * would have to know to distrust; NaN is the value nothing reads as a
- * measurement. It is the one place NaN means two things in this output -- a
- * position outside its reference, and one inside it that nothing reached --
- * and coverage tells them apart, being NaN for the first alone.
- *
- * The standard error is that of a proportion over the evidence standing as its
- * count. The rate cannot exceed one, every weight being a share of an event and
- * an insertion spanning what it lays, so the root is of nothing negative.
- */
-static const double *derived(h5writer *w, out_field_id id, const accum *acc,
-                             size_t len)
-{
-    const double *mutations = accum_const_data(acc, ACCUM_MUTATIONS);
-    const double *spanned   = accum_const_data(acc, ACCUM_SPANNED);
-
-    for (size_t i = 0; i < len; i++) {
-        double evidence = spanned[i];
-        double rate     = evidence > 0 ? mutations[i] / evidence : 0.0;
-
-        if (rate > 1.0)
-            rate = 1.0;
-
-        /* Some evidence is wanted whatever depth was asked for, so a depth of
-         * nothing means whatever there is rather than none at all. */
-        bool known = evidence > 0.0 && evidence >= w->min_depth;
-
-        w->row[i] = known
-                  ? (id == OUT_REACTIVITY
-                        ? rate
-                        : sqrt(rate * (1.0 - rate) / evidence))
-                  : (double)NAN;
-    }
-
-    return w->row;
-}
-
+/* What a field is written from. Two of them are not accumulated at all: the
+ * rate and its error are what the mutations and the span come to, which rates
+ * works out into a row of its own. */
 static const double *values(h5writer *w, out_field_id id, const accum *acc,
                             size_t len)
 {
-    if (id == OUT_REACTIVITY || id == OUT_ERROR)
-        return derived(w, id, acc, len);
+    if (id == OUT_REACTIVITY)
+        rate_reactivity(&w->rates, acc, len, w->row);
+    else if (id == OUT_ERROR)
+        rate_error(&w->rates, acc, len, w->row);
+    else
+        return accum_const_data(acc, OUT_FIELDS[id].shape);
 
-    return accum_const_data(acc, OUT_FIELDS[id].shape);
+    return w->row;
 }
 
 /* The reference's own values, and then the mark for the columns past them.

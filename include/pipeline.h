@@ -9,6 +9,7 @@
 #include <stddef.h>
 
 #include "filter.h"
+#include "rates.h"
 #include "tally.h"
 
 typedef struct {
@@ -19,10 +20,7 @@ typedef struct {
     const char        *fasta_path;
     const char        *output_path;
     bool               overwrite;
-    /* Evidence a position must reach before its rate is written rather than
-     * left NaN; reaching it is enough. Zero writes a rate wherever there is any
-     * evidence at all, a rate over none being no rate. */
-    double             min_depth;
+    rate_config        rate_config;
     filter_config      filter_config;
     tally_config       tally_config;
     size_t      workers;         /* threads running the processing step */

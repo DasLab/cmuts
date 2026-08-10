@@ -91,7 +91,7 @@ static const cli_option OPTIONS[] = {
                 "exhaust memory ends the run.",
       .minimum = 0, .maximum = CLI_UNBOUNDED },
     { .group = "Counting", .name = "min-depth", .type = OPT_DOUBLE,
-      .offset = offsetof(cli_args, pipeline.min_depth), .metavar = "D",
+      .offset = offsetof(cli_args, pipeline.rate_config.min_depth), .metavar = "D",
       .help = "evidence a position needs before its rate is written",
       .detail = "A reactivity is the mutations at a position over the evidence "
                 "for them, and the error is what that evidence makes of it. "

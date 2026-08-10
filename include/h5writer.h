@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include "accum.h"
+#include "rates.h"
 
 /* Writes one dataset per accumulator field: (n_refs, ref_cap) for per-base
  * fields, (n_refs,) for scalars, alongside the reference names.
@@ -26,7 +27,7 @@ typedef struct h5writer h5writer;
 
 /* Fails rather than replacing an existing file unless overwrite is set. */
 h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
-                          double min_depth, bool overwrite);
+                          rate_config rates, bool overwrite);
 void      h5writer_close(h5writer *w);
 
 /* Records the name of every reference, in header order. */

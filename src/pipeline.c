@@ -531,7 +531,7 @@ static void *consumer_main(void *arg)
 pipeline_config pipeline_defaults(void)
 {
     return (pipeline_config){
-        .min_depth      = 1,
+        .rate_config    = rate_defaults(),
         .workers        = 4,
         .decode_threads = 4,
         .queue_capacity = 4096,
@@ -639,7 +639,7 @@ static int pipeline_open_output(pipeline *p, const pipeline_config *cfg,
                                 bool may_replace, char *error, size_t error_len)
 {
     p->out = h5writer_create(cfg->output_path, cm_bam_stream_nref(p->bam), p->ref_cap,
-                             cfg->min_depth, may_replace);
+                             cfg->rate_config, may_replace);
     if (!p->out) {
         snprintf(error, error_len, "out of memory");
         return -1;
