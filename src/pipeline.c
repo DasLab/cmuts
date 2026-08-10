@@ -531,6 +531,7 @@ static void *consumer_main(void *arg)
 pipeline_config pipeline_defaults(void)
 {
     return (pipeline_config){
+        .min_depth      = 1,
         .workers        = 4,
         .decode_threads = 4,
         .queue_capacity = 4096,

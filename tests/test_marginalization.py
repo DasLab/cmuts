@@ -40,7 +40,10 @@ DIVIDED = 0.1
 # reading an array of zeros and agreeing with itself. What is under test is
 # where an event is counted, not what a run chooses to count, so both kinds are
 # given a weight here.
-WEIGHTED = dict(insertion_weight=1)
+# One read to a reference, so the evidence never reaches a whole observation
+# and every rate would be left NaN; the depth filter is not what these tests
+# are about.
+WEIGHTED = dict(insertion_weight=1, min_depth=0)
 
 CASES = [(kind, gap, run) for kind in KINDS for gap in GAPS for run in RUNS]
 CONTROLS = [(kind, gap, RUNS[0]) for kind in KINDS for gap in GAPS]
@@ -117,7 +120,8 @@ def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
 
     for name, rows in written.items():
         for cigar, row in zip(cigars, rows):
-            assert np.allclose(row, rows[0], atol=TOLERANCE, rtol=0), \
+            assert np.allclose(row, rows[0], atol=TOLERANCE, rtol=0,
+                               equal_nan=True), \
                 f"{name} at {cigar} differs from {cigars[0]}"
 
 

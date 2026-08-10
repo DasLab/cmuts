@@ -379,7 +379,8 @@ static int write_part(h5writer *w, out_field_id id, int32_t tid, size_t from,
 /* The rate a position's mutations come to against the evidence for them, and
  * how far that rate is to be believed.
  *
- * Both are NaN where the evidence does not pass min_depth. No rate can be had
+ * Both are NaN where the evidence falls short of min_depth, which it meets by
+ * reaching it. No rate can be had
  * from nothing at all, and one had from almost nothing is a number a caller
  * would have to know to distrust; NaN is the value nothing reads as a
  * measurement. It is the one place NaN means two things in this output -- a
@@ -403,7 +404,11 @@ static const double *derived(h5writer *w, out_field_id id, const accum *acc,
         if (rate > 1.0)
             rate = 1.0;
 
-        w->row[i] = evidence > w->min_depth
+        /* Some evidence is wanted whatever depth was asked for, so a depth of
+         * nothing means whatever there is rather than none at all. */
+        bool known = evidence > 0.0 && evidence >= w->min_depth;
+
+        w->row[i] = known
                   ? (id == OUT_REACTIVITY
                         ? rate
                         : sqrt(rate * (1.0 - rate) / evidence))

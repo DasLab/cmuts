@@ -95,13 +95,16 @@ static const cli_option OPTIONS[] = {
       .help = "evidence a position needs before its rate is written",
       .detail = "A reactivity is the mutations at a position over the evidence "
                 "for them, and the error is what that evidence makes of it. "
-                "Below this both are left NaN: no rate can be had from nothing, "
-                "and one had from almost nothing is a number a caller would have "
-                "to know to distrust. The default of 0 writes a rate wherever "
-                "anything was spanned at all, and 1 asks for a whole read's "
-                "worth. Coverage is written whatever this says, so what a "
-                "position was reached by is there to be read even where no rate "
-                "is.",
+                "Short of this both are left NaN, reaching it being enough: no "
+                "rate can be had from nothing, and one had from almost nothing "
+                "is a number a caller would have to know to distrust. The "
+                "default of 1 asks for a whole observation, which is also what "
+                "holds the error to a half, that being the most a standard "
+                "error of a proportion can be; below one it is divided by a "
+                "fraction and goes where it likes. A depth of 0 writes a rate "
+                "wherever there is any evidence at all. Coverage is written "
+                "whatever this says, so what a position was reached by is there "
+                "to be read even where no rate is.",
       .minimum = 0, .maximum = CLI_UNBOUNDED },
 
     { .group = "Counting", .name = "substitution-weight", .type = OPT_DOUBLE,
