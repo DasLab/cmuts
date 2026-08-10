@@ -48,29 +48,40 @@ typedef struct {
     h5writer      *out;
     progress      *bar;
     tally_tables   tally_tables;
-    /* The first way a worker found to stop, which every worker offers and the
-     * loader reads: one failure is enough, and the first to arrive is all the
-     * run has to report. */
-    _Atomic int    failure;   /* a phmm_status */
     filter_config  filter_config;
     size_t         batch;
     size_t         ref_cap;    /* longest reference, sizing every accumulator */
 } pipeline;
 
-static void pipeline_finish_reference(pipeline *p, refctx *ctx)
+/* Everything above is settled while the run is assembled and only read once it
+ * starts, which is why every stage below takes it const. What the threads tell
+ * one another is held apart, and is the only thing any of them writes. */
+
+/* The first way a worker found to stop: one failure is enough, and the first to
+ * arrive is all the run has to report. */
+typedef struct {
+    _Atomic int status;   /* a phmm_status, PHMM_OK until a worker stops */
+} failure_flag;
+
+/* Keeps the first offered and discards the rest, so that what the run reports
+ * is the failure that stopped it and not whichever worker wrote last. */
+static void failure_record(failure_flag *f, phmm_status status)
+{
+    int unfailed = PHMM_OK;
+
+    atomic_compare_exchange_strong(&f->status, &unfailed, (int)status);
+}
+
+static phmm_status failure_seen(const failure_flag *f)
+{
+    return (phmm_status)atomic_load(&f->status);
+}
+
+static void pipeline_finish_reference(const pipeline *p, refctx *ctx)
 {
     void *handle = ctx;
 
     queue_push_all(p->completed, &handle, 1);
-}
-
-/* Keeps the first failure offered and discards the rest, so that what the run
- * reports is the one that stopped it and not whichever worker stored last. */
-static void pipeline_record_failure(pipeline *p, phmm_status status)
-{
-    int unfailed = PHMM_OK;
-
-    atomic_compare_exchange_strong(&p->failure, &unfailed, (int)status);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -78,7 +89,8 @@ static void pipeline_record_failure(pipeline *p, phmm_status status)
 /* ------------------------------------------------------------------------ */
 
 typedef struct {
-    pipeline      *pipe;
+    const pipeline *pipe;
+    failure_flag  *failure;  /* shared; the one thing a worker writes */
     refctx        *held;    /* reference the shadow holds a handle for, or NULL */
     accum          shadow;
     tally_scratch *scratch; /* what the processing step works in */
@@ -131,7 +143,7 @@ static void worker_count_run(worker *w, void **slots, size_t n,
                        &w->shadow);
 
         if (status != PHMM_OK)
-            pipeline_record_failure(w->pipe, status);
+            failure_record(w->failure, status);
     }
 }
 
@@ -149,7 +161,7 @@ static void worker_process_run(worker *w, void **slots, size_t n)
     /* A run the failure reached first is unwound and not counted: nothing will
      * read what it would have contributed, and the handles it holds are owed
      * back whether it contributes or not. */
-    if (atomic_load(&w->pipe->failure) == PHMM_OK)
+    if (failure_seen(w->failure) == PHMM_OK)
         worker_count_run(w, slots, n, &ref);
 
     /* The whole run is finished at the same moment, so it goes back in one
@@ -214,7 +226,8 @@ static void *worker_main(void *arg)
  * of it is filled, a reservoir of carriers and how many remain. As locals they
  * were six variables to keep in step by hand. */
 typedef struct {
-    pipeline *pipe;
+    const pipeline     *pipe;
+    const failure_flag *failure;  /* shared; the loader only reads it */
 
     refctx *reference;  /* the one being filled, or none yet */
     size_t  rejected;   /* its reads the filter turned away */
@@ -228,9 +241,9 @@ typedef struct {
     int32_t owed;       /* the first reference not yet accounted for */
 } loader;
 
-static int loader_open(loader *l, pipeline *p)
+static int loader_open(loader *l, const pipeline *p, const failure_flag *f)
 {
-    *l = (loader){ .pipe = p };
+    *l = (loader){ .pipe = p, .failure = f };
 
     l->batch = calloc(p->batch, sizeof *l->batch);
     l->spare = calloc(p->batch, sizeof *l->spare);
@@ -281,7 +294,7 @@ static void loader_leave_reference(loader *l)
         pipeline_finish_reference(l->pipe, ctx);
 }
 
-static refctx *pipeline_open_reference(pipeline *p, int32_t tid)
+static refctx *pipeline_open_reference(const pipeline *p, int32_t tid)
 {
     const cm_fasta_record *seq = refseq_advance(p->refs, tid);
     if (!seq)
@@ -316,7 +329,7 @@ static bool loader_emit_empty(loader *l, int32_t tid)
 
 static bool loader_account_through(loader *l, int32_t upto)
 {
-    pipeline *p = l->pipe;
+    const pipeline *p = l->pipe;
 
     while (l->owed < upto) {
         int32_t tid = l->owed++;
@@ -397,14 +410,15 @@ static void loader_finish(loader *l)
 }
 
 /* Reads the file once, in order, dispatching what survives. */
-static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_len)
+static int loader_main(const pipeline *p, const failure_flag *f,
+                       size_t *unmapped, char *error, size_t error_len)
 {
     loader        l;
     cm_bam_record rec;
     int           status = CM_ITER_EOF;
     int           result = 0;
 
-    if (loader_open(&l, p) < 0) {
+    if (loader_open(&l, p, f) < 0) {
         snprintf(error, error_len, "out of memory");
         return -1;
     }
@@ -415,7 +429,7 @@ static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_
         /* A worker has found something no later read will mend, so there is
          * nothing to be had from reading them. Stopping is not failing: what
          * went wrong is the worker's to report, not the loader's. */
-        if (atomic_load(&p->failure) != PHMM_OK)
+        if (failure_seen(l.failure) != PHMM_OK)
             break;
 
         /* Unmapped reads align to no reference, so they are counted for the
@@ -469,7 +483,7 @@ static int loader_main(pipeline *p, size_t *unmapped, char *error, size_t error_
 /* ------------------------------------------------------------------------ */
 
 typedef struct {
-    pipeline *pipe;
+    const pipeline *pipe;
     int       status;  /* first write failure, if any */
     pthread_t thread;
 } consumer;
@@ -632,13 +646,15 @@ static int pipeline_open_output(pipeline *p, const pipeline_config *cfg,
  * needs is made here rather than inside the thread, so that running out of
  * memory is reported instead of leaving a thread that exits at once and a
  * loader that waits forever for it. */
-static int worker_start_all(worker *workers, size_t n, pipeline *p,
-                            size_t *started, char *error, size_t error_len)
+static int worker_start_all(worker *workers, size_t n, const pipeline *p,
+                            failure_flag *f, size_t *started,
+                            char *error, size_t error_len)
 {
     *started = 0;
 
     for (size_t i = 0; i < n; i++) {
         workers[i].pipe    = p;
+        workers[i].failure = f;
         workers[i].slots   = calloc(p->batch, sizeof *workers[i].slots);
         workers[i].scratch = tally_scratch_create();
 
@@ -663,7 +679,8 @@ static int worker_start_all(worker *workers, size_t n, pipeline *p,
 
 int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
 {
-    pipeline  p        = { 0 };
+    pipeline     p     = { 0 };
+    failure_flag failed = { 0 };
     consumer  cons     = { 0 };
     bool      may_replace = false;
     size_t    unmapped = 0;
@@ -693,9 +710,9 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
         goto done;
     }
 
-    if (worker_start_all(workers, cfg->workers, &p, &started,
+    if (worker_start_all(workers, cfg->workers, &p, &failed, &started,
                          error, error_len) == 0)
-        status = loader_main(&p, &unmapped, error, error_len);
+        status = loader_main(&p, &failed, &unmapped, error, error_len);
 
     queue_close(p.work);
     for (size_t i = 0; i < started; i++)
@@ -708,9 +725,9 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
      * caught as surely as one the loader saw in time to stop for. A loader that
      * failed on its own account has already reported something more
      * specific. */
-    if (status == 0 && atomic_load(&p.failure) != PHMM_OK) {
+    if (status == 0 && failure_seen(&failed) != PHMM_OK) {
         snprintf(error, error_len, "%s",
-                 atomic_load(&p.failure) == PHMM_NO_MEMORY
+                 failure_seen(&failed) == PHMM_NO_MEMORY
                      ? "out of memory marginalizing a read"
                      : "a marginalization did not hold together");
         status = -1;
