@@ -137,7 +137,7 @@ static int create_groups(h5writer *w)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
         if (create_field_groups(w, OUT_FIELDS[id].name) < 0) {
-            return -1;
+            return fail(w, "unable to create a group");
         }
     }
 
@@ -180,11 +180,16 @@ static hid_t create_field(h5writer *w, out_field_id id)
 /* Lifetime                                                                  */
 /* ------------------------------------------------------------------------ */
 
-h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
-                          bool overwrite)
+/* Allocates a writer holding nothing yet, with every handle marked absent.
+ *
+ * The steps that build the rest may each fail and leave those after them undone, and the
+ * writer is closed whatever happened, so it must be safe to close from here onwards: it
+ * closes exactly what it opened. Zero, which calloc leaves behind, is a handle HDF5 would
+ * accept, hence the marking. */
+static h5writer *writer_alloc(int32_t n_refs, size_t ref_cap)
 {
-    hid_t     fcpl;
     h5writer *w = calloc(1, sizeof *w);
+
     if (!w) {
         return NULL;
     }
@@ -193,9 +198,6 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
      * stderr. */
     H5Eset_auto2(H5E_DEFAULT, NULL, NULL);
 
-    /* Every handle is marked absent before anything can fail, so that a writer
-     * abandoned partway through closes exactly what it opened. Zero, which calloc
-     * leaves behind, is a handle HDF5 would accept. */
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
         w->dataset[id]   = H5I_INVALID_HID;
         w->filespace[id] = H5I_INVALID_HID;
@@ -206,57 +208,83 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
 
     w->n_refs  = n_refs;
     w->ref_cap = ref_cap;
-    w->padding = calloc(ref_cap ? ref_cap : 1, sizeof *w->padding);
+
+    return w;
+}
+
+/* Fills the row of marks that a reference's unused columns are written from. */
+static int build_padding(h5writer *w)
+{
+    w->padding = calloc(w->ref_cap ? w->ref_cap : 1, sizeof *w->padding);
 
     if (!w->padding) {
-        fail(w, "out of memory");
-        return w;
+        return fail(w, "out of memory");
     }
 
-    for (size_t i = 0; i < ref_cap; i++) {
+    for (size_t i = 0; i < w->ref_cap; i++) {
         w->padding[i] = (double)NAN;
     }
 
-    w->memspace = h5layout_row_space(ref_cap);
-    if (w->memspace < 0) {
-        fail(w, "unable to prepare the output");
-        return w;
-    }
+    return 0;
+}
 
-    fcpl = h5layout_untimed_plist(H5P_FILE_CREATE);
+/* Prepares the row every write is selected from. */
+static int build_memspace(h5writer *w)
+{
+    w->memspace = h5layout_row_space(w->ref_cap);
+
+    return w->memspace < 0 ? fail(w, "unable to prepare the output") : 0;
+}
+
+/* Creates the file, exclusively unless overwrite was requested, so that a file appearing
+ * between the check and the create cannot undo the decision. */
+static int create_file(h5writer *w, const char *path, bool overwrite)
+{
+    hid_t fcpl = h5layout_untimed_plist(H5P_FILE_CREATE);
+
     if (fcpl < 0) {
-        fail(w, "unable to prepare the output file");
-        return w;
+        return fail(w, "unable to prepare the output file");
     }
 
-    /* Exclusive unless overwrite was requested, so that a file appearing between
-     * the check and the create cannot undo the decision. */
     w->file = H5Fcreate(path, overwrite ? H5F_ACC_TRUNC : H5F_ACC_EXCL,
                         fcpl, H5P_DEFAULT);
     H5Pclose(fcpl);
 
-    if (w->file < 0) {
-        fail(w, "unable to create the output file");
-        return w;
-    }
+    return w->file < 0 ? fail(w, "unable to create the output file") : 0;
+}
 
-    if (create_groups(w) < 0) {
-        fail(w, "unable to create a group");
-        return w;
-    }
-
+/* Creates a dataset per field, and the dataspace each of its rows is selected from. */
+static int create_fields(h5writer *w)
+{
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
         w->dataset[id] = create_field(w, id);
         if (w->dataset[id] < 0) {
-            fail(w, "unable to create a dataset");
-            return w;
+            return fail(w, "unable to create a dataset");
         }
 
         w->filespace[id] = H5Dget_space(w->dataset[id]);
         if (w->filespace[id] < 0) {
-            fail(w, "unable to describe a dataset");
-            return w;
+            return fail(w, "unable to describe a dataset");
         }
+    }
+
+    return 0;
+}
+
+h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
+                          bool overwrite)
+{
+    h5writer *w = writer_alloc(n_refs, ref_cap);
+
+    if (!w) {
+        return NULL;
+    }
+
+    if (build_padding(w) == 0 &&
+        build_memspace(w) == 0 &&
+        create_file(w, path, overwrite) == 0 &&
+        create_groups(w) == 0) {
+        create_fields(w);
     }
 
     return w;

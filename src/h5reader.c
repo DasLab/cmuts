@@ -144,9 +144,27 @@ static int open_field(h5reader *r, out_field_id id)
     return r->filespace[id] < 0 ? fail_field(r, id, "cannot be described") : 0;
 }
 
-h5reader *h5reader_open(const char *path)
+static int open_fields(h5reader *r)
+{
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (open_field(r, id) < 0) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+/* Allocates a reader holding nothing yet, with every handle marked absent.
+ *
+ * The steps that build the rest may each fail and leave those after them undone, and the
+ * reader is closed whatever happened, so it must be safe to close from here onwards: it
+ * closes exactly what it opened. Zero, which calloc leaves behind, is a handle HDF5 would
+ * accept, hence the marking. */
+static h5reader *reader_alloc(void)
 {
     h5reader *r = calloc(1, sizeof *r);
+
     if (!r) {
         return NULL;
     }
@@ -155,9 +173,6 @@ h5reader *h5reader_open(const char *path)
      * stderr. */
     H5Eset_auto2(H5E_DEFAULT, NULL, NULL);
 
-    /* Every handle is marked absent before anything can fail, so that a reader
-     * abandoned partway through closes exactly what it opened. Zero, which calloc
-     * leaves behind, is a handle HDF5 would accept. */
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
         r->dataset[id]   = H5I_INVALID_HID;
         r->filespace[id] = H5I_INVALID_HID;
@@ -166,26 +181,37 @@ h5reader *h5reader_open(const char *path)
     r->file     = H5I_INVALID_HID;
     r->memspace = H5I_INVALID_HID;
 
+    return r;
+}
+
+static int open_file(h5reader *r, const char *path)
+{
     r->file = H5Fopen(path, H5F_ACC_RDONLY, H5P_DEFAULT);
-    if (r->file < 0) {
-        fail(r, "unable to open the file, which may not be HDF5 at all");
-        return r;
-    }
 
-    if (probe_shape(r) < 0) {
-        return r;
-    }
+    return r->file < 0
+         ? fail(r, "unable to open the file, which may not be HDF5 at all") : 0;
+}
 
+/* Prepares the row every read is selected into, which the shape must be known to size. */
+static int build_memspace(h5reader *r)
+{
     r->memspace = h5layout_row_space(r->ref_cap);
-    if (r->memspace < 0) {
-        fail(r, "unable to prepare the file for reading");
-        return r;
+
+    return r->memspace < 0 ? fail(r, "unable to prepare the file for reading") : 0;
+}
+
+h5reader *h5reader_open(const char *path)
+{
+    h5reader *r = reader_alloc();
+
+    if (!r) {
+        return NULL;
     }
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (open_field(r, id) < 0) {
-            return r;
-        }
+    if (open_file(r, path) == 0 &&
+        probe_shape(r) == 0 &&
+        build_memspace(r) == 0) {
+        open_fields(r);
     }
 
     return r;
