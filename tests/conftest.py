@@ -12,7 +12,7 @@ import pytest
 # is told to before the module is first imported.
 pytest.register_assert_rewrite("support")
 
-from support import CMUTS, CMUTS_GEN, generate  # noqa: E402
+from support import CMUTS, CMUTS_GEN, CMUTS_SUB, generate  # noqa: E402
 
 # Each shape is one that is easy to get wrong: many references barely covered,
 # one reference deeply covered, lengths ranging sixtyfold, reads whose stored
@@ -46,7 +46,7 @@ SHAPES = {
 
 
 def pytest_configure(config):
-    missing = [path.name for path in (CMUTS, CMUTS_GEN) if not path.exists()]
+    missing = [path.name for path in (CMUTS, CMUTS_GEN, CMUTS_SUB) if not path.exists()]
     if missing:
         pytest.exit(f"run make first: {', '.join(missing)} not built", returncode=2)
 

@@ -1,0 +1,488 @@
+"""Taking an untreated background off a treated run.
+
+cmuts-sub performs arithmetic on two files: a rate less a rate, two errors in
+quadrature, and everything counted added. Its result depends on the values in
+those files and on nothing else, so the inputs here are written by hand rather
+than counted from an alignment, and each test states the values it uses. No test
+below depends on how cmuts computes a reactivity, so that calculation may change
+without affecting any of them.
+
+The layout is the one thing the two programs share, and one test checks the
+description in outputs.py against a real run of cmuts.
+"""
+
+from __future__ import annotations
+
+import itertools
+import subprocess
+
+import numpy as np
+import pytest
+
+from outputs import (
+    BY_NAME,
+    FIELDS,
+    RULES,
+    RUN_TOTAL,
+    combined,
+    datasets_of,
+    field_of,
+    rewidened,
+    shape,
+    without,
+    write_output,
+)
+from support import CMUTS_SUB, run_cmuts, run_subtract, try_subtract
+
+# Small enough to write out by hand and to read in a failure, and ragged enough
+# that a row, a histogram and a scalar are all of different widths.
+N_REFS = 4
+CAP = 6
+
+# Every dataset the arithmetic applies to, run totals included.
+COMBINED = [field.name for field in FIELDS] + [RUN_TOTAL]
+
+# The datasets holding a rate or a fraction, which are the ones that can be
+# marked as never measured.
+FLOATING = ("coverage", "reactivity", "error")
+
+
+@pytest.fixture(params=["plain", "chunked"])
+def storage(request):
+    """The two ways an input may be stored. cmuts writes chunked, shuffled and
+    deflated; a subtraction must give the same result either way, so every test
+    that reads values runs against both."""
+    return request.param
+
+
+@pytest.fixture
+def build(tmp_path, storage):
+    """Writes an input, returning its path. Each is named separately, so one
+    test may build several."""
+    written = itertools.count()
+
+    def make(values=None, *, n_refs=N_REFS, cap=CAP, unmapped=0):
+        return write_output(
+            tmp_path / f"input{next(written)}.h5",
+            n_refs=n_refs, cap=cap, values=values, unmapped=unmapped,
+            storage=storage,
+        )
+
+    return make
+
+
+@pytest.fixture
+def subtract(tmp_path):
+    """Runs the subtraction into a path of its own."""
+    def run(treated, untreated, **options):
+        return run_subtract(treated, untreated, tmp_path / "difference.h5", **options)
+
+    return run
+
+
+def spread(field, n_refs=N_REFS, cap=CAP, seed=0):
+    """Values filling one field, differing from column to column and from row
+    to row, so that a rule applied along the wrong axis does not agree by
+    accident."""
+    rng = np.random.default_rng(seed)
+    wanted = shape(BY_NAME[field], n_refs, cap)
+
+    if BY_NAME[field].dtype == "u8":
+        return rng.integers(0, 1000, size=wanted, dtype=np.uint64)
+
+    return rng.random(size=wanted).astype(np.float32)
+
+
+def everything(seed):
+    """A value for every field at once, so that a test of one field runs on a
+    file whose other fields are not zero."""
+    return {field.name: spread(field.name, seed=seed + i)
+            for i, field in enumerate(FIELDS)}
+
+
+# ---------------------------------------------------------------------------
+# The layout, which is shared with cmuts
+# ---------------------------------------------------------------------------
+
+
+def test_the_layout_written_here_is_the_one_cmuts_writes(data, tmp_path):
+    """The one place these tests touch cmuts.
+
+    Every other test builds its inputs from the description in outputs.py, so
+    that description must match what cmuts produces. Only the structure is
+    compared -- the names, the types and the widths -- and never a value, so
+    what cmuts computes remains outside these tests. A field added to the output
+    fails here alone, and with a message naming it.
+    """
+    counted = tmp_path / "counted.h5"
+    run_cmuts(data, counted)
+    real = datasets_of(counted)
+
+    assert set(real) == {field.name for field in FIELDS} | {RUN_TOTAL}
+
+    n_refs, cap = real["coverage"][0]
+
+    for field in FIELDS:
+        found, dtype = real[field.name]
+
+        assert found == shape(field, n_refs, cap), field.name
+        assert dtype == np.dtype(field.dtype), field.name
+
+    assert real[RUN_TOTAL][0] == (), "a run total belongs to no reference"
+
+
+# ---------------------------------------------------------------------------
+# The rules
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", COMBINED)
+def test_each_field_follows_its_rule(build, subtract, name):
+    """Every dataset of the output against what the two inputs make of it.
+
+    Driven from the table of rules rather than one test per rule, so a field
+    that gains a dataset without gaining a rule fails here.
+    """
+    treated = build(everything(seed=1), unmapped=17)
+    untreated = build(everything(seed=50), unmapped=3)
+
+    output = subtract(treated, untreated)
+
+    assert np.array_equal(
+        field_of(output, name),
+        combined(name, field_of(treated, name), field_of(untreated, name)),
+    ), name
+
+
+def test_a_background_above_the_signal_leaves_a_negative_reactivity(build, subtract):
+    """Nothing holds the difference at zero. A rate below its background is a
+    measurement like any other, and clamping it would discard what the two
+    inputs record."""
+    treated = build({"reactivity": 0.25})
+    untreated = build({"reactivity": 0.75})
+
+    difference = field_of(subtract(treated, untreated), "reactivity")
+
+    assert np.all(difference == np.float32(-0.5))
+
+
+def test_an_error_is_never_reduced_by_subtracting(build, subtract):
+    """Quadrature, not subtraction: the difference of two measurements is less
+    certain than either of them, never more."""
+    treated = build({"error": spread("error", seed=7)})
+    untreated = build({"error": spread("error", seed=8)})
+
+    output = subtract(treated, untreated)
+
+    assert np.all(field_of(output, "error") >= field_of(treated, "error"))
+    assert np.all(field_of(output, "error") >= field_of(untreated, "error"))
+
+
+def test_counts_stay_whole_and_exact(build, subtract):
+    """Counts pass through a double on the way in and on the way out, which is
+    exact well past any number of reads a run could hold. What is written is
+    still whole, and still an unsigned."""
+    large = np.uint64(2) ** 40 + 1
+
+    treated = build({"reads/counted": large}, unmapped=large)
+    untreated = build({"reads/counted": 1}, unmapped=1)
+
+    output = subtract(treated, untreated)
+
+    assert np.all(field_of(output, "reads/counted") == large + 1)
+    assert field_of(output, RUN_TOTAL) == large + 1
+    assert field_of(output, "reads/counted").dtype == np.dtype("u8")
+
+
+# ---------------------------------------------------------------------------
+# What was never measured
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", FLOATING)
+def test_a_value_either_input_lacks_is_missing_from_the_output(build, subtract, name):
+    """NaN marks a position nothing was measured at, and the output holds it
+    wherever either input does: a difference of rates is known only where both
+    rates are known.
+
+    Each row carries one of the four cases, so a single run covers them all.
+    """
+    known, missing = np.float32(0.5), np.float32(np.nan)
+
+    left = np.full((N_REFS, CAP), known, dtype=np.float32)
+    right = np.full((N_REFS, CAP), known, dtype=np.float32)
+
+    left[1, :] = missing                    # missing in the treated run alone
+    right[2, :] = missing                   # missing in the background alone
+    left[3, :] = right[3, :] = missing      # missing in both
+
+    output = subtract(build({name: left}), build({name: right}))
+    result = field_of(output, name)
+
+    assert np.array_equal(np.isnan(result), np.isnan(left) | np.isnan(right))
+    assert not np.isnan(result[0]).any(), "nothing is lost where both are known"
+
+
+def test_the_columns_past_a_reference_stay_marked(build, subtract):
+    """A row is as ragged after a subtraction as before it.
+
+    An output records no reference lengths. What marks a column as no part of a
+    reference is that both inputs hold NaN there, and the arithmetic carries
+    that through without any knowledge of where a reference ends.
+    """
+    lengths = [6, 4, 2, 1]
+    rows = np.full((N_REFS, CAP), np.float32(0.25))
+
+    for row, length in enumerate(lengths):
+        rows[row, length:] = np.nan
+
+    output = subtract(build({"coverage": rows}), build({"coverage": rows}))
+    result = field_of(output, "coverage")
+
+    for row, length in enumerate(lengths):
+        assert not np.isnan(result[row, :length]).any(), f"row {row} within"
+        assert np.isnan(result[row, length:]).all(), f"row {row} past its end"
+
+
+# ---------------------------------------------------------------------------
+# What holds of any two files
+# ---------------------------------------------------------------------------
+
+
+def test_the_output_is_shaped_and_typed_like_its_inputs(build, subtract):
+    """Whatever reads a cmuts output reads this one: the same datasets, the
+    same widths, the same types."""
+    treated, untreated = build(everything(seed=2)), build(everything(seed=9))
+
+    assert datasets_of(subtract(treated, untreated)) == datasets_of(treated)
+
+
+def test_a_file_against_itself_leaves_no_reactivity(build, subtract):
+    """The strongest statement of the rule: a run is exactly its own
+    background, leaving zero wherever a rate was known at all."""
+    values = everything(seed=3)
+    values["reactivity"][2, 3] = np.nan
+
+    treated = build(values)
+    result = field_of(subtract(treated, treated), "reactivity")
+    known = ~np.isnan(field_of(treated, "reactivity"))
+
+    assert known.any(), "nothing was known, so nothing was tested"
+    assert np.all(result[known] == 0)
+    assert np.isnan(result[~known]).all()
+
+
+def test_swapping_the_two_inputs_negates_only_the_reactivity(build, subtract, tmp_path):
+    """The argument order determines which file is the background, and that
+    decides the sign of the difference and nothing else: an error, a coverage
+    and a count are the same either way round."""
+    treated, untreated = build(everything(seed=4)), build(everything(seed=40))
+
+    forward = subtract(treated, untreated)
+    backward = run_subtract(untreated, treated, tmp_path / "backward.h5")
+
+    assert np.array_equal(field_of(backward, "reactivity"),
+                          -field_of(forward, "reactivity"))
+
+    for name in set(COMBINED) - {"reactivity"}:
+        assert np.array_equal(field_of(backward, name), field_of(forward, name)), name
+
+
+def test_a_background_of_nothing_changes_nothing(build, subtract):
+    """A background that measured nothing anywhere leaves the treated run as it
+    was: its rates, its error, and everything counted."""
+    treated = build(everything(seed=5))
+    nothing = build({"reactivity": 0.0, "error": 0.0})
+
+    output = subtract(treated, nothing)
+
+    for name in ("reactivity", "error", "coverage", "reads/counted"):
+        assert np.array_equal(field_of(output, name), field_of(treated, name)), name
+
+
+def test_two_runs_agree_byte_for_byte(build, tmp_path):
+    """One thread, and rows written in order, so a result is reproducible from
+    its inputs. That is what makes an output worth checksumming, and it does not
+    hold of cmuts, whose rows are written as its workers finish them."""
+    treated, untreated = build(everything(seed=6)), build(everything(seed=60))
+
+    first = run_subtract(treated, untreated, tmp_path / "first.h5")
+    second = run_subtract(treated, untreated, tmp_path / "second.h5")
+
+    assert first.read_bytes() == second.read_bytes()
+
+
+@pytest.mark.parametrize("n_refs, cap", [(1, 1), (1, 40), (3, 1), (400, 2)])
+def test_the_rules_hold_at_any_shape(build, subtract, n_refs, cap):
+    """One reference, one base, and more references than fit in a chunk."""
+    values = {"reactivity": spread("reactivity", n_refs, cap, seed=11),
+              "reads/counted": spread("reads/counted", n_refs, cap, seed=12)}
+    other = {"reactivity": spread("reactivity", n_refs, cap, seed=21),
+             "reads/counted": spread("reads/counted", n_refs, cap, seed=22)}
+
+    treated = build(values, n_refs=n_refs, cap=cap)
+    untreated = build(other, n_refs=n_refs, cap=cap)
+    output = subtract(treated, untreated)
+
+    for name in ("reactivity", "reads/counted"):
+        assert np.array_equal(
+            field_of(output, name),
+            combined(name, field_of(treated, name), field_of(untreated, name)),
+        ), name
+
+
+# ---------------------------------------------------------------------------
+# Inputs that are refused
+# ---------------------------------------------------------------------------
+
+
+def test_inputs_of_different_reference_counts_are_refused(build, tmp_path):
+    attempt = try_subtract(build(n_refs=4), build(n_refs=5), tmp_path / "out.h5")
+
+    assert attempt.returncode != 0
+    assert "references" in attempt.stderr
+
+
+def test_inputs_of_different_widths_are_refused(build, tmp_path):
+    """Two files holding the same number of references, counted against
+    references of different lengths. This is as far as the check can go: an
+    output holds no names, so nothing else about the two can be compared."""
+    attempt = try_subtract(build(cap=6), build(cap=7), tmp_path / "out.h5")
+
+    assert attempt.returncode != 0
+    assert "wide" in attempt.stderr
+
+
+def test_a_file_holding_no_references_is_refused(tmp_path):
+    """A file of the right shape in every other respect, with no rows in it."""
+    empty = write_output(tmp_path / "empty.h5", n_refs=0, cap=CAP)
+
+    attempt = try_subtract(empty, empty, tmp_path / "out.h5")
+
+    assert attempt.returncode != 0
+    assert "no references" in attempt.stderr
+
+
+def test_something_that_is_not_hdf5_is_refused(build, tmp_path):
+    notes = tmp_path / "notes.txt"
+    notes.write_text("months of irreplaceable notes\n")
+
+    attempt = try_subtract(notes, build(), tmp_path / "out.h5")
+
+    assert attempt.returncode != 0
+    assert notes.read_text() == "months of irreplaceable notes\n"
+
+
+@pytest.mark.parametrize("missing", COMBINED)
+def test_an_input_missing_any_dataset_is_refused(build, tmp_path, missing):
+    """A file that is HDF5, and holds most of what an output holds, is still
+    not an output. Every dataset is checked for, the run total included, so no
+    part of the result can be left unwritten without a report."""
+    attempt = try_subtract(without(build(), missing), build(), tmp_path / "out.h5")
+
+    assert attempt.returncode != 0
+    assert missing.rsplit("/", 1)[-1] in attempt.stderr
+
+
+def test_an_input_whose_datasets_disagree_is_refused(build, tmp_path):
+    """The width of the coverage gives the length of the longest reference, and
+    every other field is checked against it rather than assumed to match."""
+    broken = rewidened(build(), "error", CAP + 3)
+
+    attempt = try_subtract(broken, build(), tmp_path / "out.h5")
+
+    assert attempt.returncode != 0
+    assert "error" in attempt.stderr
+
+
+# ---------------------------------------------------------------------------
+# What is already at the output path
+# ---------------------------------------------------------------------------
+
+
+def test_it_refuses_to_replace_an_existing_file(build, subtract):
+    treated, untreated = build(), build()
+    output = subtract(treated, untreated)
+    before = output.read_bytes()
+
+    attempt = try_subtract(treated, untreated, output)
+
+    assert attempt.returncode != 0
+    assert "already holds data" in attempt.stderr
+    assert output.read_bytes() == before, "the first result is untouched"
+
+
+def test_overwrite_replaces_it(build, subtract):
+    """Not that the second run succeeds, but that what is left at the path is
+    its result and not the first's."""
+    output = subtract(build({"reactivity": 0.25}), build({"reactivity": 0.0}))
+
+    treated, untreated = build({"reactivity": 0.75}), build({"reactivity": 0.25})
+    run_subtract(treated, untreated, output, overwrite=True)
+
+    assert np.all(field_of(output, "reactivity") == np.float32(0.5))
+
+
+@pytest.mark.parametrize("wrong", ["shape", "missing dataset", "not hdf5"])
+def test_a_run_that_refuses_its_inputs_destroys_nothing(build, subtract, tmp_path, wrong):
+    """Every defect an input can have is found before the output is created, so
+    a result already at that path survives a run that cannot proceed."""
+    output = subtract(build(), build())
+    before = output.read_bytes()
+
+    def not_hdf5():
+        notes = tmp_path / "notes.txt"
+        notes.write_text("notes")
+        return notes
+
+    bad = {
+        "shape": lambda: build(n_refs=N_REFS + 1),
+        "missing dataset": lambda: without(build(), RUN_TOTAL),
+        "not hdf5": not_hdf5,
+    }[wrong]()
+
+    attempt = try_subtract(bad, build(), output, overwrite=True)
+
+    assert attempt.returncode != 0
+    assert output.read_bytes() == before
+
+
+# ---------------------------------------------------------------------------
+# The command line
+# ---------------------------------------------------------------------------
+
+
+def test_both_inputs_are_required(build, tmp_path):
+    """One file is not a subtraction. Invoked directly, there being no way to
+    leave an argument out through the helper that always passes two."""
+    given = subprocess.run(
+        [str(CMUTS_SUB), "-o", str(tmp_path / "out.h5"), str(build())],
+        capture_output=True, text=True,
+    )
+
+    assert given.returncode == 2
+    assert "expected" in given.stderr
+    assert not (tmp_path / "out.h5").exists()
+
+
+# ---------------------------------------------------------------------------
+# End to end
+# ---------------------------------------------------------------------------
+
+
+def test_it_reads_what_cmuts_writes(data, tmp_path):
+    """Two real runs through a real subtraction, which is the one thing the
+    built inputs cannot cover: that the two programs fit together.
+
+    Nothing is asserted about any value, only that the run succeeds and that
+    what it leaves is shaped like what it was given.
+    """
+    treated = tmp_path / "treated.h5"
+    untreated = tmp_path / "untreated.h5"
+
+    run_cmuts(data, treated)
+    run_cmuts(data, untreated, min_mapq=30)
+
+    output = run_subtract(treated, untreated, tmp_path / "difference.h5")
+
+    assert datasets_of(output) == datasets_of(treated)

@@ -30,6 +30,7 @@ typedef struct {
 
     int32_t n_refs;
     size_t  ref_cap;
+    size_t  unmapped;  /* the two runs' totals, added on opening them */
 } subtraction;
 
 /* ------------------------------------------------------------------------ */
@@ -127,8 +128,13 @@ static int subtract_references(subtraction *s, char *error, size_t error_len)
 }
 
 /* Reads align to no reference whether or not a run was treated, so the totals
- * add as the per-reference counts do. */
-static int subtract_totals(subtraction *s, char *error, size_t error_len)
+ * add as the per-reference counts do.
+ *
+ * Read while the inputs are being opened rather than when the sum comes to be
+ * written, so that a file missing one is refused before the output is created.
+ * Everything else an input can lack is found on opening it; leaving this to the
+ * end would make it the one defect that costs a file already on disk. */
+static int read_totals(subtraction *s, char *error, size_t error_len)
 {
     size_t treated, untreated;
 
@@ -138,10 +144,14 @@ static int subtract_totals(subtraction *s, char *error, size_t error_len)
     if (metadata_read_run(s->untreated, &untreated) < 0)
         return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
 
-    if (metadata_write_run(s->out, treated + untreated) < 0)
-        return fail_output(s, error, error_len);
-
+    s->unmapped = treated + untreated;
     return 0;
+}
+
+static int write_totals(subtraction *s, char *error, size_t error_len)
+{
+    return metadata_write_run(s->out, s->unmapped) < 0
+         ? fail_output(s, error, error_len) : 0;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -193,7 +203,10 @@ static int open_inputs(subtraction *s, char *error, size_t error_len)
     if (h5reader_error(s->untreated))
         return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
 
-    return check_agreement(s, error, error_len);
+    if (check_agreement(s, error, error_len) < 0)
+        return -1;
+
+    return read_totals(s, error, error_len);
 }
 
 /* One row of the widest field, three times over, which holds a row of any of
@@ -248,11 +261,13 @@ int subtract_run(const subtract_config *cfg, char *error, size_t error_len)
                              error, error_len) < 0)
         return -1;
 
+    /* Every way an input can be wrong is found before the output is created,
+     * so a run that refuses its inputs leaves whatever is at that path alone. */
     if (open_inputs(&s, error, error_len) == 0 &&
         build_buffers(&s, error, error_len) == 0 &&
         open_output(&s, may_replace, error, error_len) == 0 &&
         subtract_references(&s, error, error_len) == 0)
-        status = subtract_totals(&s, error, error_len);
+        status = write_totals(&s, error, error_len);
 
     subtraction_teardown(&s);
     return status;

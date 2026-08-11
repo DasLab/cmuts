@@ -23,6 +23,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 CMUTS = ROOT / "build" / "cmuts"
 CMUTS_GEN = ROOT / "build" / "cmuts-gen"
+CMUTS_SUB = ROOT / "build" / "cmuts-sub"
 
 STRAND_FLAGS = {"both": (), "forward": ("-F", "16"), "reverse": ("-f", "16")}
 
@@ -401,6 +402,30 @@ def try_cmuts(data: Dataset, output, workers: int = 4, **options):
     """Runs it whether or not it succeeds, for the paths that should fail."""
     return subprocess.run(
         [str(word) for word in _cmuts_command(data, output, workers, options)],
+        capture_output=True, text=True,
+    )
+
+
+def _subtract_command(treated, untreated, output, options):
+    command = [CMUTS_SUB, "-o", output]
+
+    for key, value in options.items():
+        # A flag carries no value of its own.
+        command += [_option(key)] if value is True else [_option(key), value]
+
+    return [*command, treated, untreated]
+
+
+def run_subtract(treated, untreated, output, **options):
+    """Takes the background off a run, returning where the result was written."""
+    _run(_subtract_command(treated, untreated, output, options))
+    return output
+
+
+def try_subtract(treated, untreated, output, **options):
+    """Runs it whether or not it succeeds, for the paths that should fail."""
+    return subprocess.run(
+        [str(word) for word in _subtract_command(treated, untreated, output, options)],
         capture_output=True, text=True,
     )
 
