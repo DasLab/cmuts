@@ -18,18 +18,18 @@
  * mutations: weighted into one and not the other, it would count as evidence against a
  * modification rather than no evidence either way. */
 const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS] = {
-    [ACCUM_COVERAGE]  = { SHAPE_PER_BASE },
-    [ACCUM_SPANNED]   = { SHAPE_PER_BASE },
-    [ACCUM_MUTATIONS] = { SHAPE_PER_BASE },
-    [ACCUM_LENGTHS]   = { SHAPE_PER_LENGTH },
-    [ACCUM_READS]     = { SHAPE_SCALAR },
-    [ACCUM_FILTERED]  = { SHAPE_SCALAR },
+    [ACCUM_COVERAGE]  = { shape_per_base },
+    [ACCUM_SPANNED]   = { shape_per_base },
+    [ACCUM_MUTATIONS] = { shape_per_base },
+    [ACCUM_LENGTHS]   = { shape_per_length },
+    [ACCUM_READS]     = { shape_none },
+    [ACCUM_FILTERED]  = { shape_none },
 };
 
 /* Values one field occupies. With len == cap this is also its stride in the arena. */
 size_t accum_extent(accum_field_id id, size_t len, size_t cap)
 {
-    return shape_extent(ACCUM_FIELDS[id].shape, len, cap);
+    return shape_values(ACCUM_FIELDS[id].shape, len, cap);
 }
 
 static size_t arena_extent(size_t cap)

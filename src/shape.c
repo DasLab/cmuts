@@ -1,30 +1,41 @@
-/* shape.c -- the width and the rank of a row of each kind.
+/* shape.c -- the shapes a field's values can have.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
 
 #include "shape.h"
 
-size_t shape_extent(shape_kind kind, size_t len, size_t cap)
+shape_extents shape_per_base(size_t len, size_t cap)
 {
-    switch (kind) {
-        case SHAPE_PER_BASE:   return len;
-        case SHAPE_PER_LENGTH: return SHAPE_LENGTH_BINS(cap);
-        case SHAPE_SCALAR:     return 1;
-        case SHAPE_N_KINDS:    break;
-    }
+    (void)cap;
 
-    return 0;
+    return (shape_extents){ .rank = 1, .dim = { len } };
 }
 
-int shape_rank(shape_kind kind)
+shape_extents shape_per_length(size_t len, size_t cap)
 {
-    switch (kind) {
-        case SHAPE_PER_BASE:
-        case SHAPE_PER_LENGTH: return 2;
-        case SHAPE_SCALAR:     return 1;
-        case SHAPE_N_KINDS:    break;
+    (void)len;
+
+    return (shape_extents){ .rank = 1, .dim = { SHAPE_LENGTH_BINS(cap) } };
+}
+
+shape_extents shape_none(size_t len, size_t cap)
+{
+    (void)len;
+    (void)cap;
+
+    return (shape_extents){ .rank = 0 };
+}
+
+size_t shape_values(shape_fn shape, size_t len, size_t cap)
+{
+    shape_extents extents = shape(len, cap);
+    int           rank    = shape_rank(extents);
+    size_t        values  = 1;
+
+    for (int i = 0; i < rank; i++) {
+        values *= extents.dim[i];
     }
 
-    return 0;
+    return values;
 }

@@ -12,7 +12,7 @@
 #include "output.h"
 
 /* Writes one dataset per field of the output format: (n_refs, width) for a row field,
- * (n_refs,) for a scalar.
+ * (n_refs,) for one value per reference, and a scalar for a total belonging to the run.
  *
  * A row is identified by its position alone: row i belongs to the reference the header
  * declares i-th, which is the i-th record of the FASTA, the two being required to agree.
@@ -50,8 +50,8 @@ void      h5writer_close(h5writer *w);
 int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
                    const double *values);
 
-/* Attaches a run-level total to the file, for counts belonging to no single reference and
- * so having no row of their own. */
-int h5writer_count(h5writer *w, const char *name, size_t value);
+/* Writes the whole of a field belonging to the run rather than to any one reference, and
+ * so having no row. */
+int h5writer_total(h5writer *w, out_field_id id, size_t value);
 
 const char *h5writer_error(const h5writer *w);

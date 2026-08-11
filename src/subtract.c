@@ -14,7 +14,6 @@
 
 #include "h5reader.h"
 #include "h5writer.h"
-#include "metadata.h"
 #include "output.h"
 
 typedef struct {
@@ -30,7 +29,7 @@ typedef struct {
 
     int32_t n_refs;
     size_t  ref_cap;
-    size_t  unmapped;  /* the two runs' totals, summed on opening them */
+    size_t  totals[OUT_N_FIELDS];  /* the fields with no row, combined on opening */
 } subtraction;
 
 /* ------------------------------------------------------------------------ */
@@ -115,6 +114,10 @@ static int subtract_reference(subtraction *s, int32_t tid, char *error,
                               size_t error_len)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (!OUT_FIELDS[id].per_ref) {
+            continue;
+        }
+
         if (subtract_field(s, id, tid, error, error_len) < 0) {
             return -1;
         }
@@ -134,30 +137,48 @@ static int subtract_references(subtraction *s, char *error, size_t error_len)
     return 0;
 }
 
-/* Sums the two runs' unmapped totals, which add as the per-reference counts do.
+/* Combines the fields belonging to the run rather than to any reference, under the same
+ * rules their per-reference neighbors follow.
  *
- * Read while the inputs are being opened rather than when the sum is written, so that a file
- * missing one is refused before the output is created. */
+ * Read while the inputs are being opened rather than when the result is written, so that a
+ * file missing one is refused before the output is created. */
 static int read_totals(subtraction *s, char *error, size_t error_len)
 {
-    size_t treated, untreated;
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        size_t treated, untreated;
 
-    if (metadata_read_run(s->treated, &treated) < 0) {
-        return fail_input(error, error_len, s->cfg->treated_path, s->treated);
+        if (OUT_FIELDS[id].per_ref) {
+            continue;
+        }
+
+        if (h5reader_total(s->treated, id, &treated) < 0) {
+            return fail_input(error, error_len, s->cfg->treated_path, s->treated);
+        }
+
+        if (h5reader_total(s->untreated, id, &untreated) < 0) {
+            return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
+        }
+
+        s->totals[id] = (size_t)combine(OUT_FIELDS[id].combine, (double)treated,
+                                        (double)untreated);
     }
 
-    if (metadata_read_run(s->untreated, &untreated) < 0) {
-        return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
-    }
-
-    s->unmapped = treated + untreated;
     return 0;
 }
 
 static int write_totals(subtraction *s, char *error, size_t error_len)
 {
-    return metadata_write_run(s->out, s->unmapped) < 0
-         ? fail_output(s, error, error_len) : 0;
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (OUT_FIELDS[id].per_ref) {
+            continue;
+        }
+
+        if (h5writer_total(s->out, id, s->totals[id]) < 0) {
+            return fail_output(s, error, error_len);
+        }
+    }
+
+    return 0;
 }
 
 /* ------------------------------------------------------------------------ */

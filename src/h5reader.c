@@ -22,7 +22,6 @@ struct h5reader {
      * own: only the selection differs between one row and the next. */
     hid_t   filespace[OUT_N_FIELDS];
     hid_t   memspace;   /* one row of the widest field, selected down to size */
-    hid_t   reads;      /* the group the per-run counts are gathered in */
     int32_t n_refs;
     size_t  ref_cap;
     char    error[CM_ERROR_MAX];
@@ -70,7 +69,7 @@ static int dataset_dims(hid_t dataset, int rank, hsize_t *dims)
 static int probe_shape(h5reader *r)
 {
     hid_t   dataset = H5Dopen2(r->file, OUT_FIELDS[SHAPE_FIELD].name, H5P_DEFAULT);
-    hsize_t dims[SHAPE_RANK_MAX];
+    hsize_t dims[OUT_RANK_MAX];
     int     status;
 
     if (dataset < 0) {
@@ -97,7 +96,7 @@ static int probe_shape(h5reader *r)
 static int check_shape(h5reader *r, out_field_id id, const hsize_t *expected)
 {
     int     rank = out_rank(id);
-    hsize_t dims[SHAPE_RANK_MAX];
+    hsize_t dims[OUT_RANK_MAX];
 
     if (dataset_dims(r->dataset[id], rank, dims) < 0) {
         return fail_field(r, id, "has an unexpected number of dimensions");
@@ -118,8 +117,8 @@ static int check_shape(h5reader *r, out_field_id id, const hsize_t *expected)
 
 static int open_field(h5reader *r, out_field_id id)
 {
-    hsize_t dims[SHAPE_RANK_MAX]  = { 0, 0 };
-    hsize_t chunk[SHAPE_RANK_MAX] = { 0, 0 };
+    hsize_t dims[OUT_RANK_MAX]  = { 0, 0 };
+    hsize_t chunk[OUT_RANK_MAX] = { 0, 0 };
     hid_t   dapl;
 
     h5layout_shape(id, r->n_refs, r->ref_cap, dims, chunk);
@@ -165,7 +164,6 @@ h5reader *h5reader_open(const char *path)
     }
 
     r->file     = H5I_INVALID_HID;
-    r->reads    = H5I_INVALID_HID;
     r->memspace = H5I_INVALID_HID;
 
     r->file = H5Fopen(path, H5F_ACC_RDONLY, H5P_DEFAULT);
@@ -190,11 +188,6 @@ h5reader *h5reader_open(const char *path)
         }
     }
 
-    r->reads = H5Gopen2(r->file, OUT_READS_GROUP, H5P_DEFAULT);
-    if (r->reads < 0) {
-        fail(r, "the group holding the counts about reads is not present");
-    }
-
     return r;
 }
 
@@ -215,10 +208,6 @@ void h5reader_close(h5reader *r)
 
     if (r->memspace >= 0) {
         H5Sclose(r->memspace);
-    }
-
-    if (r->reads >= 0) {
-        H5Gclose(r->reads);
     }
 
     if (r->file >= 0) {
@@ -270,26 +259,20 @@ int h5reader_field(h5reader *r, out_field_id id, int32_t tid, double *values)
 /* Totals                                                                    */
 /* ------------------------------------------------------------------------ */
 
-int h5reader_count(h5reader *r, const char *name, size_t *value)
+int h5reader_total(h5reader *r, out_field_id id, size_t *value)
 {
-    hid_t    dataset = H5Dopen2(r->reads, name, H5P_DEFAULT);
-    uint64_t stored  = 0;
+    uint64_t stored = 0;
     herr_t   status;
 
-    if (dataset < 0) {
-        snprintf(r->error, sizeof r->error, "%s/%s: not present",
-                 OUT_READS_GROUP, name);
-        return -1;
+    if (OUT_FIELDS[id].per_ref) {
+        return fail(r, "a field with a row per reference has no run total");
     }
 
-    status = H5Dread(dataset, H5T_NATIVE_UINT64, H5S_ALL, H5S_ALL,
+    status = H5Dread(r->dataset[id], H5T_NATIVE_UINT64, H5S_ALL, H5S_ALL,
                      H5P_DEFAULT, &stored);
-    H5Dclose(dataset);
 
     if (status < 0) {
-        snprintf(r->error, sizeof r->error, "%s/%s: unable to read it",
-                 OUT_READS_GROUP, name);
-        return -1;
+        return fail_field(r, id, "unable to read it");
     }
 
     *value = (size_t)stored;

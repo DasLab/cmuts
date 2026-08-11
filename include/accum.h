@@ -31,7 +31,7 @@ typedef enum {
 /* All the accumulator needs of a field. What it is called in the output, and whether it
  * is written at all, is output.h's to say. */
 typedef struct {
-    shape_kind shape;
+    shape_fn shape;
 } accum_field;
 
 extern const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS];

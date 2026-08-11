@@ -15,7 +15,9 @@
 
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "shape.h"
 
@@ -29,6 +31,7 @@ typedef enum {
     OUT_LENGTHS,
     OUT_READS,
     OUT_REJECTED,
+    OUT_UNMAPPED,
     OUT_N_FIELDS,
 } out_field_id;
 
@@ -60,10 +63,16 @@ typedef enum {
     OUT_N_STORED,
 } out_stored;
 
-/* One field of the output. */
+/* One field of the output.
+ *
+ * A field indexed by reference holds one row per reference, and its dataset is the
+ * reference dimension followed by the extents of that row. A field not indexed by one
+ * belongs to the run: the unmapped reads align to no reference, so their total is a row
+ * with nothing in front of it, which is a dataset of rank zero. */
 typedef struct {
     const char *name;
-    shape_kind  shape;    /* the kind of row it has */
+    shape_fn    row;      /* the extents one reference's values occupy */
+    bool        per_ref;  /* whether there is one such row per reference */
     out_stored  stored;   /* the type its values are narrowed to */
     out_absent  absent;   /* what a value it was never given means */
     out_combine combine;  /* how two runs' values of it combine */
@@ -75,6 +84,9 @@ extern const out_field OUT_FIELDS[OUT_N_FIELDS];
  * totals are named relative to it. */
 #define OUT_READS_GROUP "reads"
 
+/* The reference dimension, where a field has one, and the extents of its row. */
+#define OUT_RANK_MAX (1 + SHAPE_RANK_MAX)
+
 /* Values one field occupies for a reference of len bases, in a file whose longest
  * reference is cap. */
 size_t out_extent(out_field_id id, size_t len, size_t cap);
@@ -82,6 +94,12 @@ size_t out_extent(out_field_id id, size_t len, size_t cap);
 /* The widest row of any field, which is what a buffer must hold to take a row of any of
  * them. */
 size_t out_widest(size_t cap);
+
+/* Writes the dimensions of one field's dataset into dims, which must have room for
+ * OUT_RANK_MAX of them, and returns the rank. Rows are as wide as the field's extent at
+ * the longest reference, so every row of a field is the same width whatever its own
+ * reference measures. */
+int out_dims(out_field_id id, int32_t n_refs, size_t cap, size_t *dims);
 
 /* Dimensions one field's dataset has. */
 int out_rank(out_field_id id);

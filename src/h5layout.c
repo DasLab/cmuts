@@ -44,14 +44,18 @@ static hsize_t rows_per_chunk(size_t row_values, int32_t n_refs)
 void h5layout_shape(out_field_id id, int32_t n_refs, size_t cap,
                     hsize_t *dims, hsize_t *chunk)
 {
-    size_t width = out_extent(id, cap, cap);
+    size_t extents[OUT_RANK_MAX];
+    int    rank = out_dims(id, n_refs, cap, extents);
 
-    dims[0]  = (hsize_t)n_refs;
-    chunk[0] = rows_per_chunk(width, n_refs);
+    for (int i = 0; i < rank; i++) {
+        dims[i] = chunk[i] = (hsize_t)extents[i];
+    }
 
-    if (out_rank(id) > 1) {
-        dims[1]  = width;
-        chunk[1] = width;
+    /* A chunk spans whole rows and as many of them as fit, so only the reference
+     * dimension is cut down. A field with no reference dimension is one value, and is
+     * not chunked at all. */
+    if (OUT_FIELDS[id].per_ref) {
+        chunk[0] = rows_per_chunk(out_extent(id, cap, cap), n_refs);
     }
 }
 
@@ -106,10 +110,10 @@ hid_t h5layout_row_space(size_t cap)
 int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
                          int32_t tid, size_t from, size_t n)
 {
-    hsize_t start[SHAPE_RANK_MAX] = { (hsize_t)tid, (hsize_t)from };
-    hsize_t count[SHAPE_RANK_MAX] = { 1, (hsize_t)n };
-    hsize_t offset                = 0;
-    hsize_t extent                = out_rank(id) > 1 ? (hsize_t)n : 1;
+    hsize_t start[OUT_RANK_MAX] = { (hsize_t)tid, (hsize_t)from };
+    hsize_t count[OUT_RANK_MAX] = { 1, (hsize_t)n };
+    hsize_t offset              = 0;
+    hsize_t extent              = out_rank(id) > 1 ? (hsize_t)n : 1;
 
     if (H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, count, NULL) < 0) {
         return -1;
@@ -148,6 +152,13 @@ hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank)
         return H5I_INVALID_HID;
     }
 
+    /* A dataset of rank zero holds one value, which is written the moment it is
+     * created. There is nothing to chunk, nothing to filter, and no position that
+     * could go unwritten and need a fill. */
+    if (rank == 0) {
+        return dcpl;
+    }
+
     if (!fill ||
         H5Pset_chunk(dcpl, rank, chunk) < 0 ||
         H5Pset_fill_value(dcpl, h5layout_type(id), fill) < 0 ||
@@ -168,6 +179,11 @@ hid_t h5layout_access_plist(const hsize_t *chunk, int rank)
 
     if (dapl < 0) {
         return H5I_INVALID_HID;
+    }
+
+    /* Nothing to cache where nothing is chunked. */
+    if (rank == 0) {
+        return dapl;
     }
 
     for (int i = 0; i < rank; i++) {

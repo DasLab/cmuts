@@ -45,13 +45,12 @@ void refrow_destroy(refrow *r)
     free(r);
 }
 
-/* One output field's values, taken from the accumulated fields behind it.
+/* Gives one output field's values, computed into the scratch row where they are derived
+ * and read in place where they are not, or NULL for a field with no row.
  *
- * This is where the two descriptions meet, and they do not correspond one to one: the
- * reactivity and its error are computed from several accumulated fields into the scratch
- * row, the span they are taken against is never written out, and the rest are read in
- * place. Every field is named rather than defaulted, so an output field added without a
- * source of its own draws a warning here and is refused at the write. */
+ * The accumulated fields and the written ones do not correspond one to one, so every field
+ * is named here rather than defaulted: one added without a source of its own draws a
+ * warning and is refused at the write. */
 static const double *values(refrow *r, out_field_id id, const accum *acc,
                             size_t len)
 {
@@ -60,6 +59,7 @@ static const double *values(refrow *r, out_field_id id, const accum *acc,
         case OUT_LENGTHS:    return accum_const_data(acc, ACCUM_LENGTHS);
         case OUT_READS:      return accum_const_data(acc, ACCUM_READS);
         case OUT_REJECTED:   return accum_const_data(acc, ACCUM_FILTERED);
+        case OUT_UNMAPPED:
         case OUT_N_FIELDS:   break;
         case OUT_REACTIVITY:
             rate_reactivity(&r->rates, acc, len, r->row);
@@ -79,7 +79,13 @@ int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc)
     }
 
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        const double *row = values(r, id, acc, len);
+        const double *row;
+
+        if (!OUT_FIELDS[id].per_ref) {
+            continue;
+        }
+
+        row = values(r, id, acc, len);
 
         if (!row || h5writer_field(r->out, id, tid, len, row) < 0) {
             return -1;

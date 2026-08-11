@@ -70,14 +70,15 @@ int h5writer_may_replace(const char *path, bool overwrite, bool *may_replace,
 
 static hid_t create_field(h5writer *w, out_field_id id)
 {
-    hsize_t dims[SHAPE_RANK_MAX]  = { 0, 0 };
-    hsize_t chunk[SHAPE_RANK_MAX] = { 0, 0 };
-    int     rank                  = out_rank(id);
+    hsize_t dims[OUT_RANK_MAX]  = { 0, 0 };
+    hsize_t chunk[OUT_RANK_MAX] = { 0, 0 };
+    int     rank                = out_rank(id);
     hid_t   space, dcpl, dapl, dataset;
 
     h5layout_shape(id, w->n_refs, w->ref_cap, dims, chunk);
 
-    space = H5Screate_simple(rank, dims, NULL);
+    space = rank == 0 ? H5Screate(H5S_SCALAR)
+                      : H5Screate_simple(rank, dims, NULL);
     dcpl  = h5layout_creation_plist(id, chunk, rank);
     dapl  = h5layout_access_plist(chunk, rank);
 
@@ -285,39 +286,21 @@ int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
 /* Totals                                                                    */
 /* ------------------------------------------------------------------------ */
 
-/* Writes a run total as a scalar dataset beside the per-reference counts.
+/* Writes the whole of a field that belongs to the run rather than to a reference.
  *
- * A dataset rather than an attribute on the group, since h5ls does not show
- * attributes unless asked. Stored as the integer type it is counted in rather than
- * the float its neighbors are narrowed to, being counted whole and never
- * accumulated. */
-int h5writer_count(h5writer *w, const char *name, size_t value)
+ * Transferred as an unsigned rather than through the double every row passes through, a
+ * run total being counted whole and never accumulated. */
+int h5writer_total(h5writer *w, out_field_id id, size_t value)
 {
-    uint64_t stored  = value;
-    hid_t    space   = H5Screate(H5S_SCALAR);
-    hid_t    dcpl    = h5layout_untimed_plist(H5P_DATASET_CREATE);
-    hid_t    dataset = H5I_INVALID_HID;
-    herr_t   status  = -1;
+    uint64_t stored = value;
+    herr_t   status;
 
-    if (space >= 0 && dcpl >= 0) {
-        dataset = H5Dcreate2(w->reads, name, H5T_STD_U64LE, space,
-                             H5P_DEFAULT, dcpl, H5P_DEFAULT);
+    if (OUT_FIELDS[id].per_ref) {
+        return fail(w, "a field with a row per reference has no run total");
     }
 
-    if (dataset >= 0) {
-        status = H5Dwrite(dataset, H5T_NATIVE_UINT64, H5S_ALL, H5S_ALL,
-                          H5P_DEFAULT, &stored);
-    }
-
-    if (dataset >= 0) {
-        H5Dclose(dataset);
-    }
-    if (dcpl >= 0) {
-        H5Pclose(dcpl);
-    }
-    if (space >= 0) {
-        H5Sclose(space);
-    }
+    status = H5Dwrite(w->dataset[id], H5T_NATIVE_UINT64, H5S_ALL, H5S_ALL,
+                      H5P_DEFAULT, &stored);
 
     return status < 0 ? fail(w, "unable to write a run total") : 0;
 }

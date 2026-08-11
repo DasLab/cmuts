@@ -25,7 +25,6 @@
 #include "bamstream.h"
 #include "h5writer.h"
 #include "itempool.h"
-#include "metadata.h"
 #include "progress.h"
 #include "queue.h"
 #include "refctx.h"
@@ -741,7 +740,8 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
 
     /* The consumer has been joined, so the writer is reachable from one thread
      * again and the run totals may be attached. */
-    if (status == 0 && (cons.status < 0 || metadata_write_run(p.out, unmapped) < 0)) {
+    if (status == 0 && (cons.status < 0 ||
+                        h5writer_total(p.out, OUT_UNMAPPED, unmapped) < 0)) {
         snprintf(error, error_len, "%s: %s", cfg->output_path, h5writer_error(p.out));
         status = -1;
     }

@@ -36,7 +36,7 @@ size_t  h5reader_capacity(const h5reader *r);
  * out_extent(id, capacity, capacity) doubles. */
 int h5reader_field(h5reader *r, out_field_id id, int32_t tid, double *values);
 
-/* A run total, by its name within the group the totals are gathered in. */
-int h5reader_count(h5reader *r, const char *name, size_t *value);
+/* The whole of a field belonging to the run rather than to any one reference. */
+int h5reader_total(h5reader *r, out_field_id id, size_t *value);
 
 const char *h5reader_error(const h5reader *r);

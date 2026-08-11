@@ -1,9 +1,15 @@
-/* shape.h -- how many values a per-reference field occupies.
+/* shape.h -- the extents one reference's values occupy.
  *
- * The accumulator and the output both describe their fields by the kind of row each has,
- * and the two must agree on how wide a row of a given kind is: a value accumulated per
- * read length has to land in a dataset column of the same meaning. The kinds and their
- * widths are stated here once, and neither module states them again.
+ * A field is described by a function from the reference it belongs to, and the longest in
+ * the run, to the extents of the values it holds there. The rank is how many extents there
+ * are, so it is answered by the same call rather than by a second description that could
+ * disagree with the first. A field of one value per reference has no extents at all: the
+ * empty vector, whose product is the single value it holds.
+ *
+ * The accumulator and the output both describe their fields this way, and must, since a
+ * value accumulated per read length has to reach a dataset column of the same meaning. What
+ * the output adds is the reference dimension, which an accumulator holding one reference
+ * has no use for.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -11,13 +17,6 @@
 #pragma once
 
 #include <stddef.h>
-
-typedef enum {
-    SHAPE_PER_BASE,    /* one value per reference base */
-    SHAPE_PER_LENGTH,  /* one value per read length, plus an overflow bin */
-    SHAPE_SCALAR,      /* one value per reference */
-    SHAPE_N_KINDS,
-} shape_kind;
 
 /* Bins a read-length histogram covers, given the longest reference in the run: one for
  * every length from 0 to twice it. The range reaches past a reference because a read
@@ -32,14 +31,34 @@ typedef enum {
  * total less the row's own sum. */
 #define SHAPE_LENGTH_BINS(cap) (2 * (cap) + 1)
 
-/* Values a field of this kind occupies for a reference of len bases, in a run whose
- * longest is cap. */
-size_t shape_extent(shape_kind kind, size_t len, size_t cap);
+/* The largest number of extents any of the shapes below writes. Raise it alongside a shape
+ * that writes more. */
+#define SHAPE_RANK_MAX 1
 
-/* Dimensions a dataset of this kind has: the reference it is indexed by, and whatever the
- * kind adds to that. */
-int shape_rank(shape_kind kind);
+/* The extents one reference's values occupy. A shape fills this and nothing wider, so one
+ * reporting a rank it has no room for misdescribes a field rather than overrunning
+ * anything; shape_rank is what every reader of dim counts through. */
+typedef struct {
+    int    rank;
+    size_t dim[SHAPE_RANK_MAX];
+} shape_extents;
 
-/* The largest rank any kind has, which is how long an array describing a dataset of any of
- * them must be. Raise it alongside a kind of a rank not yet seen. */
-#define SHAPE_RANK_MAX 2
+/* Gives the extents a reference of len bases occupies, in a run whose longest is cap.
+ *
+ * The rank is the same whatever a shape is given; only the extents vary, which is what
+ * lets the rank of a dataset be asked for without a run to ask it of. */
+typedef shape_extents (*shape_fn)(size_t len, size_t cap);
+
+shape_extents shape_per_base(size_t len, size_t cap);
+shape_extents shape_per_length(size_t len, size_t cap);
+shape_extents shape_none(size_t len, size_t cap);
+
+/* Gives the extents held: what was reported, or all there is room for, whichever is fewer.
+ * Inline so that every loop over dim carries the bound with it. */
+static inline int shape_rank(shape_extents extents)
+{
+    return extents.rank < SHAPE_RANK_MAX ? extents.rank : SHAPE_RANK_MAX;
+}
+
+/* The values one reference occupies, the product of its extents. */
+size_t shape_values(shape_fn shape, size_t len, size_t cap);
