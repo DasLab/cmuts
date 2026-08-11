@@ -17,6 +17,12 @@
 struct h5writer {
     hid_t   file;
     hid_t   dataset[OUT_N_FIELDS];
+    /* A dataspace apiece, kept for the life of the writer. Only the selection
+     * differs between one row and the next, and a writer is used from one
+     * thread, so the handles are made once and reselected rather than built and
+     * discarded for every row of every field. */
+    hid_t   filespace[OUT_N_FIELDS];
+    hid_t   memspace;   /* one row of the widest field, selected down to size */
     hid_t   reads;      /* the group the per-run counts are gathered in */
     int32_t n_refs;
     size_t  ref_cap;
@@ -109,6 +115,18 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
      * trace on stderr. */
     H5Eset_auto2(H5E_DEFAULT, NULL, NULL);
 
+    /* Every handle is marked absent before anything can fail, so that a writer
+     * abandoned partway through closes exactly what it opened. Zero, which the
+     * allocation leaves behind, is not a handle HDF5 would refuse. */
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        w->dataset[id]   = H5I_INVALID_HID;
+        w->filespace[id] = H5I_INVALID_HID;
+    }
+
+    w->file     = H5I_INVALID_HID;
+    w->reads    = H5I_INVALID_HID;
+    w->memspace = H5I_INVALID_HID;
+
     w->n_refs  = n_refs;
     w->ref_cap = ref_cap;
     w->padding = calloc(ref_cap ? ref_cap : 1, sizeof *w->padding);
@@ -121,10 +139,11 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
     for (size_t i = 0; i < ref_cap; i++)
         w->padding[i] = (double)NAN;
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++)
-        w->dataset[id] = H5I_INVALID_HID;
-
-    w->reads = H5I_INVALID_HID;
+    w->memspace = out_row_space(ref_cap);
+    if (w->memspace < 0) {
+        fail(w, "unable to prepare the output");
+        return w;
+    }
 
     fcpl = out_untimed_plist(H5P_FILE_CREATE);
     if (fcpl < 0) {
@@ -166,6 +185,12 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
             fail(w, "unable to create a dataset");
             return w;
         }
+
+        w->filespace[id] = H5Dget_space(w->dataset[id]);
+        if (w->filespace[id] < 0) {
+            fail(w, "unable to describe a dataset");
+            return w;
+        }
     }
 
     return w;
@@ -176,9 +201,15 @@ void h5writer_close(h5writer *w)
     if (!w)
         return;
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++)
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (w->filespace[id] >= 0)
+            H5Sclose(w->filespace[id]);
         if (w->dataset[id] >= 0)
             H5Dclose(w->dataset[id]);
+    }
+
+    if (w->memspace >= 0)
+        H5Sclose(w->memspace);
 
     if (w->reads >= 0)
         H5Gclose(w->reads);
@@ -199,48 +230,19 @@ const char *h5writer_error(const h5writer *w)
 /* Rows                                                                      */
 /* ------------------------------------------------------------------------ */
 
-/* Selects the part of a dataset belonging to one reference: the whole row for
- * a scalar field, a span of it for a row field. */
-static int select_row(hid_t dataset, int32_t tid, size_t from, size_t width,
-                      int rank, hid_t *filespace, hid_t *memspace)
-{
-    hsize_t start[OUT_RANK_MAX] = { (hsize_t)tid, (hsize_t)from };
-    hsize_t count[OUT_RANK_MAX] = { 1, (hsize_t)width };
-    hsize_t extent              = rank == OUT_RANK_VECTOR ? (hsize_t)width : 1;
-
-    *filespace = H5Dget_space(dataset);
-    if (*filespace < 0)
-        return -1;
-
-    if (H5Sselect_hyperslab(*filespace, H5S_SELECT_SET, start, NULL, count, NULL) < 0) {
-        H5Sclose(*filespace);
-        return -1;
-    }
-
-    *memspace = H5Screate_simple(1, &extent, NULL);
-    if (*memspace < 0) {
-        H5Sclose(*filespace);
-        return -1;
-    }
-
-    return 0;
-}
-
 static int write_part(h5writer *w, out_field_id id, int32_t tid, size_t from,
                       size_t n, const double *values)
 {
-    hid_t  filespace, memspace;
     herr_t status;
 
-    if (select_row(w->dataset[id], tid, from, n, out_rank(id),
-                   &filespace, &memspace) < 0)
+    if (n == 0)
+        return 0;
+
+    if (out_select_span(w->filespace[id], w->memspace, id, tid, from, n) < 0)
         return fail(w, "unable to select an output row");
 
-    status = H5Dwrite(w->dataset[id], H5T_NATIVE_DOUBLE, memspace, filespace,
-                      H5P_DEFAULT, values);
-
-    H5Sclose(memspace);
-    H5Sclose(filespace);
+    status = H5Dwrite(w->dataset[id], H5T_NATIVE_DOUBLE, w->memspace,
+                      w->filespace[id], H5P_DEFAULT, values);
 
     return status < 0 ? fail(w, "unable to write an output row") : 0;
 }

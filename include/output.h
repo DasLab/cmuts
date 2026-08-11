@@ -90,6 +90,19 @@ void out_shape(out_field_id id, int32_t n_refs, size_t cap,
 hid_t       out_type(out_field_id id);
 const void *out_fill(out_field_id id);
 
+/* A dataspace holding one row of the widest field, which a span of any field's
+ * row is then selected from. */
+hid_t out_row_space(size_t cap);
+
+/* Selects n values of one reference's row of a field, starting at column from:
+ * in the file, and in the memory row the values are moved through. The two are
+ * selected together so that they cannot disagree on how many values move.
+ *
+ * The selections replace whatever was there, so both dataspaces may be kept for
+ * as long as the file is open and reselected for each row. */
+int out_select_span(hid_t filespace, hid_t memspace, out_field_id id,
+                    int32_t tid, size_t from, size_t n);
+
 /* A creation property list with object timestamping turned off.
  *
  * HDF5 stamps every object header with the time it was written, so two runs

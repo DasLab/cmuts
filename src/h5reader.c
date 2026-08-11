@@ -18,6 +18,10 @@
 struct h5reader {
     hid_t   file;
     hid_t   dataset[OUT_N_FIELDS];
+    /* A dataspace apiece, kept for the life of the reader, as the writer keeps
+     * its own: only the selection differs between one row and the next. */
+    hid_t   filespace[OUT_N_FIELDS];
+    hid_t   memspace;   /* one row of the widest field, selected down to size */
     hid_t   reads;      /* the group the per-run counts are gathered in */
     int32_t n_refs;
     size_t  ref_cap;
@@ -125,7 +129,12 @@ static int open_field(h5reader *r, out_field_id id)
     if (r->dataset[id] < 0)
         return fail_field(r, id, "not present");
 
-    return check_shape(r, id, dims);
+    if (check_shape(r, id, dims) < 0)
+        return -1;
+
+    r->filespace[id] = H5Dget_space(r->dataset[id]);
+
+    return r->filespace[id] < 0 ? fail_field(r, id, "cannot be described") : 0;
 }
 
 h5reader *h5reader_open(const char *path)
@@ -138,10 +147,17 @@ h5reader *h5reader_open(const char *path)
      * trace on stderr. */
     H5Eset_auto2(H5E_DEFAULT, NULL, NULL);
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++)
-        r->dataset[id] = H5I_INVALID_HID;
+    /* Every handle is marked absent before anything can fail, so that a reader
+     * abandoned partway through closes exactly what it opened. Zero, which the
+     * allocation leaves behind, is not a handle HDF5 would refuse. */
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        r->dataset[id]   = H5I_INVALID_HID;
+        r->filespace[id] = H5I_INVALID_HID;
+    }
 
-    r->reads = H5I_INVALID_HID;
+    r->file     = H5I_INVALID_HID;
+    r->reads    = H5I_INVALID_HID;
+    r->memspace = H5I_INVALID_HID;
 
     r->file = H5Fopen(path, H5F_ACC_RDONLY, H5P_DEFAULT);
     if (r->file < 0) {
@@ -151,6 +167,12 @@ h5reader *h5reader_open(const char *path)
 
     if (probe_shape(r) < 0)
         return r;
+
+    r->memspace = out_row_space(r->ref_cap);
+    if (r->memspace < 0) {
+        fail(r, "unable to prepare the file for reading");
+        return r;
+    }
 
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++)
         if (open_field(r, id) < 0)
@@ -168,9 +190,15 @@ void h5reader_close(h5reader *r)
     if (!r)
         return;
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++)
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (r->filespace[id] >= 0)
+            H5Sclose(r->filespace[id]);
         if (r->dataset[id] >= 0)
             H5Dclose(r->dataset[id]);
+    }
+
+    if (r->memspace >= 0)
+        H5Sclose(r->memspace);
 
     if (r->reads >= 0)
         H5Gclose(r->reads);
@@ -200,51 +228,19 @@ size_t h5reader_capacity(const h5reader *r)
 /* Rows                                                                      */
 /* ------------------------------------------------------------------------ */
 
-/* Selects the part of a dataset belonging to one reference: the whole row for
- * a row field, the single value for a scalar one. */
-static int select_row(hid_t dataset, int32_t tid, size_t width, int rank,
-                      hid_t *filespace, hid_t *memspace)
-{
-    hsize_t start[OUT_RANK_MAX] = { (hsize_t)tid, 0 };
-    hsize_t count[OUT_RANK_MAX] = { 1, (hsize_t)width };
-    hsize_t extent              = rank == OUT_RANK_VECTOR ? (hsize_t)width : 1;
-
-    *filespace = H5Dget_space(dataset);
-    if (*filespace < 0)
-        return -1;
-
-    if (H5Sselect_hyperslab(*filespace, H5S_SELECT_SET, start, NULL, count, NULL) < 0) {
-        H5Sclose(*filespace);
-        return -1;
-    }
-
-    *memspace = H5Screate_simple(1, &extent, NULL);
-    if (*memspace < 0) {
-        H5Sclose(*filespace);
-        return -1;
-    }
-
-    return 0;
-}
-
 int h5reader_field(h5reader *r, out_field_id id, int32_t tid, double *values)
 {
     size_t width = out_extent(id, r->ref_cap, r->ref_cap);
-    hid_t  filespace, memspace;
     herr_t status;
 
     if (tid < 0 || tid >= r->n_refs)
         return fail(r, "reference index outside the file");
 
-    if (select_row(r->dataset[id], tid, width, out_rank(id),
-                   &filespace, &memspace) < 0)
+    if (out_select_span(r->filespace[id], r->memspace, id, tid, 0, width) < 0)
         return fail(r, "unable to select an input row");
 
-    status = H5Dread(r->dataset[id], H5T_NATIVE_DOUBLE, memspace, filespace,
-                     H5P_DEFAULT, values);
-
-    H5Sclose(memspace);
-    H5Sclose(filespace);
+    status = H5Dread(r->dataset[id], H5T_NATIVE_DOUBLE, r->memspace,
+                     r->filespace[id], H5P_DEFAULT, values);
 
     return status < 0 ? fail(r, "unable to read an input row") : 0;
 }

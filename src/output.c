@@ -116,6 +116,31 @@ const void *out_fill(out_field_id id)
                                                    : (const void *)&zero;
 }
 
+hid_t out_row_space(size_t cap)
+{
+    hsize_t widest = (hsize_t)out_widest(cap);
+
+    return H5Screate_simple(1, &widest, NULL);
+}
+
+/* A scalar field has one value per reference, so the column plays no part in
+ * selecting it; the arrays are written in full and the rank decides how much of
+ * them is read. */
+int out_select_span(hid_t filespace, hid_t memspace, out_field_id id,
+                    int32_t tid, size_t from, size_t n)
+{
+    hsize_t start[OUT_RANK_MAX] = { (hsize_t)tid, (hsize_t)from };
+    hsize_t count[OUT_RANK_MAX] = { 1, (hsize_t)n };
+    hsize_t offset              = 0;
+    hsize_t extent              = out_rank(id) == OUT_RANK_VECTOR ? (hsize_t)n : 1;
+
+    if (H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, count, NULL) < 0)
+        return -1;
+
+    return H5Sselect_hyperslab(memspace, H5S_SELECT_SET, &offset, NULL,
+                               &extent, NULL);
+}
+
 hid_t out_untimed_plist(hid_t class_id)
 {
     hid_t plist = H5Pcreate(class_id);
