@@ -89,16 +89,16 @@ extern const out_field OUT_FIELDS[OUT_N_FIELDS];
 
 /* Values one field occupies for a reference of len bases, in a file whose longest
  * reference is cap. */
-size_t out_extent(out_field_id id, size_t len, size_t cap);
+size_t out_values(out_field_id id, size_t len, size_t cap);
 
 /* The widest row of any field, which is what a buffer must hold to take a row of any of
  * them. */
 size_t out_widest(size_t cap);
 
 /* Writes the dimensions of one field's dataset into dims, which must have room for
- * OUT_RANK_MAX of them, and returns the rank. Rows are as wide as the field's extent at
- * the longest reference, so every row of a field is the same width whatever its own
- * reference measures. */
+ * OUT_RANK_MAX of them, and returns the rank. Rows hold as many values as the field
+ * occupies at the longest reference, so every row of a field is the same width whatever
+ * its own reference measures. */
 int out_dims(out_field_id id, int32_t n_refs, size_t cap, size_t *dims);
 
 /* Dimensions one field's dataset has. */

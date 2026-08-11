@@ -26,10 +26,16 @@
 /* Shape                                                                     */
 /* ------------------------------------------------------------------------ */
 
-static hsize_t rows_per_chunk(size_t row_values, int32_t n_refs)
+/* Bytes one value of a field occupies on disk, which is the width of the type it is
+ * stored as and not that of the double it is transferred through. */
+static size_t stored_bytes(out_field_id id)
 {
-    size_t  row_bytes = row_values * sizeof(float);
-    hsize_t rows      = row_bytes ? TARGET_CHUNK_BYTES / row_bytes : (hsize_t)n_refs;
+    return H5Tget_size(h5layout_type(id));
+}
+
+static hsize_t rows_per_chunk(size_t row_bytes, int32_t n_refs)
+{
+    hsize_t rows = row_bytes ? TARGET_CHUNK_BYTES / row_bytes : (hsize_t)n_refs;
 
     if (rows < 1) {
         rows = 1;
@@ -55,7 +61,7 @@ void h5layout_shape(out_field_id id, int32_t n_refs, size_t cap,
      * dimension is cut down. A field with no reference dimension is one value, and is
      * not chunked at all. */
     if (OUT_FIELDS[id].per_ref) {
-        chunk[0] = rows_per_chunk(out_extent(id, cap, cap), n_refs);
+        chunk[0] = rows_per_chunk(out_values(id, cap, cap) * stored_bytes(id), n_refs);
     }
 }
 
@@ -172,10 +178,10 @@ hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank)
     return dcpl;
 }
 
-hid_t h5layout_access_plist(const hsize_t *chunk, int rank)
+hid_t h5layout_access_plist(out_field_id id, const hsize_t *chunk, int rank)
 {
     hid_t  dapl  = H5Pcreate(H5P_DATASET_ACCESS);
-    size_t bytes = sizeof(float);
+    size_t bytes = stored_bytes(id);
 
     if (dapl < 0) {
         return H5I_INVALID_HID;

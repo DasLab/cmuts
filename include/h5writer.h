@@ -42,8 +42,8 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
 void      h5writer_close(h5writer *w);
 
 /* Writes one field's values for a reference of len bases, narrowing the accumulated doubles
- * to the field's stored type. Columns past the reference's own extent are marked as not
- * part of it.
+ * to the field's stored type. Columns past the values that reference occupies are marked
+ * as not part of it.
  *
  * Pass ref_cap as len to write a full-width row, at which every field occupies its full
  * width and none has a tail to mark. */

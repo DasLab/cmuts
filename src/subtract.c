@@ -87,7 +87,7 @@ static void combine_row(out_combine how, const double *treated,
 static int subtract_field(subtraction *s, out_field_id id, int32_t tid,
                           char *error, size_t error_len)
 {
-    size_t width = out_extent(id, s->ref_cap, s->ref_cap);
+    size_t width = out_values(id, s->ref_cap, s->ref_cap);
 
     if (h5reader_field(s->treated, id, tid, s->left) < 0) {
         return fail_input(error, error_len, s->cfg->treated_path, s->treated);

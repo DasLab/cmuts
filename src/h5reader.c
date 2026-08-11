@@ -123,7 +123,7 @@ static int open_field(h5reader *r, out_field_id id)
 
     h5layout_shape(id, r->n_refs, r->ref_cap, dims, chunk);
 
-    dapl = h5layout_access_plist(chunk, out_rank(id));
+    dapl = h5layout_access_plist(id, chunk, out_rank(id));
     if (dapl < 0) {
         return fail(r, "unable to prepare a dataset for reading");
     }
@@ -238,7 +238,7 @@ size_t h5reader_capacity(const h5reader *r)
 
 int h5reader_field(h5reader *r, out_field_id id, int32_t tid, double *values)
 {
-    size_t width = out_extent(id, r->ref_cap, r->ref_cap);
+    size_t width = out_values(id, r->ref_cap, r->ref_cap);
     herr_t status;
 
     if (tid < 0 || tid >= r->n_refs) {

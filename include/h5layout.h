@@ -20,9 +20,9 @@
 
 #include "output.h"
 
-/* The dataset's shape and that of the chunks it is stored in. A row is as wide as the
- * field's extent at the longest reference, so a field wider than one value per base is
- * sized by the same rule as the rest. Both arrays are SHAPE_RANK_MAX long, of which only
+/* The dataset's shape and that of the chunks it is stored in. A row holds as many values
+ * as the field occupies at the longest reference, so a field wider than one value per base
+ * is sized by the same rule as the rest. Both arrays are OUT_RANK_MAX long, of which only
  * the field's own rank is written. */
 void h5layout_shape(out_field_id id, int32_t n_refs, size_t cap,
                     hsize_t *dims, hsize_t *chunk);
@@ -57,4 +57,4 @@ hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank);
 /* A dataset access property list whose chunk cache holds several chunks of this shape. The
  * writer and the reader both work through rows in roughly ascending order, so caching a few
  * chunks avoids inflating a chunk again for each row in it. */
-hid_t h5layout_access_plist(const hsize_t *chunk, int rank);
+hid_t h5layout_access_plist(out_field_id id, const hsize_t *chunk, int rank);

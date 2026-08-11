@@ -39,7 +39,7 @@ extern const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS];
 /* Values one field occupies for a reference of len bases, in a run whose longest is cap.
  * Allocation, zeroing, merging, the output row and the dataset width all derive from
  * this, so a new kind of field is described here and nowhere else. */
-size_t accum_extent(accum_field_id id, size_t len, size_t cap);
+size_t accum_values(accum_field_id id, size_t len, size_t cap);
 
 /* Accumulated values for a single reference.
  *

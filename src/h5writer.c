@@ -80,7 +80,7 @@ static hid_t create_field(h5writer *w, out_field_id id)
     space = rank == 0 ? H5Screate(H5S_SCALAR)
                       : H5Screate_simple(rank, dims, NULL);
     dcpl  = h5layout_creation_plist(id, chunk, rank);
-    dapl  = h5layout_access_plist(chunk, rank);
+    dapl  = h5layout_access_plist(id, chunk, rank);
 
     if (space < 0 || dcpl < 0 || dapl < 0) {
         dataset = H5I_INVALID_HID;
@@ -264,22 +264,22 @@ static int write_part(h5writer *w, out_field_id id, int32_t tid, size_t from,
 int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
                    const double *values)
 {
-    size_t extent = out_extent(id, len, w->ref_cap);
-    size_t width  = out_extent(id, w->ref_cap, w->ref_cap);
+    size_t held  = out_values(id, len, w->ref_cap);
+    size_t width = out_values(id, w->ref_cap, w->ref_cap);
 
     if (tid < 0 || tid >= w->n_refs) {
         return fail(w, "reference index outside the output");
     }
 
-    if (write_part(w, id, tid, 0, extent, values) < 0) {
+    if (write_part(w, id, tid, 0, held, values) < 0) {
         return -1;
     }
 
-    if (extent == width) {
+    if (held == width) {
         return 0;
     }
 
-    return write_part(w, id, tid, extent, width - extent, w->padding);
+    return write_part(w, id, tid, held, width - held, w->padding);
 }
 
 /* ------------------------------------------------------------------------ */

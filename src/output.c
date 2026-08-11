@@ -15,7 +15,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     [OUT_UNMAPPED]   = { "reads/unmapped", shape_none,       false, OUT_U64, OUT_ZERO, OUT_ADD       },
 };
 
-size_t out_extent(out_field_id id, size_t len, size_t cap)
+size_t out_values(out_field_id id, size_t len, size_t cap)
 {
     return shape_values(OUT_FIELDS[id].row, len, cap);
 }
@@ -25,7 +25,7 @@ size_t out_widest(size_t cap)
     size_t widest = 0;
 
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        size_t width = out_extent(id, cap, cap);
+        size_t width = out_values(id, cap, cap);
 
         widest = width > widest ? width : widest;
     }

@@ -33,7 +33,7 @@ int32_t h5reader_refs(const h5reader *r);
 size_t  h5reader_capacity(const h5reader *r);
 
 /* Reads one field's whole row for a reference. values must hold
- * out_extent(id, capacity, capacity) doubles. */
+ * out_values(id, capacity, capacity) doubles. */
 int h5reader_field(h5reader *r, out_field_id id, int32_t tid, double *values);
 
 /* The whole of a field belonging to the run rather than to any one reference. */
