@@ -9,14 +9,13 @@
 
 /* The quantities every accumulator carries.
  *
- * This enum and ACCUM_FIELDS are the single source of truth for the layout:
- * allocation, zeroing and merging all derive from them, and nothing else in the
- * pipeline inspects an accumulator's contents. Adding a quantity means adding
- * one enumerator and one table row.
+ * This enum and ACCUM_FIELDS are the single source of truth for the layout: allocation,
+ * zeroing and merging all derive from them, and nothing else in the pipeline inspects an
+ * accumulator's contents. Adding a quantity means adding one enumerator and one row.
  *
- * What is written is no longer this. The mutations and the span are the
- * evidence a run gathers and the output holds the rate they come to, so
- * h5writer keeps a table of its own and takes only its shapes from here. */
+ * These are not the fields written out. The mutations and the span are evidence and the
+ * output holds the rate they come to, so output.h keeps a table of its own and takes only
+ * its shapes from here. */
 typedef enum {
     ACCUM_COVERAGE,
     ACCUM_SPANNED,
@@ -33,41 +32,38 @@ typedef enum {
     ACCUM_SCALAR,      /* one value per reference */
 } accum_kind;
 
-/* Bins a read-length histogram covers, given the longest reference in the run:
- * one for every length from 0 to twice it. The range reaches past a reference
- * because a read carrying insertions or soft-clipped ends is longer than the
- * one it aligns to, which on the libraries measured is where most of them fall.
+/* Bins a read-length histogram covers, given the longest reference in the run: one for
+ * every length from 0 to twice it. The range reaches past a reference because a read
+ * carrying insertions or soft-clipped ends is longer than the one it aligns to.
  *
- * Every row is this wide, whatever its own reference measures. A read length is
- * not a position in a reference, so a column that a short reference has no
- * reads for is a count of zero and not padding; sizing rows individually would
- * leave the same column meaning different things in different rows, and reads
- * uncounted where the array had room for them all along.
+ * Every row is this wide, whatever its own reference measures. A read length is not a
+ * position in a reference, so a column a short reference has no reads for is a count of
+ * zero and not padding; sizing rows individually would leave the same column meaning
+ * different things in different rows.
  *
- * A read longer than the range is counted in no bin. How many there were is the
- * reads total less the row's own sum. */
+ * A read longer than the range is counted in no bin. How many there were is the reads
+ * total less the row's own sum. */
 #define ACCUM_LENGTH_BINS(cap) (2 * (cap) + 1)
 
-/* What a field is, which is all the accumulator needs of it. What it is called
- * in the output, and whether it is written at all, is h5writer's to say. */
+/* All the accumulator needs of a field. What it is called in the output, and whether it
+ * is written at all, is output.h's to say. */
 typedef struct {
     accum_kind kind;
 } accum_field;
 
 extern const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS];
 
-/* Values one field occupies for a reference of len bases, in a run whose
- * longest is cap. Allocation, zeroing, merging, the output row and the
- * dataset's own width all derive from this, so a new kind of field is described
- * here and nowhere else. */
+/* Values one field occupies for a reference of len bases, in a run whose longest is cap.
+ * Allocation, zeroing, merging, the output row and the dataset width all derive from
+ * this, so a new kind of field is described here and nowhere else. */
 size_t accum_extent(accum_field_id id, size_t len, size_t cap);
 
 /* Accumulated values for a single reference.
  *
- * Every accumulator in a run is allocated at the same capacity, so any two are
- * layout compatible and may be merged. Values are held as double and narrowed
- * only on output: one reference can absorb hundreds of thousands of reads,
- * which is enough for float rounding to become visible in the totals. */
+ * Every accumulator in a run is allocated at the same capacity, so any two are layout
+ * compatible and may be merged. Values are held as double and narrowed only on output:
+ * one reference can absorb hundreds of thousands of reads, enough for float rounding to
+ * become visible in the totals. */
 typedef struct {
     double *arena;                  /* owned; one allocation backing every field */
     double *slot[ACCUM_N_FIELDS];   /* views into arena */
@@ -86,9 +82,8 @@ void accum_add(accum *dst, const accum *src, size_t len);
 
 /* Storage for one field: len values for ACCUM_PER_BASE, one for ACCUM_SCALAR.
  *
- * Two forms rather than one taking a const accumulator and handing back a
- * writable pointer, which would let anything holding a finished reference
- * quietly alter it. */
+ * Two forms rather than one taking a const accumulator and returning a writable pointer,
+ * which would let anything holding a finished reference alter it. */
 static inline double *accum_data(accum *acc, accum_field_id id)
 {
     return acc->slot[id];

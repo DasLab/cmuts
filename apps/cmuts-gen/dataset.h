@@ -10,8 +10,8 @@
 #include "sample.h"
 #include "simulate.h"
 
-/* SAM is readable in a diff, which is worth having for a small fixture; BAM is
- * what anything large should be. */
+/* SAM is readable in a diff, which is worth having for a small fixture. BAM is for anything
+ * large. */
 typedef enum {
     DATASET_BAM,
     DATASET_SAM,
@@ -19,11 +19,9 @@ typedef enum {
 
 /* Everything a dataset is made of.
  *
- * How a read differs from the reference is the simulator's to describe and is
- * held as its model rather than flattened in here. What is left is the shape of
- * the run: how many references there are, how long they are, and how many reads
- * each receives.
- */
+ * How a read differs from the reference is the simulator's to describe, and is held as its
+ * model rather than flattened in here. What is left is the shape of the run: how many
+ * references there are, how long they are, and how many reads each receives. */
 typedef struct {
     const char    *prefix;         /* PREFIX.bam or PREFIX.sam, and PREFIX.fasta */
     dataset_format format;
@@ -36,7 +34,7 @@ typedef struct {
 
     sim_model      model;
 
-    /* Everything generated follows from this. */
+    /* Every value generated derives from this. */
     size_t         seed;
 } dataset_config;
 

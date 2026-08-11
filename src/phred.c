@@ -7,8 +7,8 @@
 
 #include <math.h>
 
-/* A PHRED score is ten times the negative log of the chance the call is wrong,
- * so a score of 0 means no confidence at all and 30 means one in a thousand. */
+/* Fills the table. A PHRED score is ten times the negative log of the chance the call is
+ * wrong, so 0 means no confidence at all and 30 one chance in a thousand. */
 void phred_build(phred *table)
 {
     for (unsigned quality = 0; quality <= PHRED_MAX; quality++)

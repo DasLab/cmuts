@@ -13,8 +13,8 @@
 #include "tally.h"
 
 typedef struct {
-    /* Read as though they were one file: every reference is counted across all
-     * of them, into the single row it has in the output. */
+    /* Read as one file: every reference is counted across all of them, into the single row
+     * it has in the output. */
     const char *const *bam_paths;
     size_t             n_bams;
     const char        *fasta_path;
@@ -32,6 +32,6 @@ typedef struct {
 
 pipeline_config pipeline_defaults(void);
 
-/* Runs the file to completion, leaving the results in the output file.
- * Returns 0, or -1 with a description in error. */
+/* Runs the input to completion, leaving the results in the output file. Returns 0, or -1 with
+ * a description in error. */
 int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len);

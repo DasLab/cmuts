@@ -1,9 +1,8 @@
 /* tally.c -- one read's contribution to a reference.
  *
- * Drives the marginal over one read and adds the window it returns to the
- * reference's accumulator, clipping to the reference's own bounds. What the
- * three counted quantities mean is described in phmm.c, which computes them,
- * and in accum.c, which stores them.
+ * Runs the marginal over one read and adds the window it returns to the reference's
+ * accumulator, clipping to the reference's bounds. The three counted quantities are
+ * described in phmm.c, which computes them, and accum.c, which stores them.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -21,7 +20,7 @@ typedef struct {
 
 struct tally_scratch {
     phmm_scratch *phmm;
-    int          *half;   /* the band handed to the marginal, row by row */
+    int          *half;   /* the band passed to the marginal, one per row */
     size_t        rows;   /* rows it is sized for */
 };
 
@@ -34,10 +33,9 @@ static void add_at(const context *ctx, accum_field_id field, hts_pos_t pos,
         values[pos] += value;
 }
 
-/* The read's own stored length, which is what the length filters are applied
- * to and so counts inserted and soft-clipped bases. A read longer than the
- * range the bins cover is counted in none of them; the reads total is what
- * says how many those were. */
+/* Counts the read in its length bin. Binned by stored length, as the length filters are
+ * applied, so inserted and soft-clipped bases count. A read longer than the range the
+ * bins cover falls in none of them; the reads total gives how many those were. */
 static void add_length(const context *ctx)
 {
     double *bins   = accum_data(ctx->target, ACCUM_LENGTHS);
@@ -58,9 +56,9 @@ static void add_window(const context *ctx, const phmm_window *window)
     }
 }
 
-/* A band of uniform width, the only shape used so far. Grown to the
- * longest read seen and filled once, the width being fixed before any read
- * arrives. Returns NULL if it cannot be grown, which ends the run. */
+/* A band of uniform width, the only shape used so far. Grown to the longest read seen
+ * and filled once, the width being fixed before any read arrives. Returns NULL if it
+ * cannot be grown, which ends the run. */
 static const int *uniform_band(tally_scratch *scratch, const cm_bam_record *read,
                                int band)
 {

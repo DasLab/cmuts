@@ -7,16 +7,15 @@
 
 #include <math.h>
 
-/* Chunks are sized by bytes rather than rows so that a file of few long
- * references and one of many short references both land near this figure. */
+/* Chunks are sized in bytes rather than rows, so that a file of few long references
+ * and one of many short references both land near this figure. */
 #define TARGET_CHUNK_BYTES (1u << 20)
 
-/* The slots are a hash table over chunk indices, which is why their number is
- * prime. */
+/* The slots are a hash table over chunk indices, hence a prime. */
 #define CACHED_CHUNKS 4
 #define CACHE_SLOTS   521
 
-/* HDF5's own default, restated because naming either of the other two means
+/* HDF5's own default, restated because setting either of the other two means
  * passing all three. */
 #define CACHE_PREEMPTION 0.75
 
@@ -62,11 +61,9 @@ hid_t h5layout_type(out_field_id id)
     return OUT_FIELDS[id].counted ? H5T_STD_U64LE : H5T_IEEE_F32LE;
 }
 
-/* A field's OUT_ZERO or OUT_NAN, in the type the field is stored as.
- *
- * An unsigned has no NaN, so OUT_NAN is not available to a counted field; the
- * table gives each of them OUT_ZERO. None requires anything else, no counted
- * field having padding. */
+/* A field's OUT_ZERO or OUT_NAN, in the type the field is stored as. An unsigned has
+ * no NaN, so OUT_NAN is not available to a counted field; the table gives each of
+ * them OUT_ZERO, no counted field having padding. */
 const void *h5layout_fill(out_field_id id)
 {
     static const uint64_t none = 0;
@@ -91,9 +88,9 @@ hid_t h5layout_row_space(size_t cap)
     return H5Screate_simple(1, &widest, NULL);
 }
 
-/* A scalar field has one value per reference, so the column plays no part in
- * selecting it; the arrays are written in full and the rank decides how much of
- * them is read. */
+/* Selects n values of one reference's row, in the file and in memory together. A
+ * scalar field has one value per reference, so the column plays no part in selecting
+ * it: the arrays are filled in full and the rank decides how much is read. */
 int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
                          int32_t tid, size_t from, size_t n)
 {

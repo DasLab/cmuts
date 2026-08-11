@@ -14,7 +14,7 @@ struct ctxpool {
     refctx *storage;    /* the whole block, retained for teardown */
     size_t  capacity;
     size_t  ref_cap;
-    queue  *available;  /* free list; blocking pop gives the pool its bound */
+    queue  *available;  /* free list; a blocking pop is what bounds the pool */
 };
 
 /* ------------------------------------------------------------------------ */
@@ -160,10 +160,11 @@ void ctxpool_destroy(ctxpool *p)
     free(p);
 }
 
-/* The queue carries a void *, and one is converted to and from a refctx *
- * through a slot of its own rather than by reading this pointer as though it
- * were one. Only void * and char * are promised the same representation as
- * every other object pointer, so the two are not the same thing to alias. */
+/* Takes a context from the pool, blocking while every one is live.
+ *
+ * The queue carries a void *, converted through a slot of its own rather than by
+ * reading a refctx * as though it were one. Only void * and char * are guaranteed the
+ * representation of every other object pointer, so the two may not be aliased. */
 refctx *ctxpool_take(ctxpool *p)
 {
     void *slot = NULL;

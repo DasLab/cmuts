@@ -1,11 +1,10 @@
 /* dataset.c -- writing the alignments and the reference they came from.
  *
- * A reference's reads are all placed before any of them is built, so the
- * records can be emitted in coordinate order however many there are and nothing
- * has to be sorted afterwards.
+ * A reference's reads are all placed before any of them is built, so the records can be
+ * emitted in coordinate order however many there are and nothing has to be sorted afterwards.
  *
- * A reference's content follows from the seed and its index alone, so any one
- * of them is reproducible without generating those before it.
+ * A reference's content derives from the seed and its index alone, so any one of them is
+ * reproducible without generating those before it.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -22,7 +21,7 @@
 /* Bases per line of a FASTA record. */
 #define FASTA_LINE 60
 
-/* Generated names, so one bound serves them all. */
+/* Names are generated, so one bound serves them all. */
 #define NAME_LEN 64
 
 #define PATH_LEN 4096
@@ -31,7 +30,7 @@
 /* Names and paths                                                           */
 /* ------------------------------------------------------------------------ */
 
-/* Padded so that the references read in order wherever they are listed. */
+/* Zero-padded, so that the references sort in order wherever they are listed. */
 static void reference_name(char *out, size_t size, size_t tid)
 {
     snprintf(out, size, "ref%06zu", tid);
@@ -42,8 +41,8 @@ static void read_name(char *out, size_t size, const char *kind, size_t index)
     snprintf(out, size, "%s%zu", kind, index);
 }
 
-/* Returns -1 where the prefix leaves no room for the extension, rather than
- * writing to the truncated path that would otherwise be built. */
+/* Builds an output path, returning -1 where the prefix leaves no room for the extension rather
+ * than writing to the truncated path. */
 static int output_path(char *out, size_t size, const char *prefix, const char *extension)
 {
     int written = snprintf(out, size, "%s.%s", prefix, extension);
@@ -51,8 +50,8 @@ static int output_path(char *out, size_t size, const char *prefix, const char *e
     return written < 0 || (size_t)written >= size ? -1 : 0;
 }
 
-/* The format decides both the extension and the mode htslib opens with, so the
- * two are named together and neither is restated where a file is opened. */
+/* The format decides both the extension and the mode htslib opens with, so the two are named
+ * together and neither is restated where a file is opened. */
 typedef struct {
     const char *extension;
     const char *mode;
@@ -69,12 +68,10 @@ static const format_encoding ENCODINGS[] = {
 
 /* What each reference draws from.
  *
- * A stream per reference and per purpose, so that what a reference looks like
- * depends on the seed and its index alone: not on how many reads the ones
- * before it needed, and not on how many values another purpose happened to
- * draw first. Sharing one stream between two purposes would mean the number of
- * draws each makes had to agree in two places, and adding a draw to one would
- * silently change what the other produced. */
+ * One stream per reference and per purpose, so that a reference depends on the seed and its
+ * index alone: not on how many reads the ones before it needed, and not on how many values
+ * another purpose drew first. Sharing a stream between two purposes would make adding a draw
+ * to one silently change what the other produced. */
 typedef enum {
     STREAM_LENGTH,    /* how long a reference is */
     STREAM_CONTENT,   /* its sequence, and the reads laid on it */
@@ -88,9 +85,8 @@ static void seed_stream(rng *r, size_t seed, size_t tid, stream purpose)
               ^ ((uint64_t)purpose * 0xa24baed4963ee407ULL));
 }
 
-/* A count drawn from a distribution, held to what there is room for. One may
- * be written with a negative bound, and nothing is drawn fewer than zero
- * times. */
+/* A count drawn from a distribution, held to limit. A spec may be written with a negative
+ * bound, and nothing is drawn fewer than zero times. */
 static size_t draw_count(const distribution *d, rng *r, size_t limit)
 {
     long drawn = distribution_draw(d, r);
@@ -105,8 +101,8 @@ static size_t draw_count(const distribution *d, rng *r, size_t limit)
 /* References                                                                */
 /* ------------------------------------------------------------------------ */
 
-/* Drawn for every reference up front, since the header has to declare them all
- * before the first record is written. */
+/* Every reference's length, drawn up front, the header having to declare them all before the
+ * first record is written. */
 static size_t *draw_reference_lengths(const dataset_config *cfg)
 {
     size_t *lengths = calloc(cfg->references, sizeof *lengths);
@@ -121,7 +117,7 @@ static size_t *draw_reference_lengths(const dataset_config *cfg)
         seed_stream(&r, cfg->seed, tid, STREAM_LENGTH);
         len = distribution_draw(&cfg->ref_length, &r);
 
-        /* A reference with no bases is one no read could be placed on. */
+        /* No read could be placed on a reference of no bases. */
         lengths[tid] = len < 1 ? 1 : (size_t)len;
     }
 
@@ -175,9 +171,8 @@ static void write_fasta_record(FILE *fasta, const char *name, const char *seq, s
 /* The writer                                                                */
 /* ------------------------------------------------------------------------ */
 
-/* Both files, and everything reused from one read to the next. The buffers are
- * sized to the largest the configuration can produce, so nothing is allocated
- * once writing has begun. */
+/* Both files, and everything reused from one read to the next. The buffers are sized to the
+ * largest the configuration can produce, so nothing is allocated once writing has begun. */
 typedef struct {
     const dataset_config *cfg;
 
@@ -189,13 +184,13 @@ typedef struct {
     sim_scratch   *scratch;
     sim_placement *places;    /* one reference's reads, ordered by start */
     size_t         capacity;  /* reads a reference may receive */
-    char          *sequence;  /* the reference in hand */
+    char          *sequence;  /* the reference being written */
 
     size_t next_read;         /* numbering, over the run as a whole */
 } writer;
 
-/* Room for the most reads a reference can receive, and never for none: an
- * empty allocation is one that cannot be told apart from a failed one. */
+/* Room for the most reads a reference can receive, and never for none, an empty allocation
+ * being indistinguishable from a failed one. */
 static size_t places_needed(const distribution *reads_per_ref)
 {
     long most = distribution_maximum(reads_per_ref);
@@ -268,9 +263,9 @@ static int write_read(writer *w, rng *r, int32_t tid, sim_placement where)
     return sam_write1(w->alignments, w->header, w->rec) < 0 ? -1 : 0;
 }
 
-/* Every read of one reference. The placements are eight bytes apiece and are
- * drawn and sorted before any record is built, so coordinate order costs the
- * sort rather than holding every record of the reference in memory. */
+/* Writes every read of one reference. The placements are eight bytes apiece and are drawn and
+ * sorted before any record is built, so coordinate order costs the sort rather than holding
+ * every record of the reference in memory. */
 static int write_reference_reads(writer *w, rng *r, int32_t tid, size_t reflen)
 {
     size_t reads = draw_count(&w->cfg->reads_per_ref, r, w->capacity);
@@ -287,9 +282,9 @@ static int write_reference_reads(writer *w, rng *r, int32_t tid, size_t reflen)
     return 0;
 }
 
-/* The sequence is written whether or not the reference receives any reads: one
- * that received none is a reference the output has a row for and nothing in
- * it, which is the case a sparse experiment is made of. */
+/* Writes one reference and its reads. The sequence is written whether or not the reference
+ * receives any reads, a reference with none being a row the output holds and nothing in it --
+ * which is what a sparse experiment consists of. */
 static int write_reference(writer *w, size_t tid, size_t reflen)
 {
     char name[NAME_LEN];
@@ -307,8 +302,8 @@ static int write_reference(writer *w, size_t tid, size_t reflen)
     return write_reference_reads(w, &r, (int32_t)tid, reflen);
 }
 
-/* Reads belonging to no reference, so they are drawn once for the run and
- * written after everything that is placed. */
+/* Writes the reads belonging to no reference. Drawn once for the run and written after
+ * everything that is placed, where a coordinate-sorted file keeps them. */
 static int write_unmapped_reads(writer *w)
 {
     rng    r;

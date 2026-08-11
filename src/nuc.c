@@ -13,8 +13,8 @@ const nuc NUC_FROM_CHAR[256] = {
     ['U'] = NUC_T, ['u'] = NUC_T,
 };
 
-/* BAM gives each base four bits, one bit per possibility, so exactly the four
- * powers of two name a single base. */
+/* BAM gives each base four bits, one per possibility, so only the four powers of two
+ * name a single base. */
 const nuc NUC_FROM_READ[16] = {
     [1] = NUC_A,
     [2] = NUC_C,

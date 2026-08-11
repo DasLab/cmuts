@@ -1,10 +1,9 @@
 /* cli.c -- command line parsing, driven by a program's option table.
  *
- * Every argument a program accepts is described once, in its cli_spec. The
- * short option string, the getopt_long table, assignment, bounds checking,
- * which arguments are mandatory, the usage line, the help text and the JSON
- * description all derive from it, so nothing can fall out of step with it and
- * adding an argument means adding a row.
+ * Every argument a program accepts is described once, in its cli_spec. The short
+ * option string, the getopt_long table, assignment, bounds checking, the usage
+ * line, the help text and the JSON description all derive from it, so adding an
+ * argument means adding a row.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -25,35 +24,24 @@
 /* What getopt returns for an option given without the value it needs. */
 #define MISSING_VALUE ':'
 
-/* Enough for a long option as anyone would write one. */
-#define REJECTED_MAX 64
+#define REJECTED_MAX   64  /* an option as it was written on the command line */
+#define METAVAR_MAX    32  /* a placeholder, with any ellipsis */
+#define INVOCATION_MAX 64  /* both forms of an option, and its placeholder */
+#define CEILING_MAX    32  /* an option's largest value, written out */
 
-/* Enough for a placeholder and the ellipsis a variadic one carries. */
-#define METAVAR_MAX 32
-
-/* Enough for both forms of an option and the placeholder that follows them. */
-#define INVOCATION_MAX 64
-
-/* Enough for the note naming an option's default. A string default is written
- * out in full, so this is the one of these a row could outgrow, and the note is
- * truncated where it does. */
+/* The note naming an option's default. A string default is written out in full,
+ * so this is the one of these a row can outgrow, and the note is truncated where
+ * it does. */
 #define DEFAULT_NOTE_MAX 64
 
-/* Enough for the largest value an option will take, written out. */
-#define CEILING_MAX 32
-
-/* The column an option's help begins in. The arguments list uses the same one;
- * a difference between them shows as a misaligned step in --help.
- *
- * A floor rather than a fixed width. A program whose longest invocation does
- * not fit would otherwise print its help hard against the option it describes,
- * and a metavar is free to grow. Anything with room to spare is laid out
- * exactly as it was. */
+/* The column an option's help begins in, shared with the arguments list so the
+ * two cannot step apart. A floor rather than a fixed width, since a metavar may
+ * be wider than it leaves room for. */
 #define HELP_COLUMN 28
 
-/* getopt records a short option in optopt, and for a long one leaves the
- * identifier it was given instead, which names nothing a reader would know. A
- * long one is read back from the word getopt stopped on. */
+/* Reports an option getopt would not accept, naming it as the caller wrote it.
+ * getopt records a short option in optopt but leaves a long one as the identifier
+ * it was assigned, so a long one is read back from the word getopt stopped on. */
 static void report_rejected_option(const cli_spec *spec, int argc, char **argv,
                                    bool needs_value)
 {
@@ -77,8 +65,8 @@ static bool takes_argument(const cli_option *opt)
     return opt->type != OPT_FLAG;
 }
 
-/* An option that answers and exits has no destination, so nothing is written
- * for it and its offset is never used. */
+/* Whether the option writes to the args struct. One that answers and exits has no
+ * destination, so its offset is never used. */
 static bool stores_a_value(const cli_option *opt)
 {
     return opt->action == CLI_STORE;
@@ -108,8 +96,8 @@ static const cli_option *option_by_id(const cli_spec *spec, int id)
 /* getopt_long inputs, built from the table                                  */
 /* ------------------------------------------------------------------------ */
 
-/* The leading colon has getopt report a missing value separately from an
- * unknown option. They are different mistakes and get different messages. */
+/* Builds the short option string. The leading colon has getopt report a missing
+ * value separately from an unknown option, the two getting different messages. */
 static void build_short_options(const cli_spec *spec, char *out, size_t size)
 {
     size_t n = 0;
@@ -167,9 +155,9 @@ static int parse_choice(const cli_option *opt, const char *text, const char *pro
     return -1;
 }
 
-/* The largest whole number an option will take. One with no ceiling of its own
- * is still held to what its destination can carry, so that no value is accepted
- * that the field would silently truncate. */
+/* The largest whole number an option will take. One with no ceiling of its own is
+ * bounded by what its destination can hold, so no value is accepted that the field
+ * would silently truncate. */
 static long integer_ceiling(const cli_option *opt)
 {
     if (opt->maximum != CLI_UNBOUNDED)
@@ -194,10 +182,10 @@ static const char *ceiling_text(const cli_option *opt, char *out, size_t size)
     return out;
 }
 
-/* A range is quoted only where the row declared one. An option with no ceiling
- * of its own has two independent bounds -- its floor, and what its destination
- * can hold -- so a value is reported against the single bound it missed. The
- * caller's text is echoed verbatim, not the number parsed from it. */
+/* Reports a value outside an option's bounds, echoing the caller's text rather
+ * than the number parsed from it. A range is quoted only where the row declared
+ * one; an option with no ceiling of its own is reported against whichever single
+ * bound it missed. */
 static void report_out_of_range(const cli_option *opt, const char *text,
                                 const char *program, bool below)
 {
@@ -303,8 +291,8 @@ static int assign(const cli_option *opt, void *args, const char *value,
 /* Help                                                                      */
 /* ------------------------------------------------------------------------ */
 
-/* Renders an option's default from the spec's defaults, so the help can never
- * advertise a value the program does not actually use. */
+/* Renders the note naming an option's default, read from the spec's defaults so
+ * that the help cannot advertise a value the program does not use. */
 static void format_default(const cli_option *opt, const void *defaults,
                            char *out, size_t size)
 {
@@ -346,9 +334,9 @@ static void format_default(const cli_option *opt, const void *defaults,
     }
 }
 
-/* How an option is written on its help line: the short form where it has one,
- * the long form always, and whatever it takes. The width pass and the print
- * both read it from here, so neither can measure one thing and write another. */
+/* How an option is written on its help line: the short form where it has one, the
+ * long form always, and its placeholder. Both the width pass and the print read it
+ * from here, so neither can measure one thing and write another. */
 static const char *option_form(const cli_option *opt, char *out, size_t len)
 {
     int n;
@@ -384,10 +372,9 @@ static void print_option(FILE *out, const cli_option *opt, const void *defaults,
     fprintf(out, "%s\n", suffix);
 }
 
-/* Groups are collected by scanning rather than by assuming the table is sorted
- * by group, so a row added anywhere lands under the right heading. Hidden rows
- * do not count, so a group starts at its first visible option and a group with
- * none at all never prints a heading. */
+/* Whether an earlier visible option shares this one's group. Found by scanning
+ * rather than by assuming the table is sorted by group, so a row added anywhere
+ * lands under the right heading and a group of only hidden rows prints none. */
 static bool group_seen_before(const cli_spec *spec, size_t index)
 {
     for (size_t i = 0; i < index; i++)
@@ -431,8 +418,7 @@ static void print_usage_line(const cli_spec *spec, FILE *out)
 }
 
 /* The widest invocation the help will print, so that nothing runs into its own
- * description. Hidden options are left out: they are never printed, and should
- * not widen what is. */
+ * description. Hidden options are left out, never being printed. */
 static int help_column(const cli_spec *spec)
 {
     size_t widest = HELP_COLUMN;
@@ -663,8 +649,8 @@ static cli_status check_required_options(const cli_spec *spec, const bool *seen)
     return CLI_OK;
 }
 
-/* A variadic positional takes any number of arguments, but demands one where it
- * is required. */
+/* How many positional arguments the spec demands. A variadic one takes any number
+ * but demands one where it is required. */
 static int fewest_arguments(const cli_spec *spec)
 {
     int fewest = 0;
@@ -727,8 +713,8 @@ static cli_status take_positionals(const cli_spec *spec, int argc, char **argv,
     return CLI_OK;
 }
 
-/* Requests that the tables answer in full, before any argument is required to
- * be present. */
+/* Answers a request the tables can satisfy on their own, returning whether one was
+ * made. Answered before any argument is required to be present. */
 static bool answer(const cli_spec *spec, cli_action action)
 {
     switch (action) {
@@ -764,9 +750,8 @@ cli_status cli_parse(const cli_spec *spec, int argc, char **argv, void *args)
     opterr = 0;
     optind = 1;
 
-    /* getopt keeps its state in globals, which is what makes it unsafe to call
-     * from more than one thread. Arguments are parsed before any thread exists,
-     * and optind is reset above so that a second parse starts afresh.
+    /* getopt keeps its state in globals. Arguments are parsed before any thread
+     * exists, and optind is reset above so that a second parse starts afresh.
      * NOLINTNEXTLINE(concurrency-mt-unsafe) */
     while ((found = getopt_long(argc, argv, shortopts, longopts, NULL)) != -1) {
         const cli_option *opt = found < OPTION_ID_BASE

@@ -13,8 +13,8 @@
 /* Generator                                                                 */
 /* ------------------------------------------------------------------------ */
 
-/* splitmix64: a small generator with no state beyond a counter, which makes a
- * run reproducible across platforms without depending on the C library's. */
+/* splitmix64, which keeps no state beyond a counter and so is reproducible across platforms,
+ * unlike the C library's generator. */
 void rng_seed(rng *r, uint64_t seed)
 {
     r->state = seed;
@@ -30,9 +30,9 @@ uint64_t rng_next(rng *r)
     return z ^ (z >> 31);
 }
 
-/* The top bits are the ones with full quality, and this many of them are
- * exactly what a double's mantissa holds. The shift drops the rest and the
- * scale is two to the same power, so the two are written once and follow. */
+/* A double's mantissa holds this many bits, taken from the top of the generator's output where
+ * quality is highest. The shift drops the rest and the scale is two to the same power, so both
+ * derive from the one figure. */
 #define FRACTION_BITS  53
 #define FRACTION_SHIFT (64 - FRACTION_BITS)
 #define FRACTION_SCALE (1.0 / (double)(1ULL << FRACTION_BITS))
@@ -64,9 +64,8 @@ bool rng_chance(rng *r, double probability)
 /* Specifications                                                            */
 /* ------------------------------------------------------------------------ */
 
-/* Enough for a number as anyone would write one. A longer run of characters is
- * rejected, not truncated: a truncated run of digits parses as a different
- * number, which would be worse than failing outright. */
+/* The longest number a spec may write. A longer run of characters is rejected rather than
+ * truncated, truncated digits parsing as a different number. */
 #define NUMBER_MAX 32
 
 static int fail(char *error, size_t error_len, const char *text, const char *why)

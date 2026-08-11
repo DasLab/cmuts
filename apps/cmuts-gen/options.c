@@ -1,7 +1,7 @@
 /* options.c -- cmuts-gen's command line, as one table.
  *
- * Rows use designated initializers so that a field added to cli_option
- * defaults quietly rather than having to be spelled out in every one.
+ * Rows use designated initializers, so that a field added to cli_option takes its default
+ * rather than having to be spelled out in every row.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -162,10 +162,9 @@ cli_spec gen_spec(const gen_args *defaults)
 /* Reading the specs                                                         */
 /* ------------------------------------------------------------------------ */
 
-/* Every option that carries a distribution, paired with the one it becomes.
- * The two offsets are named together so that an option added here is read by
- * the same loop as the rest, and cannot be given a table row and then left
- * unparsed. */
+/* One option carrying a distribution, paired with the field it is parsed into. The two offsets
+ * are named together so that an option added here is read by the same loop as the rest, and
+ * cannot be given a table row and then left unparsed. */
 typedef struct {
     const char *name;    /* the option it came from, for the message */
     size_t      text;    /* the written form, within gen_args */
@@ -199,9 +198,8 @@ static const distribution_option DISTRIBUTION_OPTIONS[] = {
                           offsetof(dataset_config, model.soft_clip_length) },
 };
 
-/* The option's name goes in first and the reason is written after it, so there
- * is no second buffer whose contents might not fit once the two are put
- * together. */
+/* Parses one option's text into its distribution. The option's name is written into error
+ * first and the reason appended after it, so no second buffer is needed. */
 static int parse_distribution(distribution *out,
                               const distribution_option *option,
                               const char *text,

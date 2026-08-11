@@ -30,7 +30,7 @@ typedef struct {
 
     int32_t n_refs;
     size_t  ref_cap;
-    size_t  unmapped;  /* the two runs' totals, added on opening them */
+    size_t  unmapped;  /* the two runs' totals, summed on opening them */
 } subtraction;
 
 /* ------------------------------------------------------------------------ */
@@ -59,9 +59,9 @@ static int fail_output(const subtraction *s, char *error, size_t error_len)
 /* Arithmetic                                                                */
 /* ------------------------------------------------------------------------ */
 
-/* NaN in either input carries through every rule, which is what marks a
- * position as unmeasured: a difference of rates is known only where both rates
- * are, and a position outside a reference is outside it in both files. */
+/* Combines one value from each input under the given rule. NaN in either input
+ * carries through all three, marking the position unmeasured: a difference of rates
+ * is known only where both rates are. */
 static double combine(out_combine how, double treated, double untreated)
 {
     switch (how) {
@@ -97,11 +97,10 @@ static int subtract_field(subtraction *s, out_field_id id, int32_t tid,
 
     combine_row(OUT_FIELDS[id].combine, s->left, s->right, s->result, width);
 
-    /* Written at the capacity rather than at a reference's own length: an
-     * output records no reference lengths, so a whole row is read and a whole
-     * row written. The columns past a reference are NaN in both inputs and stay
-     * NaN through the arithmetic, which is the mark the writer would otherwise
-     * have laid down itself. */
+    /* Written at the capacity rather than at the reference's own length, an output
+     * recording no reference lengths. The columns past a reference are NaN in both
+     * inputs and stay NaN through the arithmetic, which is the mark the writer would
+     * otherwise apply itself. */
     if (h5writer_field(s->out, id, tid, s->ref_cap, s->result) < 0)
         return fail_output(s, error, error_len);
 
@@ -127,13 +126,10 @@ static int subtract_references(subtraction *s, char *error, size_t error_len)
     return 0;
 }
 
-/* Reads align to no reference whether or not a run was treated, so the totals
- * add as the per-reference counts do.
+/* Sums the two runs' unmapped totals, which add as the per-reference counts do.
  *
- * Read while the inputs are being opened rather than when the sum comes to be
- * written, so that a file missing one is refused before the output is created.
- * Everything else an input can lack is found on opening it; leaving this to the
- * end would make it the one defect that costs a file already on disk. */
+ * Read while the inputs are being opened rather than when the sum is written, so that a file
+ * missing one is refused before the output is created. */
 static int read_totals(subtraction *s, char *error, size_t error_len)
 {
     size_t treated, untreated;
@@ -158,10 +154,9 @@ static int write_totals(subtraction *s, char *error, size_t error_len)
 /* Assembly                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* The two files must describe the same references. Nothing in an output names
- * them -- the FASTA holds the names, and a row is identified by its position --
- * so what can be checked is the shape: the same number of rows, each written at
- * the same capacity. */
+/* Checks that the two files describe the same references, and records their shape.
+ * An output names no references -- a row is identified by its position -- so only
+ * the shape can be compared: the same number of rows at the same capacity. */
 static int check_agreement(subtraction *s, char *error, size_t error_len)
 {
     if (h5reader_refs(s->treated) != h5reader_refs(s->untreated)) {
@@ -209,8 +204,8 @@ static int open_inputs(subtraction *s, char *error, size_t error_len)
     return read_totals(s, error, error_len);
 }
 
-/* One row of the widest field, three times over, which holds a row of any of
- * them. */
+/* Three buffers, each one row of the widest field, so that each holds a row of any
+ * field. */
 static int build_buffers(subtraction *s, char *error, size_t error_len)
 {
     size_t width = out_widest(s->ref_cap);
@@ -261,8 +256,8 @@ int subtract_run(const subtract_config *cfg, char *error, size_t error_len)
                              error, error_len) < 0)
         return -1;
 
-    /* Every way an input can be wrong is found before the output is created,
-     * so a run that refuses its inputs leaves whatever is at that path alone. */
+    /* Every way an input can be wrong is found before the output is created, so a run
+     * that refuses its inputs leaves whatever is at that path alone. */
     if (open_inputs(&s, error, error_len) == 0 &&
         build_buffers(&s, error, error_len) == 0 &&
         open_output(&s, may_replace, error, error_len) == 0 &&

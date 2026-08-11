@@ -12,16 +12,16 @@ rate_config rate_defaults(void)
     return (rate_config){ .min_depth = 1 };
 }
 
-/* Some evidence is wanted whatever depth was asked for, so a depth of nothing
- * means whatever there is rather than none at all. */
+/* Whether a position carries enough evidence to report on. Some is required whatever
+ * depth was asked for, so a depth of zero means whatever there is and not none. */
 static bool known_at(double wanted, double evidence)
 {
     return evidence > 0.0 && evidence >= wanted;
 }
 
-/* The rate cannot exceed one: every weight is a share of an event, and an
- * insertion spans what it lays. It is held there all the same, so that what
- * comes of it is a proportion however the last bit of a double rounded. */
+/* The mutations at a position over the evidence for them, held to one. Every weight is
+ * a share of an event and an insertion spans what it contributes, so the ratio cannot
+ * exceed one except by rounding. */
 static double rate_of(double mutations, double evidence)
 {
     double rate = evidence > 0.0 ? mutations / evidence : 0.0;
@@ -42,7 +42,8 @@ void rate_reactivity(const rate_config *cfg, const accum *acc, size_t len,
                : (double)NAN;
 }
 
-/* The standard error of a proportion over the evidence standing as its count. */
+/* The standard error of the rate, taking the evidence as the count it is a proportion
+ * of. */
 void rate_error(const rate_config *cfg, const accum *acc, size_t len,
                 double *restrict out)
 {

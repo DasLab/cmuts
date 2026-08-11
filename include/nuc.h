@@ -10,9 +10,9 @@
 
 #include <htslib/sam.h>
 
-/* NUC_N is first so that a table indexed by a byte reads as unknown wherever it
- * was not filled in: every IUPAC ambiguity code, every stray character, and the
- * codes BAM uses for a base that could be one of several. */
+/* NUC_N is first so that a table indexed by a byte reads as unknown wherever it was not filled
+ * in: every IUPAC ambiguity code, every stray character, and the codes BAM uses for a base
+ * that could be one of several. */
 typedef enum {
     NUC_N,
     NUC_A,
@@ -22,14 +22,14 @@ typedef enum {
     NUC_COUNT,
 } nuc;
 
-/* Named bases, which is how wide a per-base breakdown is; NUC_N is not one. */
+/* Named bases, which is how wide a per-base breakdown is. NUC_N is not one of them. */
 #define NUC_BASES (NUC_COUNT - 1)
 
 extern const nuc NUC_FROM_CHAR[256];
 extern const nuc NUC_FROM_READ[16];
 
-/* A base of a reference. Case is not significant, lower case in a FASTA marking
- * a repeat rather than a different base, and U reads as T. */
+/* A base of a reference. Case is not significant, lower case in a FASTA marking a repeat
+ * rather than a different base, and U reads as T. */
 static inline nuc nuc_from_char(char base)
 {
     return NUC_FROM_CHAR[(unsigned char)base];

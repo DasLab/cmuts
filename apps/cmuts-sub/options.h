@@ -11,8 +11,8 @@
 
 /* Everything the command line can set.
  *
- * Module configuration is held by a nested struct rather than flattened, so
- * that the module keeps owning its own settings and this stays a container. */
+ * Module configuration is held in a nested struct rather than flattened, so that the module
+ * keeps owning its own settings and this stays a container. */
 typedef struct {
     subtract_config subtract;
 } sub_args;

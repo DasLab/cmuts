@@ -10,25 +10,25 @@
 
 #include "output.h"
 
-/* Reads the datasets h5writer produces, taking the same layout from output.h.
- * Rows are read one at a time rather than whole datasets, so memory is bounded
- * by the longest reference and not by the size of the file.
+/* Reads the datasets h5writer produces, taking the same layout from output.h. Rows are read one
+ * at a time rather than whole datasets, so memory is bounded by the longest reference and not
+ * by the size of the file.
  *
- * Values are returned as double whatever they are stored as, which is how the
- * writer takes them and so the one form both sides share.
+ * Values are returned as double whatever they are stored as, which is also how the writer takes
+ * them.
  *
- * HDF5 is not thread-safe unless built for it, so a reader must be used from
- * one thread only. */
+ * HDF5 is not thread-safe unless built for it, so a reader must be used from one thread
+ * only. */
 typedef struct h5reader h5reader;
 
-/* Opens a file, checking that it holds every field the layout names and that
- * their shapes agree. Returns NULL only when out of memory; every other failure
- * is reported through h5reader_error. */
+/* Opens a file, checking that it holds every field the layout names and that their shapes
+ * agree. Returns NULL only when out of memory; every other failure is reported through
+ * h5reader_error. */
 h5reader *h5reader_open(const char *path);
 void      h5reader_close(h5reader *r);
 
-/* The shape the file was written at: one row per reference, each as wide as the
- * longest reference required. */
+/* The shape the file was written at: one row per reference, each as wide as the longest
+ * reference required. */
 int32_t h5reader_refs(const h5reader *r);
 size_t  h5reader_capacity(const h5reader *r);
 
@@ -36,7 +36,7 @@ size_t  h5reader_capacity(const h5reader *r);
  * out_extent(id, capacity, capacity) doubles. */
 int h5reader_field(h5reader *r, out_field_id id, int32_t tid, double *values);
 
-/* A run total, by the name it carries within the group they are gathered in. */
+/* A run total, by its name within the group the totals are gathered in. */
 int h5reader_count(h5reader *r, const char *name, size_t *value);
 
 const char *h5reader_error(const h5reader *r);

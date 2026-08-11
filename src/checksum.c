@@ -9,8 +9,8 @@
 
 #include <htslib/hts.h>
 
-/* Bases uppercased at a time: enough that the digest is fed in few pieces,
- * little enough to sit on the stack. */
+/* Bases uppercased at a time: enough to feed the digest in few pieces, small enough to
+ * sit on the stack. */
 #define CHUNK_BASES 4096
 
 static void hash_uppercase(hts_md5_context *md5, const char *seq, size_t len)

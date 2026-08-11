@@ -11,22 +11,19 @@
 #include "phmm.h"
 #include "phred.h"
 
-/* What a caller asks for, plain enough for a command line to write into. */
+/* What a caller asks for, in types plain enough for a command line to write into. */
 typedef struct {
-    int          band;     /* reference positions the marginal may look either
-                              side of the CIGAR; 0 pins it to the path as
-                              written */
+    int          band;     /* reference positions the marginal may look either side of the
+                              CIGAR; 0 pins it to the path as written */
     phmm_weights weights;  /* what an event of each kind counts for */
 } tally_config;
 
 tally_config tally_defaults(void);
 
-/* What the tally works from besides the read itself: how to read a quality, and
- * what to make of an alignment that could have been written more than one way.
+/* What the tally works from besides the read itself: the quality table and the model.
  *
- * Derived from the config rather than set alongside it, and built before any
- * worker starts and never written afterwards, which is what lets every worker
- * be handed the same one. */
+ * Derived from the config rather than set alongside it, and built before any worker starts
+ * and never written afterwards, so every worker may be given the same one. */
 typedef struct {
     phred quality;
     phmm  model;
@@ -37,10 +34,9 @@ void tally_tables_build(tally_tables *tables, const tally_config *config);
 
 /* Working buffers one worker reuses across every read it sees.
  *
- * Private to a worker rather than shared, since the marginal writes over the
- * whole of it for each read, and reused rather than allocated per read, since a
- * read is far too small a thing to allocate for. Every read is counted through
- * one, so a caller must have made it before any read arrives. */
+ * Private to a worker rather than shared, the marginal writing over the whole of it for
+ * each read, and reused rather than allocated per read. Every read is counted through one,
+ * so a caller must create it before any read arrives. */
 typedef struct tally_scratch tally_scratch;
 
 tally_scratch *tally_scratch_create(void);
@@ -48,13 +44,13 @@ void           tally_scratch_destroy(tally_scratch *scratch);
 
 /* Adds one read's contribution to target, which is never cleared here.
  *
- * Accumulating into a caller-provided target rather than returning a fresh
- * struct is what lets a worker hold a private accumulator across a run of
- * reads: contributions land there with no allocation and no locking, and reach
- * the shared per-reference accumulator in a single merge.
+ * Accumulating into a caller-provided target rather than returning a fresh struct lets a
+ * worker hold a private accumulator across a run of reads: contributions land there with
+ * no allocation and no locking, and reach the shared per-reference accumulator in a single
+ * merge.
  *
- * Anything but PHMM_OK is the run's to end and not this read's to survive, the
- * marginal failing only on what would fail again on every read after it. */
+ * Anything but PHMM_OK ends the run rather than skipping the read, the marginal failing
+ * only on what would fail again on every read after it. */
 phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
                   const tally_tables *tables, tally_scratch *scratch,
                   accum *target);

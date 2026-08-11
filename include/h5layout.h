@@ -1,13 +1,12 @@
 /* h5layout.h -- how the fields of an output are stored in HDF5.
  *
- * The other half of output.h: that says what the fields are, this says what
- * they become on disk -- their datatypes, their fill values, the shape of a
- * dataset and of the chunks it is written in, and the dataspaces a row is moved
- * through. The writer and the reader share it, so a file written here is
- * described the same way when it is read back.
+ * The other half of output.h: that says what the fields are, this says what they become on
+ * disk -- their datatypes, their fill values, the shape of a dataset and of the chunks it
+ * is written in, and the dataspaces a row moves through. The writer and the reader share
+ * it, so a file written here is described the same way when it is read back.
  *
- * This is where HDF5 enters the library, and h5writer.c and h5reader.c are the
- * only sources that include it.
+ * This is where HDF5 enters the library. h5writer.c and h5reader.c are the only sources
+ * that include it.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -21,45 +20,41 @@
 
 #include "output.h"
 
-/* The dataset's shape and that of the chunks it is stored in. The width of a
- * row is the field's own extent at the longest reference, so a field wider than
- * one value per base is sized by the same rule as the rest. Both arrays are
- * OUT_RANK_MAX long, and only the field's own rank is written. */
+/* The dataset's shape and that of the chunks it is stored in. A row is as wide as the
+ * field's extent at the longest reference, so a field wider than one value per base is
+ * sized by the same rule as the rest. Both arrays are OUT_RANK_MAX long, of which only the
+ * field's own rank is written. */
 void h5layout_shape(out_field_id id, int32_t n_refs, size_t cap,
                     hsize_t *dims, hsize_t *chunk);
 
 hid_t       h5layout_type(out_field_id id);
 const void *h5layout_fill(out_field_id id);
 
-/* A dataspace holding one row of the widest field, which a span of any field's
- * row is then selected from. */
+/* A dataspace holding one row of the widest field, from which a span of any field's row is
+ * then selected. */
 hid_t h5layout_row_space(size_t cap);
 
-/* Selects n values of one reference's row of a field, starting at column from:
- * in the file, and in the memory row the values are moved through. The two are
- * selected together so that they cannot disagree on how many values move.
+/* Selects n values of one reference's row of a field, starting at column from, in the file
+ * and in the memory row the values move through. The two are selected together so that
+ * they cannot disagree on how many values move.
  *
- * The selections replace whatever was there, so both dataspaces may be kept for
- * as long as the file is open and reselected for each row. */
+ * The selections replace whatever was there, so both dataspaces may be kept for as long as
+ * the file is open and reselected for each row. */
 int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
                          int32_t tid, size_t from, size_t n);
 
 /* A creation property list with object timestamping turned off.
  *
- * HDF5 stamps every object header with the time it was written, so two runs
- * over the same input would produce files differing in bytes that say nothing
- * about the result. Applied to the file as well as the datasets: an fcpl also
- * carries the root group's creation properties, and that group is stamped like
- * any other. */
+ * HDF5 stamps every object header with the time it was written, so two runs over the same
+ * input would produce files differing in bytes that say nothing about the result. Applied
+ * to the file as well as the datasets: an fcpl also carries the root group's creation
+ * properties, and that group is stamped like any other. */
 hid_t h5layout_untimed_plist(hid_t class_id);
 
-/* A dataset creation property list: chunked, filtered, and filled as the field
- * requires. */
+/* A dataset creation property list: chunked, filtered, and filled as the field requires. */
 hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank);
 
-/* A dataset access property list whose chunk cache holds several chunks of
- * this shape.
- *
- * The writer and the reader both work through rows in roughly ascending order,
- * so caching a few chunks avoids inflating a chunk again for each row in it. */
+/* A dataset access property list whose chunk cache holds several chunks of this shape. The
+ * writer and the reader both work through rows in roughly ascending order, so caching a few
+ * chunks avoids inflating a chunk again for each row in it. */
 hid_t h5layout_access_plist(const hsize_t *chunk, int rank);

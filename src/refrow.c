@@ -12,7 +12,7 @@
 struct refrow {
     h5writer   *out;      /* borrowed */
     rate_config rates;
-    double     *row;      /* what a derived field is worked out into */
+    double     *row;      /* scratch a derived field is computed into */
 };
 
 refrow *refrow_create(h5writer *out, rate_config rates, size_t ref_cap)
@@ -43,8 +43,8 @@ void refrow_destroy(refrow *r)
     free(r);
 }
 
-/* The reactivity and its error are derived rather than accumulated, so rates
- * computes them into the scratch row; every other field is read in place. */
+/* One field's values. The reactivity and its error are derived rather than accumulated,
+ * so they are computed into the scratch row; every other field is read in place. */
 static const double *values(refrow *r, out_field_id id, const accum *acc,
                             size_t len)
 {

@@ -12,11 +12,10 @@
 
 /* Everything the command line can set.
  *
- * Every parameter that varies arrives as a distribution -- a constant, a
- * range, or a list -- so the same option pins a value down for a test and
- * spreads it for a benchmark. They are text here and are turned into the
- * dataset's model once, after the command line has been read.
- */
+ * Every parameter that varies arrives as a distribution -- a constant, a range, or a list --
+ * so that the same option pins a value down for a test and spreads it for a benchmark. They
+ * are held as text here and parsed into the dataset's model once the command line has been
+ * read. */
 typedef struct {
     const char *output;
     int         format;
@@ -47,7 +46,7 @@ gen_args gen_defaults(void);
 /* The spec borrows defaults, which must outlive it. */
 cli_spec gen_spec(const gen_args *defaults);
 
-/* Reads the written specs into the dataset they describe. Returns 0, or -1 with
- * a description in error. */
+/* Parses the written specs into the dataset config they describe. Returns 0, or -1 with a
+ * description in error. */
 int gen_configure(dataset_config *cfg, const gen_args *args,
                   char *error, size_t error_len);

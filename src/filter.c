@@ -17,10 +17,9 @@ filter_config filter_defaults(void)
     };
 }
 
-/* MAPQ 255 means "unavailable" in the SAM specification rather than "perfect",
- * but it is compared numerically here, as samtools does. An aligner that emits
- * 255 throughout would otherwise have the whole of its output discarded by any
- * threshold at all. */
+/* MAPQ 255 means "unavailable" in the SAM specification rather than "perfect", but is
+ * compared numerically here as samtools does. An aligner emitting 255 throughout would
+ * otherwise have all of its output discarded by any threshold at all. */
 static bool mapping_quality_accepted(const filter_config *filter, const cm_bam_record *read)
 {
     return read->mapq >= filter->min_mapq;
@@ -37,8 +36,8 @@ static bool strand_accepted(const filter_config *filter, const cm_bam_record *re
     }
 }
 
-/* Length is that of the stored sequence, so a hard-clipped read counts only the
- * bases the aligner kept, not those it trimmed away. */
+/* Length is that of the stored sequence, so a hard-clipped read counts only the bases
+ * the aligner kept. */
 static bool length_accepted(const filter_config *filter, const cm_bam_record *read)
 {
     if (filter->min_length != FILTER_LENGTH_UNBOUNDED && read->l_qseq < filter->min_length)
@@ -50,19 +49,16 @@ static bool length_accepted(const filter_config *filter, const cm_bam_record *re
     return true;
 }
 
-/* A record may store no sequence at all, which SAM spells as a QUAL and SEQ of
- * "*". There is nothing to compare against the reference, so it is excluded
- * here instead of reaching a step that would have to invent an answer. */
+/* Whether the record stores a sequence. SAM spells its absence as a SEQ and QUAL of
+ * "*", leaving nothing to compare against the reference. */
 static bool sequence_present(const cm_bam_record *read)
 {
     return read->seq != NULL;
 }
 
-/* A record may place none of its read: no CIGAR at all, which SAM spells the
- * same way as an absent sequence; one made wholly of clips, naming bases the
- * aligner left unplaced; or one naming no base of the read, having nothing but
- * reference in it. There is then no position for it to contribute to, so it is
- * excluded here instead of counted as a read that contributed nothing. */
+/* Whether the record places any of its read. It may place none three ways: no CIGAR at
+ * all, a CIGAR made wholly of clips, or one naming reference alone. There is then no
+ * position for the read to contribute to. */
 static bool placement_present(const cm_bam_record *read)
 {
     aln_span placed = aln_placed_span(read);
@@ -70,9 +66,9 @@ static bool placement_present(const cm_bam_record *read)
     return placed.end > placed.begin;
 }
 
-/* A secondary alignment places a read already counted at its primary, so
- * accepting one would count a single molecule twice. Supplementary alignments
- * carry distinct pieces of a split read and are not excluded. */
+/* Whether the record is a primary alignment. A secondary one places a read already
+ * counted at its primary, so accepting it would count one molecule twice. Supplementary
+ * alignments carry distinct pieces of a split read and are not excluded. */
 static bool is_primary(const cm_bam_record *read)
 {
     return (read->flag & BAM_FSECONDARY) == 0;

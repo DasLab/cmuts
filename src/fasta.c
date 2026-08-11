@@ -14,8 +14,8 @@
 
 KSEQ_INIT(BGZF *, bgzf_read)
 
-/* kseq_read() reports these; kseq.h documents but does not name them. A
- * non-negative return is the length of the sequence just parsed. */
+/* Return values of kseq_read(), which kseq.h documents but does not name. A non-negative
+ * return is the length of the sequence just parsed. */
 enum {
     KSEQ_END_OF_FILE       = -1,
     KSEQ_TRUNCATED_QUALITY = -2,
@@ -79,8 +79,8 @@ void cm_fasta_close(cm_fasta_reader *reader)
 /* Iteration                                                                 */
 /* ------------------------------------------------------------------------ */
 
-/* kseq leaves the comment empty rather than absent when a header line carries
- * no description. */
+/* The record's description, or NULL where the header line carries none. kseq leaves the
+ * comment empty rather than absent in that case. */
 static const char *record_comment(const kseq_t *seq)
 {
     return seq->comment.l > 0 ? seq->comment.s : NULL;

@@ -5,7 +5,7 @@
 
 #include "metadata.h"
 
-/* Named within the group, which supplies the reads the name drops. */
+/* Named relative to the reads group it is written in. */
 #define DATASET_READS_UNMAPPED "unmapped"
 
 int metadata_write_run(h5writer *out, size_t reads_unmapped)

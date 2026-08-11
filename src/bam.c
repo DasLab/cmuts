@@ -15,19 +15,18 @@
 #include <htslib/hfile.h>
 
 
-/* sam_read1() returns a non-negative value per record and this on a clean end
- * of stream; anything lower is a read error. */
+/* sam_read1() returns a non-negative value per record and this on a clean end of
+ * stream; anything lower is a read error. */
 #define SAM_END_OF_FILE (-1)
 
-/* Everything a cm_bam_record is made of, and nothing else. CRAM keeps the rest
- * -- names, mate fields, auxiliary tags -- in blocks of their own, so what is
- * never read need not be decompressed. Adding a field to the record means
- * adding it here, or it arrives empty. */
+/* The fields a cm_bam_record is made of, and no others. CRAM keeps the rest -- names,
+ * mate fields, auxiliary tags -- in separate blocks, so what is never read need not be
+ * decompressed. A field added to the record must be added here or it arrives empty. */
 #define REQUIRED_FIELDS (SAM_FLAG | SAM_RNAME | SAM_POS | SAM_MAPQ | \
                          SAM_CIGAR | SAM_SEQ | SAM_QUAL)
 
-/* SAM spells "no qualities" as a QUAL field of "*", which BAM stores as a
- * leading 0xff in an otherwise full-length quality array. */
+/* SAM spells "no qualities" as a QUAL field of "*", which BAM stores as a leading
+ * 0xff in an otherwise full-length quality array. */
 #define QUAL_ABSENT 0xff
 
 /* The low bits a BGZF virtual offset spends on the position within a block. */
@@ -49,8 +48,8 @@ struct cm_bam_reader {
 /* Position                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* How far into the file the reader has read, in compressed bytes. Every format
- * keeps the figure somewhere else, and none of them keeps a record count. */
+/* How far into the file the reader has read, in compressed bytes. Each format keeps
+ * the figure in a different place, and none of them keeps a record count. */
 static uint64_t raw_offset(const cm_bam_reader *reader)
 {
     const htsFile *file = reader->file;
@@ -58,13 +57,10 @@ static uint64_t raw_offset(const cm_bam_reader *reader)
     if (file->is_cram)
         return (uint64_t)htell(cram_fd_get_fp(file->fp.cram));
 
-    /* A bgzipped SAM reads through BGZF as well, so the format alone does not
-     * settle which of these applies.
-     *
-     * A BGZF virtual offset is two numbers in one: the compressed block's own
-     * position in the upper bits, and how far into the inflated block the
-     * reader has come in the lower BGZF_OFFSET_BITS. Only the first indicates
-     * how much of the file has been read. */
+    /* Tested rather than switched on the format, a bgzipped SAM also reading through
+     * BGZF. A BGZF virtual offset packs two numbers: the compressed block's position
+     * in the upper bits, and how far into the inflated block the reader has come in
+     * the lower BGZF_OFFSET_BITS. Only the first bears on how much has been read. */
     if (file->is_bgzf)
         return (uint64_t)(bgzf_tell(file->fp.bgzf) >> BGZF_OFFSET_BITS);
 
@@ -82,9 +78,9 @@ static uint64_t size_of(const char *path)
 /* Lifetime                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* Only CRAM stores fields separately enough to skip any, and only CRAM accepts
- * the option. Failing to set it costs nothing but speed, so it is not a reason
- * to reject the file. */
+/* Restricts decoding to REQUIRED_FIELDS. Only CRAM stores fields separately enough to
+ * skip any, and only CRAM accepts the option; failing to set it costs speed alone, so
+ * it is not a reason to reject the file. */
 static void limit_decoding(cm_bam_reader *reader)
 {
     if (reader->file->format.format == cram)
@@ -121,8 +117,8 @@ cm_bam_reader *cm_bam_open(const char *path, const char **why)
 
     limit_decoding(reader);
 
-    /* This is where an unrecognised format is detected: the open itself
-     * succeeds on anything readable. */
+    /* Where an unrecognized format is detected, the open itself succeeding on
+     * anything readable. */
     reader->header = sam_hdr_read(reader->file);
     if (!reader->header) {
         *why = "unable to read the header";
@@ -233,8 +229,9 @@ const char *cm_bam_error(const cm_bam_reader *reader)
     return reader->error;
 }
 
-/* An offset points at the block being read rather than past it, so it stops
- * short of the end even once there is nothing left to read. */
+/* How far the reader has read, measured from the first alignment. An offset points at
+ * the block being read rather than past it, so it stops short of the end once there is
+ * nothing left to read; the span is reported instead. */
 uint64_t cm_bam_position(const cm_bam_reader *reader)
 {
     uint64_t at;
@@ -258,11 +255,9 @@ uint64_t cm_bam_span(const cm_bam_reader *reader)
 /* Header text                                                               */
 /* ------------------------------------------------------------------------ */
 
-/* The header is read as the text it arrived as. Asking htslib for a tag would
- * have it parse the whole header into records first, and on a file with
- * millions of references that costs gigabytes to answer a question about a few
- * characters -- 3.85 GB against a header text of 0.50 GB, measured on a file of
- * 24 million. The text is already in memory and holds the same information. */
+/* The header is searched as raw text. Asking htslib for a tag makes it parse the whole
+ * header into records first, which on a file of 24 million references measured 3.85 GB
+ * against a header text of 0.50 GB. */
 
 static const char *line_end(const char *line)
 {
@@ -331,9 +326,9 @@ int32_t cm_bam_nref(const cm_bam_reader *reader)
     return sam_hdr_nref(reader->header);
 }
 
-/* @HD is the first line where a sort order appears at all, so only the first
- * line is examined. A header carrying one elsewhere violates the specification
- * and is treated as declaring no sort order. */
+/* Whether the header declares SO:coordinate. Only the first line is examined, @HD being
+ * the one line a sort order may appear on; a header carrying one elsewhere violates the
+ * specification and is read as declaring none. */
 bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader)
 {
     const char *text = sam_hdr_str(reader->header);
@@ -350,8 +345,8 @@ bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader)
     if (!order)
         return false;
 
-    /* The value runs to the end of its field, so a longer word beginning with
-     * "coordinate" is not one. */
+    /* The value must fill its field, so a longer word beginning with "coordinate" does
+     * not match. */
     return (size_t)(field_end(order, end) - order) == len &&
            strncmp(order, SORT_ORDER_COORDINATE, len) == 0;
 }
@@ -378,10 +373,10 @@ void cm_bam_sq_open(cm_bam_sq_cursor *cursor, const cm_bam_reader *reader)
     cursor->tid  = 0;
 }
 
-/* The lines appear in the order the references are numbered, so reaching one
- * is a matter of walking forward over those before it. The cursor is left on
- * the line it reached rather than past it, so two requests for the same
- * reference give the same answer. */
+/* The M5 checksum declared for a reference, or NULL where the header declares none.
+ * The lines appear in the order the references are numbered, so the cursor reaches one
+ * by walking forward over those before it. It is left on the line it reached rather
+ * than past it, so two requests for the same reference give the same answer. */
 const char *cm_bam_sq_checksum(cm_bam_sq_cursor *cursor, int32_t tid, size_t *len)
 {
     const char *end;

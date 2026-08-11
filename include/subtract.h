@@ -15,7 +15,6 @@ typedef struct {
     bool        overwrite;
 } subtract_config;
 
-/* Combines the two inputs field by field into a third file of the same layout,
- * following the rule each field declares in output.h. Returns 0, or -1 with a
- * description in error. */
+/* Combines the two inputs field by field into a third file of the same layout, following the
+ * rule each field declares in output.h. Returns 0, or -1 with a description in error. */
 int subtract_run(const subtract_config *cfg, char *error, size_t error_len);

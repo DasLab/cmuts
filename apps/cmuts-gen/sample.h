@@ -9,8 +9,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* A reproducible generator. Everything the tool decides comes from one of
- * these, so a run is a function of its seed alone. */
+/* A reproducible generator. Everything the tool decides is drawn from one of these, so a run is
+ * a function of its seed alone. */
 typedef struct {
     uint64_t state;
 } rng;
@@ -25,20 +25,19 @@ double rng_fraction(rng *r);
 /* True with the given probability. */
 bool rng_chance(rng *r, double probability);
 
-/* The values a parameter may take, drawn from uniformly, written one of three
- * ways:
+/* The values a parameter may take, drawn from uniformly, written one of three ways:
  *
  *     40          every draw is 40
  *     20:200      uniform over the range, inclusive
  *     0,1,30,255  drawn from the listed values
  *
- * All three are a finite set: a constant is a set of one, a range is the whole
- * span between its endpoints, and a list is exactly what it names. Only the
- * uniform is expressible; nothing here weights one value above another.
+ * All three name a finite set: a constant is a set of one, a range is the whole span between
+ * its endpoints, and a list is exactly what it names. Only the uniform is expressible; there
+ * is no way to weight one value above another.
  *
- * A constant is what pins a value down for a test; a range or a list is what
- * spreads it for a benchmark or a fuzz run. One grammar serves both, so no
- * parameter needs a separate switch to randomise it. */
+ * A constant pins a value down for a test; a range or a list spreads it for a benchmark or a
+ * fuzz run. One grammar serves both, so no parameter needs a separate switch to randomize
+ * it. */
 #define DISTRIBUTION_MAX_VALUES 64
 
 typedef struct {

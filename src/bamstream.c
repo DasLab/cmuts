@@ -12,14 +12,14 @@
 
 #include "error.h"
 
-/* Where a file stands in the order the references are drained. Unmapped reads
- * sit at the end of a coordinate-sorted file, so they follow every reference
- * rather than preceding them all, which their tid of -1 would otherwise mean. */
+/* Where a reference stands in the order the files are drained. Unmapped reads sit at
+ * the end of a coordinate-sorted file, so they sort after every reference rather
+ * than before them all, as their tid of -1 would otherwise put them. */
 #define ORDER_UNMAPPED INT64_MAX
 #define ORDER_NONE     (-1)
 
-/* One file, and the record it has ready. The one read ahead waits in the reader
- * that produced it, so the merge needs nowhere of its own to put it. */
+/* One file, and the record read ahead from it. The record itself stays in the reader
+ * that produced it, so the merge needs no storage of its own. */
 typedef struct {
     cm_bam_reader *reader;
     const char    *path;     /* borrowed from the command line */
@@ -32,12 +32,12 @@ struct cm_bam_stream {
     size_t        n;
     size_t        at;        /* the source now supplying records */
     int64_t       current;   /* the reference being drained */
-    bool          supplied;  /* whether that source has given up its record */
+    bool          supplied;  /* whether that source's record has been handed out */
     htsThreadPool pool;
     char          error[CM_ERROR_MAX];
 };
 
-/* Failures name a file, since which of them is at fault is not otherwise clear. */
+/* Failures name a file, which of them is at fault not being otherwise clear. */
 static int fail(cm_bam_stream *stream, const char *path, const char *what)
 {
     snprintf(stream->error, sizeof stream->error, "%s: %s", path, what);
@@ -66,7 +66,7 @@ static int open_source(cm_bam_stream *stream, source *src, const char *path,
     if (cm_bam_nref(src->reader) < 1)
         return fail(stream, path, "declares no references");
 
-    /* Before any record is read, so that a CRAM decodes against the same
+    /* Set before any record is read, so that a CRAM decodes against the same
      * reference its reads are compared to. */
     if (cm_bam_set_reference(src->reader, fasta_path) < 0)
         return fail(stream, path, cm_bam_error(src->reader));
@@ -74,9 +74,9 @@ static int open_source(cm_bam_stream *stream, source *src, const char *path,
     return 0;
 }
 
-/* One pool between them all, so the threads follow whichever file is being
- * drained rather than each file holding a set that idles while the others are
- * read. The rest spend them reading ahead, so switching files does not stall. */
+/* Points every reader at one shared thread pool, so that the threads follow whichever
+ * file is being drained rather than each file holding a set that idles while the
+ * others are read. */
 static int share_threads(cm_bam_stream *stream, int threads)
 {
     if (threads < 1)
@@ -97,8 +97,8 @@ static int share_threads(cm_bam_stream *stream, int threads)
     return 0;
 }
 
-/* Reads the record a source will offer next. One that has run out is left spent
- * and takes no further part in the merge. */
+/* Reads the record a source will offer next, marking it spent at end of file. A spent
+ * source takes no further part in the merge. */
 static int advance(cm_bam_stream *stream, source *src)
 {
     int status = cm_bam_next(src->reader, &src->pending);
@@ -150,7 +150,7 @@ void cm_bam_stream_close(cm_bam_stream *stream)
     for (size_t i = 0; i < stream->n; i++)
         cm_bam_close(stream->sources[i].reader);
 
-    /* After the readers, which draw on it until they are closed. */
+    /* Destroyed after the readers, which draw on it until they are closed. */
     if (stream->pool.pool)
         hts_tpool_destroy(stream->pool.pool);
 
@@ -185,8 +185,8 @@ static bool holder_of(const cm_bam_stream *stream, int64_t reference, size_t fro
     return false;
 }
 
-/* The source holding the lowest reference any of them has left. Ties go to the
- * first, so the files are drained in the order they were named. */
+/* The source holding the lowest reference any of them has left. Ties go to the first,
+ * so the files are drained in the order they were named. */
 static bool lowest_holder(const cm_bam_stream *stream, size_t *out)
 {
     size_t lowest = 0;
@@ -208,9 +208,9 @@ static bool lowest_holder(const cm_bam_stream *stream, size_t *out)
     return found;
 }
 
-/* Stays with the source in hand while it still holds the reference being
- * drained, then takes the next source that holds it, and only once none does
- * moves on to the lowest reference left anywhere. */
+/* Chooses the source the next record comes from: the current one while it still holds
+ * the reference being drained, then the next source holding it, and only once none
+ * does the lowest reference left anywhere. */
 static bool select_source(cm_bam_stream *stream)
 {
     size_t at;
@@ -231,8 +231,8 @@ static bool select_source(cm_bam_stream *stream)
 
 int cm_bam_stream_next(cm_bam_stream *stream, cm_bam_record *out)
 {
-    /* The record handed out last time is the source's own, so it is overwritten
-     * only now that the caller has had its turn with it. */
+    /* The record handed out last time belongs to the source, so it is overwritten only
+     * now that the caller is done with it. */
     if (stream->supplied && advance(stream, &stream->sources[stream->at]) < 0)
         return CM_ITER_ERROR;
 
@@ -266,7 +266,7 @@ uint64_t cm_bam_stream_position(const cm_bam_stream *stream)
     return total;
 }
 
-/* Nothing is known of the whole where anything is unknown of a part. */
+/* The summed span, or 0 where the size of any one file is unknown. */
 uint64_t cm_bam_stream_span(const cm_bam_stream *stream)
 {
     uint64_t total = 0;

@@ -33,8 +33,8 @@
 #include "refseq.h"
 #include "tally.h"
 
-/* Completed references are drained in small groups. The consumer is never the
- * bottleneck, so this only saves a lock acquisition per reference. */
+/* Completed references drained per pop. The consumer is never the bottleneck, so
+ * this only saves a lock acquisition per reference. */
 #define COMPLETION_BATCH 16
 
 typedef struct {
@@ -45,7 +45,7 @@ typedef struct {
     itempool      *items;
     ctxpool       *contexts;
     h5writer      *out;
-    refrow        *rows;       /* what a finished accumulator is written through */
+    refrow        *rows;       /* writes a finished accumulator */
     progress      *bar;
     tally_tables   tally_tables;
     filter_config  filter_config;
@@ -53,18 +53,17 @@ typedef struct {
     size_t         ref_cap;    /* longest reference, sizing every accumulator */
 } pipeline;
 
-/* Everything above is settled while the run is assembled and only read once it
- * starts, which is why every stage below takes it const. What the threads tell
- * one another is held apart, and is the only thing any of them writes. */
+/* The pipeline is settled while the run is assembled and only read once it starts,
+ * so every stage below takes it const. What the threads share is kept separate,
+ * below, and is the only thing any of them writes. */
 
-/* The first way a worker found to stop: one failure is enough, and the first to
- * arrive is all the run has to report. */
+/* The first failure a worker reported. One is enough to stop the run. */
 typedef struct {
     _Atomic int status;   /* a phmm_status, PHMM_OK until a worker stops */
 } failure_flag;
 
-/* Keeps the first offered and discards the rest, so that what the run reports
- * is the failure that stopped it and not whichever worker wrote last. */
+/* Records a failure, keeping the first offered and discarding the rest, so that
+ * the run reports the failure that stopped it rather than the last one written. */
 static void failure_record(failure_flag *f, phmm_status status)
 {
     int unfailed = PHMM_OK;
@@ -93,16 +92,15 @@ typedef struct {
     failure_flag  *failure;  /* shared; the one thing a worker writes */
     refctx        *held;    /* reference the shadow holds a handle for, or NULL */
     accum          shadow;
-    tally_scratch *scratch; /* what the processing step works in */
+    tally_scratch *scratch; /* buffers for the processing step */
     void         **slots;   /* a batch of workitems, allocated before the
                                thread starts */
     pthread_t      thread;
 } worker;
 
-/* Merges the shadow into its reference and releases the handle that protected
- * it. The shadow is left entirely zero: it is cleared over exactly the extent
- * it was dirtied, and was zero elsewhere by the same argument on the previous
- * flush. */
+/* Merges the shadow into its reference and releases the handle protecting it. The
+ * shadow is left entirely zero: it is cleared over exactly the extent it was
+ * dirtied, and was zero elsewhere by the same argument on the previous flush. */
 static void worker_flush_shadow(worker *w)
 {
     refctx *ctx = w->held;
@@ -128,17 +126,17 @@ static void worker_switch_shadow(worker *w, refctx *ctx)
     w->held = ctx;
 }
 
-/* Every slot of a batch is a workitem. The batches are void * because the
- * queue and the pool that fill them carry void *, and converting one back is
- * said here rather than at each place a slot is read. */
+/* One slot of a batch, as the workitem it is. Batches are void * because the queue
+ * and the pool that fill them carry void *, so the conversion back is written here
+ * rather than at each place a slot is read. */
 static const workitem *item_at(void *const *slots, size_t i)
 {
     return slots[i];
 }
 
-/* Every read of a run, into the worker's own shadow. A read the tally cannot
- * count is one no later read would fare better on, so what it found is put
- * where the loader will see it and the batch is seen through regardless. */
+/* Counts every read of a run into the worker's own shadow. A read the tally cannot
+ * count fails for a reason no later read would escape, so the failure is recorded
+ * for the loader to see and the batch is finished regardless. */
 static void worker_count_run(worker *w, void **slots, size_t n,
                       const cm_fasta_record *ref)
 {
@@ -156,8 +154,8 @@ static void worker_count_run(worker *w, void **slots, size_t n,
     }
 }
 
-/* Processes a run of reads that all belong to one reference, which lets the
- * whole run cost a single handle release. */
+/* Processes a run of reads belonging to one reference, so that the whole run costs
+ * a single handle release. */
 static void worker_process_run(worker *w, void **slots, size_t n)
 {
     refctx         *ctx   = item_at(slots, 0)->ctx;
@@ -166,20 +164,18 @@ static void worker_process_run(worker *w, void **slots, size_t n)
     worker_switch_shadow(w, ctx);
     refctx_sequence(ctx, &ref);
 
-    /* A run the failure reached first is unwound and not counted: nothing will
-     * read what it would have contributed, and the handles it holds are owed
-     * back whether it contributes or not. */
+    /* A run reached after a failure is released without being counted, nothing
+     * being left to read what it would have contributed. */
     if (failure_seen(w->failure) == PHMM_OK)
         worker_count_run(w, slots, n, &ref);
 
-    /* The whole run is finished at the same moment, so it goes back in one
-     * piece. Nothing reads these carriers afterwards: worker_process_batch
-     * scans for runs only at or beyond the current head, and every item before
-     * it has already been processed. */
+    /* Returned in one piece, the whole run finishing at once. Nothing reads these
+     * carriers afterwards: worker_process_batch scans for runs only at or beyond
+     * the current head. */
     itempool_give_many(w->pipe->items, slots, n);
 
-    /* Never the last handle, the shadow having taken one on this reference
-     * before the run was counted, so the reference cannot be finished here. */
+    /* Never the last handle, the shadow having taken one on this reference before
+     * the run was counted, so the reference cannot be finished here. */
     refctx_release(ctx, (int)n);
 }
 
@@ -206,9 +202,9 @@ static void *worker_main(void *arg)
         size_t n = queue_try_pop(w->pipe->work, w->slots, batch);
 
         if (n == 0) {
-            /* Flush before blocking: an idle worker holding a shadow would pin
-             * its reference indefinitely, and the loader would eventually
-             * stall waiting for a context to come free. */
+            /* Flush before blocking: an idle worker holding a shadow pins its
+             * reference indefinitely, and the loader then stalls waiting for a
+             * context to come free. */
             worker_flush_shadow(w);
 
             n = queue_pop(w->pipe->work, w->slots, batch);
@@ -227,23 +223,22 @@ static void *worker_main(void *arg)
 /* Loader                                                                    */
 /* ------------------------------------------------------------------------ */
 
-/* What the loader has in hand.
+/* The loader's state.
  *
- * Each of the three is a pair of values only meaningful together: a reference
- * and its count of filtered reads, a batch bound for the workers and how much
- * of it is filled, a reservoir of carriers and how many remain. As locals they
- * were six variables to keep in step by hand. */
+ * The three pairs below are each two values meaningful only together: a reference
+ * and its count of filtered reads, a batch and how much of it is filled, a
+ * reservoir of carriers and how many remain. */
 typedef struct {
     const pipeline     *pipe;
     const failure_flag *failure;  /* shared; the loader only reads it */
 
-    refctx *reference;  /* the one being filled, or none yet */
+    refctx *reference;  /* the one being filled, or NULL */
     size_t  rejected;   /* its reads the filter turned away */
 
     void  **batch;      /* workitems bound for the workers */
     size_t  queued;
 
-    void  **spare;      /* workitem carriers drawn from the pool, unspent */
+    void  **spare;      /* unspent workitem carriers drawn from the pool */
     size_t  held;
 
     int32_t owed;       /* the first reference not yet accounted for */
@@ -264,12 +259,10 @@ static int loader_open(loader *l, const pipeline *p, const failure_flag *f)
     return -1;
 }
 
-/* Hands what is queued to the workers, taking a handle on the reference for
- * each read so that it cannot be finished while any of them is in transit.
- *
- * A read names its reference when it is taken and holds no handle on it until
- * here. The loader's own handle covers that gap: it is held from the moment the
- * reference is opened until after the last of its reads has been dispatched. */
+/* Queues the batch for the workers, taking a handle on the reference for each read
+ * so that it cannot be finished while any of them is in transit. A read holds no
+ * handle between being taken and reaching here; the loader's own handle, held from
+ * the moment the reference is opened, covers that gap. */
 static void loader_dispatch(loader *l)
 {
     if (l->queued == 0)
@@ -316,12 +309,10 @@ static refctx *pipeline_open_reference(const pipeline *p, int32_t tid)
     return ctx;
 }
 
-/* A reference the reader passed over received nothing, and its row is what the
- * fill already says: zero everywhere. That is the whole of the answer only
- * where the reference is as long as the longest, which on a library of one
- * length is every one of them. A shorter one has columns past its own end that
- * the fill calls zero and are not part of it, so it is opened and closed
- * unread, for the sake of the mark its tail carries. */
+/* Opens and closes a reference the reader passed over, so that its row is written
+ * unread. A reference that received nothing is zero everywhere, which the fill
+ * value already gives -- but only where it is as long as the longest. A shorter one
+ * needs the columns past its own end marked as outside it. */
 static bool loader_emit_empty(loader *l, int32_t tid)
 {
     refctx *ctx = pipeline_open_reference(l->pipe, tid);
@@ -350,10 +341,10 @@ static bool loader_account_through(loader *l, int32_t upto)
     return true;
 }
 
-/* Moves to the reference a read belongs to, unless it is already the one in
- * hand. This happens before the filter is applied, so a rejected read is still
- * counted against its reference: one whose reads were all filtered out is
- * distinct from one that received none. */
+/* Moves to the reference a read belongs to, unless it is already the current one.
+ * Called before the filter is applied, so a rejected read still counts against its
+ * reference: one whose reads were all filtered out is distinct from one that
+ * received none. */
 static bool loader_on_reference(loader *l, int32_t tid)
 {
     if (l->reference && l->reference->tid == tid)
@@ -370,10 +361,9 @@ static bool loader_on_reference(loader *l, int32_t tid)
     return l->reference != NULL;
 }
 
-/* Carriers are drawn a batch at a time and spent one by one, so the pool's
- * lock is taken once per batch rather than once per read. One only ever moves
- * from the reservoir into the batch, so the two together never hold more than
- * a refill's worth. */
+/* One carrier for the read just taken. Carriers are drawn a batch at a time and
+ * spent one by one, so the pool's lock is taken once per batch rather than once per
+ * read. */
 static workitem *loader_carrier(loader *l)
 {
     if (l->held == 0)
@@ -382,8 +372,8 @@ static workitem *loader_carrier(loader *l)
     return l->held ? l->spare[--l->held] : NULL;
 }
 
-/* Takes a copy of the record just read, since the reader overwrites its own on
- * the next advance, and queues it for the workers. */
+/* Copies the record just read and queues it for the workers, the reader overwriting
+ * its own record on the next advance. */
 static int loader_take_read(loader *l)
 {
     workitem *item = loader_carrier(l);
@@ -405,7 +395,7 @@ static int loader_take_read(loader *l)
     return 0;
 }
 
-/* Everything in hand goes back, whichever way the loop was left. */
+/* Returns everything the loader still holds, whichever way the loop was left. */
 static void loader_finish(loader *l)
 {
     loader_leave_reference(l);
@@ -434,14 +424,13 @@ static int loader_main(const pipeline *p, const failure_flag *f,
     while ((status = cm_bam_stream_next(p->bam, &rec)) == CM_ITER_OK) {
         progress_follow(p->bar);
 
-        /* A worker has found something no later read will mend, so there is
-         * nothing to be had from reading them. Stopping is not failing: what
-         * went wrong is the worker's to report, not the loader's. */
+        /* A worker has failed for a reason no later read would escape, so reading
+         * on gains nothing. Not an error here: the worker reports it. */
         if (failure_seen(l.failure) != PHMM_OK)
             break;
 
-        /* Unmapped reads align to no reference, so they are counted for the
-         * run as a whole and go no further. */
+        /* Unmapped reads align to no reference, so they are counted for the run as
+         * a whole and go no further. */
         if (rec.flag & BAM_FUNMAP) {
             (*unmapped)++;
             continue;
@@ -467,14 +456,13 @@ static int loader_main(const pipeline *p, const failure_flag *f,
         }
     }
 
-    /* The reference in hand goes back before the ones the reader never reached
-     * are opened. Holding it while asking the pool for another is a wait on
-     * itself where the pool holds one context, which is what --live-refs 1
-     * asks for. */
+    /* Released before the references the reader never reached are opened. Holding
+     * it while asking the pool for another deadlocks where the pool holds a single
+     * context, which is what --live-refs 1 asks for. */
     loader_leave_reference(&l);
 
-    /* Whatever the reader stopped short of received nothing, as surely as the
-     * references it passed over between reads. */
+    /* The references the reader stopped short of received nothing, as did those it
+     * passed over between reads. */
     if (result == 0 && status == CM_ITER_EOF
         && !loader_account_through(&l, cm_bam_stream_nref(p->bam))) {
         snprintf(error, error_len, "%s", refseq_error(p->refs));
@@ -512,8 +500,8 @@ static void *consumer_main(void *arg)
         for (size_t i = 0; i < n; i++) {
             refctx *ctx = slots[i];
 
-            /* Keep draining after a failure: the loader and workers must not
-             * be left blocked on a queue nobody is emptying. */
+            /* Keep draining after a failure, or the loader and workers block on a
+             * queue nothing is emptying. */
             if (c->status == 0 &&
                 refrow_write(c->pipe->rows, ctx->tid, ctx->len, &ctx->acc) < 0)
                 c->status = -1;
@@ -584,9 +572,9 @@ static int pipeline_open_inputs(pipeline *p, const pipeline_config *cfg,
 static int pipeline_build_buffers(pipeline *p, const pipeline_config *cfg,
                                   char *error, size_t error_len)
 {
-    /* Enough carriers for a full queue, a batch in the hands of every worker,
-     * and two for the loader: one being filled and one held in reserve, since
-     * a short refill can leave it holding part of each. */
+    /* Enough carriers for a full queue, a batch per worker, and two batches for
+     * the loader: one being filled and one in reserve, a short refill leaving it
+     * holding part of each. */
     size_t carriers = cfg->queue_capacity + (cfg->workers + 2) * cfg->batch;
 
     p->batch         = cfg->batch;
@@ -631,11 +619,10 @@ static int pipeline_open_output(pipeline *p, const pipeline_config *cfg,
     return 0;
 }
 
-/* Starts as many workers as it can, reporting through started how many are
- * running so that the caller joins exactly those. Every allocation a worker
- * needs is made here rather than inside the thread, so that running out of
- * memory is reported instead of leaving a thread that exits at once and a
- * loader that waits forever for it. */
+/* Starts the workers, reporting through started how many are running so that the
+ * caller joins exactly those. Every allocation a worker needs is made here rather
+ * than inside the thread, so that running out of memory is reported instead of
+ * leaving a thread that exits at once and a loader waiting on it. */
 static int worker_start_all(worker *workers, size_t n, const pipeline *p,
                             failure_flag *f, size_t *started,
                             char *error, size_t error_len)
@@ -692,7 +679,7 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
 
     tally_tables_build(&p.tally_tables, &cfg->tally_config);
 
-    /* Once nothing is left that could fail before a read is taken. */
+    /* Started once nothing is left that could fail before the first read. */
     p.bar = progress_start(p.bam);
 
     cons.pipe = &p;
@@ -712,10 +699,9 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
     queue_close(p.completed);
     pthread_join(cons.thread, NULL);
 
-    /* Checked once every worker has stopped, so a failure on the last batch is
-     * caught as surely as one the loader saw in time to stop for. A loader that
-     * failed on its own account has already reported something more
-     * specific. */
+    /* Checked once every worker has stopped, so that a failure on the last batch is
+     * caught as well as one the loader saw in time to stop for. A loader that failed
+     * on its own account has already reported something more specific. */
     if (status == 0 && failure_seen(&failed) != PHMM_OK) {
         snprintf(error, error_len, "%s",
                  failure_seen(&failed) == PHMM_NO_MEMORY
@@ -724,8 +710,8 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
         status = -1;
     }
 
-    /* The consumer has been joined, so the writer is again reachable from one
-     * thread only and the run totals can be attached. */
+    /* The consumer has been joined, so the writer is reachable from one thread
+     * again and the run totals may be attached. */
     if (status == 0 && (cons.status < 0 || metadata_write_run(p.out, unmapped) < 0)) {
         snprintf(error, error_len, "%s: %s", cfg->output_path, h5writer_error(p.out));
         status = -1;

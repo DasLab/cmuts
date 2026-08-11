@@ -1,8 +1,8 @@
 /* simulate.c -- alignments built from a reference and a mutation model.
  *
- * A read is first laid out as a list of single-base events, and the CIGAR,
- * SEQ, MD and NM are then all derived from that one list. Nothing is written
- * twice, so the four cannot contradict each other however the events fall.
+ * A read is first laid out as a list of single-base events, from which the CIGAR, SEQ, MD and NM
+ * are all then derived. Nothing is written twice, so the four cannot contradict each other
+ * however the events fall.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -15,14 +15,13 @@
 
 static const char BASES[] = "ACGT";
 
-/* What an MD string is allowed: a few characters for each event, and room at
- * the end for the count it closes with.
+/* How much room an MD string is given: a few characters per event, plus room for the count it
+ * closes with.
  *
- * Neither is what keeps the writing inside the buffer -- the cursor is held
- * short of the end at every step, whatever these say -- so an underestimate
- * costs a tag cut short and nothing worse. MD_HEADROOM is what the loop keeps
- * in hand so that a tag that is cut short is left after a whole event rather
- * than partway through a number. */
+ * Neither figure is what keeps the writing inside the buffer -- the cursor is held short of the
+ * end at every step regardless -- so an underestimate costs a tag cut short and nothing worse.
+ * MD_HEADROOM is the margin the loop keeps so that a tag cut short ends after a whole event
+ * rather than partway through a number. */
 #define MD_PER_EVENT 4
 #define MD_TAIL      32
 #define MD_HEADROOM  16
@@ -145,8 +144,8 @@ static size_t add_clip(sim_event *events, size_t n, size_t cap, long len, rng *r
     return n;
 }
 
-/* Places the remaining events uniformly over the positions that are left, so
- * that no list of positions has to be drawn and sorted first. */
+/* Whether an event falls at this position, spreading the remaining events uniformly over the
+ * positions left so that no list of positions has to be drawn and sorted first. */
 static bool event_falls_here(long remaining, size_t positions_left, rng *r)
 {
     return remaining > 0 &&
@@ -187,9 +186,8 @@ static size_t lay_out_read(sim_scratch *scratch, const sim_model *model, rng *r,
     for (size_t i = 0; i < out.span && n < cap; ) {
         size_t left = out.span - i;
 
-        /* Indels are kept away from either end, so the CIGAR neither begins
-         * nor ends with an operation that consumes only one of the two
-         * sequences. */
+        /* Indels are kept away from either end, so that the CIGAR neither begins nor ends with
+         * an operation consuming only one of the two sequences. */
         bool interior = i > 0 && left > 1;
 
         if (interior && event_falls_here(deletion, left, r)) {
@@ -292,13 +290,12 @@ static size_t build_sequence(const sim_event *events, size_t n, const sim_model 
     return len;
 }
 
-/* A match count and the one character that closes it: the base that broke the
- * run, or the caret that opens a deletion.
+/* Appends a match count and the one character closing it: the base that broke the run, or the
+ * caret opening a deletion.
  *
- * The cursor is left where the text ends and not where it would have ended had
- * there been room, which is what snprintf hands back. The two part company only
- * once the buffer is full, and a cursor past the end would leave every write
- * after it addressing memory that is not there. */
+ * Returns the cursor where the text ends, not where it would have ended had there been room,
+ * which is what snprintf reports. The two differ only once the buffer is full, and a cursor past
+ * the end would put every write after it outside the buffer. */
 static size_t append_run(char *md, size_t used, size_t cap, long run,
                          char closing)
 {
@@ -310,8 +307,7 @@ static size_t append_run(char *md, size_t used, size_t cap, long run,
     return used + (size_t)wrote < cap ? used + (size_t)wrote : cap - 1;
 }
 
-/* One deleted base, written only where both it and the terminator after it
- * have somewhere to go. */
+/* Appends one deleted base, written only where both it and the terminator after it fit. */
 static size_t append_base(char *md, size_t used, size_t cap, char base)
 {
     if (used + 1 >= cap)
@@ -323,13 +319,12 @@ static size_t append_base(char *md, size_t used, size_t cap, char base)
     return used;
 }
 
-/* MD describes only the reference-consuming positions, so insertions and soft
- * clips contribute nothing to it. It opens and closes with a match count, and
- * carries one between every pair of events, which is why a run of zero is
- * still written out.
+/* Builds the MD tag. It describes only the reference-consuming positions, so insertions and soft
+ * clips contribute nothing. It opens and closes with a match count and carries one between every
+ * pair of events, which is why a run of zero is still written out.
  *
- * Every step leaves the cursor short of cap, so the closing count writes into
- * a buffer it is still inside however the events fell. */
+ * Every step leaves the cursor short of cap, so the closing count writes inside the buffer
+ * however the events fell. */
 static void build_md(const sim_event *events, size_t n, char *md, size_t cap)
 {
     size_t used = 0;

@@ -99,18 +99,14 @@ size_t queue_push(queue *q, void *const *items, size_t n)
 
         pushed += fill(q, items + pushed, n - pushed);
 
-        /* One waiter is woken rather than every one of them. A fill adds at
-         * most a batch and a consumer takes at most a batch -- the same
-         * configured value on both sides -- so one waiter drains what one fill
-         * added, and waking the rest only to find the queue empty again is
-         * pure cost. Consumers that are already running need no waking at all:
-         * they try the queue before blocking on it.
+        /* One waiter rather than all of them: a fill adds at most a batch and a
+         * consumer takes at most a batch, the same configured value on both sides, so
+         * one waiter drains what one fill added.
          *
-         * There is no lost wakeup here. A consumer holds the lock while it
-         * finds the queue empty and begins to wait, and a producer holds it to
-         * fill, so the two cannot interleave: either the consumer is already
-         * waiting when the signal is sent, or it has yet to look and will find
-         * the items. */
+         * No wakeup is lost. A consumer holds the lock while it finds the queue empty
+         * and begins to wait, and a producer holds it to fill, so either the consumer
+         * is already waiting when the signal is sent or it has yet to look and will
+         * find the items. */
         pthread_cond_signal(&q->not_empty);
     }
     pthread_mutex_unlock(&q->lock);

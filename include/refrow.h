@@ -1,9 +1,8 @@
 /* refrow.h -- writing one reference's row from its accumulator.
  *
- * The writer holds the file and the layout; a run holds an accumulator. Two of
- * the fields written are not accumulated: the reactivity and its error are
- * derived from the mutations and the span, which is done here, along with the
- * settings that govern it.
+ * The writer holds the file and the layout; a run holds an accumulator. Two of the fields
+ * written are not accumulated: the reactivity and its error are derived here from the mutations
+ * and the span, along with the settings governing that.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -23,6 +22,5 @@ typedef struct refrow refrow;
 refrow *refrow_create(h5writer *out, rate_config rates, size_t ref_cap);
 void    refrow_destroy(refrow *r);
 
-/* Writes every field of one reference's row. Values past len are left at the
- * fill value. */
+/* Writes every field of one reference's row. Values past len are left at the fill value. */
 int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc);

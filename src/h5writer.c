@@ -18,17 +18,14 @@ struct h5writer {
     hid_t   file;
     hid_t   dataset[OUT_N_FIELDS];
     /* A dataspace apiece, kept for the life of the writer. Only the selection
-     * differs between one row and the next, and a writer is used from one
-     * thread, so the handles are made once and reselected rather than built and
-     * discarded for every row of every field. */
+     * differs between one row and the next, and a writer is used from one thread,
+     * so the handles are made once and reselected. */
     hid_t   filespace[OUT_N_FIELDS];
     hid_t   memspace;   /* one row of the widest field, selected down to size */
     hid_t   reads;      /* the group the per-run counts are gathered in */
     int32_t n_refs;
     size_t  ref_cap;
-    /* NaN, as wide as the longest tail any row can have, so marking one is a
-     * write and not a fill each time. */
-    double *padding;
+    double *padding;    /* NaN, as wide as the longest tail a row can have */
     char    error[CM_ERROR_MAX];
 };
 
@@ -42,9 +39,8 @@ static int fail(h5writer *w, const char *what)
 /* The path                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* What is worth refusing is a file with something in it. A path that exists
- * but is empty is what mktemp and shell redirection leave behind, and there is
- * nothing there to lose. */
+/* Whether the path holds a file with something in it. An empty file is what mktemp
+ * and shell redirection leave behind, and has nothing to lose. */
 static bool holds_data(const char *path)
 {
     struct stat info;
@@ -61,9 +57,9 @@ int h5writer_may_replace(const char *path, bool overwrite, bool *may_replace,
         return -1;
     }
 
-    /* Where nothing is at the path, the create stays exclusive, so a file
-     * appearing in between is not quietly replaced. Where an empty one is
-     * already there it has to be truncated instead. */
+    /* Where nothing is at the path the create stays exclusive, so a file appearing
+     * in between is not quietly replaced. An empty file already there has to be
+     * truncated instead. */
     *may_replace = overwrite || access(path, F_OK) == 0;
     return 0;
 }
@@ -111,13 +107,13 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
     if (!w)
         return NULL;
 
-    /* Report failures through h5writer_error rather than HDF5's own stack
-     * trace on stderr. */
+    /* Report failures through h5writer_error rather than HDF5's own stack trace on
+     * stderr. */
     H5Eset_auto2(H5E_DEFAULT, NULL, NULL);
 
     /* Every handle is marked absent before anything can fail, so that a writer
-     * abandoned partway through closes exactly what it opened. Zero, which the
-     * allocation leaves behind, is not a handle HDF5 would refuse. */
+     * abandoned partway through closes exactly what it opened. Zero, which calloc
+     * leaves behind, is a handle HDF5 would accept. */
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
         w->dataset[id]   = H5I_INVALID_HID;
         w->filespace[id] = H5I_INVALID_HID;
@@ -151,8 +147,8 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
         return w;
     }
 
-    /* Exclusive unless overwrite was requested, so that the decision cannot
-     * be undone by the file appearing between the check and the create. */
+    /* Exclusive unless overwrite was requested, so that a file appearing between
+     * the check and the create cannot undo the decision. */
     w->file = H5Fcreate(path, overwrite ? H5F_ACC_TRUNC : H5F_ACC_EXCL,
                         fcpl, H5P_DEFAULT);
     H5Pclose(fcpl);
@@ -162,9 +158,9 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
         return w;
     }
 
-    /* Named before any dataset inside it, so a path names a group that is
-     * already there. Untimed as the file and the datasets are, or two runs over
-     * one input would differ by the moment this was made. */
+    /* Created before any dataset inside it, so that a dataset's path names a group
+     * already present. Untimed, as the file and the datasets are, or two runs over
+     * one input would differ by the moment this was created. */
     gcpl = h5layout_untimed_plist(H5P_GROUP_CREATE);
     if (gcpl < 0) {
         fail(w, "unable to prepare the output");
@@ -247,13 +243,13 @@ static int write_part(h5writer *w, out_field_id id, int32_t tid, size_t from,
     return status < 0 ? fail(w, "unable to write an output row") : 0;
 }
 
-/* The reference's own values, and then the mark for the columns past them.
+/* Writes one field's row: the reference's own values, then the mark for the columns
+ * past them.
  *
- * The tail is written with the row rather than swept up at the end: a row and
- * its tail share a chunk, so marking it now costs a chunk already in hand where
- * returning to it later costs reading, inflating and deflating that chunk
- * again. Where a reference is as long as the longest there is no tail, which on
- * a library of one length is every reference. */
+ * The tail is written with the row rather than swept up at the end. The two share a
+ * chunk, so marking it now writes to a chunk already open where returning to it
+ * later would mean inflating and deflating that chunk again. A reference as long as
+ * the longest has no tail. */
 int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
                    const double *values)
 {
@@ -276,13 +272,12 @@ int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
 /* Totals                                                                    */
 /* ------------------------------------------------------------------------ */
 
-/* A run total, as a scalar beside the per-reference counts it belongs with.
+/* Writes a run total as a scalar dataset beside the per-reference counts.
  *
- * A dataset and not an attribute on the group: h5ls lists a dataset and passes
- * an attribute over unless asked for one, and a figure nothing shows is a
- * figure nobody finds. It keeps the exact type it is counted in rather than
- * the float its neighbours are narrowed to, being counted whole in the loader
- * and never accumulated. */
+ * A dataset rather than an attribute on the group, since h5ls does not show
+ * attributes unless asked. Stored as the integer type it is counted in rather than
+ * the float its neighbors are narrowed to, being counted whole and never
+ * accumulated. */
 int h5writer_count(h5writer *w, const char *name, size_t value)
 {
     uint64_t stored  = value;

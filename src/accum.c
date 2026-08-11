@@ -8,21 +8,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Coverage and span differ over exactly what a read did not read: a deleted
- * position is spanned but not covered, and a poorly read one is spanned whole
- * but covered only in proportion to the confidence in its base. A rate over
- * coverage gives the fraction of bases actually read that disagreed.
+/* Coverage and span differ over what a read did not read: a deleted position is spanned
+ * but not covered, and a poorly read one is spanned whole but covered in proportion to
+ * the confidence in its base.
  *
- * The span is what the mutations are taken against, and so is the evidence
- * bearing on a position rather than the reads that reached it. A pairing and a
- * deletion bear on it whole, the one having read the base and the other having
- * reached it. An inserted base answers to no reference position, and bears on
- * one only as far as --insertion-weight says an insertion is a modification at
- * all: it enters the span weighted, exactly as it enters the mutations, so a
- * weight of nothing leaves it out of both and the rate is what it would have
- * been had the insertion not been there. Weighted into one and not the other,
- * it would have been evidence against a modification rather than no evidence
- * either way. */
+ * The span is the evidence the mutations are taken against. A pairing and a deletion
+ * contribute to it whole. An insertion contributes only as far as --insertion-weight
+ * makes it a modification, entering the span weighted exactly as it enters the
+ * mutations: weighted into one and not the other, it would count as evidence against a
+ * modification rather than no evidence either way. */
 const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS] = {
     [ACCUM_COVERAGE]  = { ACCUM_PER_BASE },
     [ACCUM_SPANNED]   = { ACCUM_PER_BASE },
@@ -32,7 +26,7 @@ const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS] = {
     [ACCUM_FILTERED]  = { ACCUM_SCALAR },
 };
 
-/* With len == cap this also gives the field's stride in the arena. */
+/* Values one field occupies. With len == cap this is also its stride in the arena. */
 size_t accum_extent(accum_field_id id, size_t len, size_t cap)
 {
     switch (ACCUM_FIELDS[id].kind) {

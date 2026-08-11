@@ -1,7 +1,7 @@
 /* options.c -- cmuts's command line, as one table.
  *
- * Rows use designated initializers so that a field added to cli_option
- * defaults quietly rather than having to be spelled out in every one.
+ * Rows use designated initializers, so that a field added to cli_option takes its default
+ * rather than having to be spelled out in every row.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */

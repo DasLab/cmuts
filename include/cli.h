@@ -1,9 +1,9 @@
 /* cli.h -- command line parsing, driven by a table of options.
  *
- * A program describes its command line once, as a cli_spec, and everything
- * else derives from it: parsing, bounds checking, the usage line, grouped
- * help, and a JSON description for generating documentation and shell
- * completions. Nothing here knows what any particular program's options mean.
+ * A program describes its command line once, as a cli_spec, and everything else derives
+ * from it: parsing, bounds checking, the usage line, grouped help, and a JSON description
+ * for generating documentation and shell completions. Nothing here knows what any
+ * particular program's options mean.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -15,14 +15,13 @@
 #include <stddef.h>
 #include <stdio.h>
 
-/* The maximum of an option that has no ceiling of its own, which is held only
- * to what its destination can carry. It is the widest number a command line
- * can be read into, so naming it outright in a row would mean the same thing;
- * no meaning an option might attach to a maximum is lost. */
+/* The maximum of an option with no ceiling of its own, bounded only by what its
+ * destination can hold. It is also the widest number a command line can be read into, so a
+ * row naming it outright means the same thing. */
 #define CLI_UNBOUNDED LONG_MAX
 
-/* The type of a row's destination. It must match the C type of the field at
- * that offset: the value is written through a pointer of exactly this type. */
+/* The type of a row's destination. It must match the C type of the field at that offset,
+ * the value being written through a pointer of exactly this type. */
 typedef enum {
     OPT_FLAG,    /* takes no argument; sets a bool */
     OPT_STRING,
@@ -32,16 +31,15 @@ typedef enum {
     OPT_ENUM,    /* one of a named set of values; stores an int */
 } cli_type;
 
-/* One accepted value of an OPT_ENUM option. A choice list ends with a NULL
- * name. */
+/* One accepted value of an OPT_ENUM option. A choice list ends with a NULL name. */
 typedef struct {
     const char *name;
     int         value;
 } cli_choice;
 
-/* What an option does besides storing a value. The three that answer and exit
- * are declared rather than recognised by name, so they need no field of their
- * own and any program may have them. */
+/* What an option does besides storing a value. The three that answer and exit are declared
+ * rather than recognized by name, so they need no field of their own and any program may
+ * have them. */
 typedef enum {
     CLI_STORE,
     CLI_SHOW_HELP,
@@ -59,9 +57,8 @@ typedef struct {
     const char       *help;     /* one line, for the help output */
     const char       *detail;   /* paragraph for manual pages; NULL to reuse help */
     bool              required;
-    /* Options that need not be applied at all carry the word the help prints
-     * in place of their default, which is the value meaning "not applied".
-     * NULL where every value is a real setting. */
+    /* The word the help prints in place of a default, for an option that need not be
+     * applied at all. NULL where every value is a real setting. */
     const char       *unset_label;
     long              minimum;  /* bounds for the numeric types */
     long              maximum;  /* CLI_UNBOUNDED where only the floor binds */
@@ -77,8 +74,8 @@ typedef struct {
     const char *detail;
     size_t      offset;
     bool        required;
-    /* Takes every argument left rather than one, so it must come last: the
-     * array goes to offset and its length to count_offset. */
+    /* Takes every remaining argument rather than one, so it must come last. The array goes
+     * to offset and its length to count_offset. */
     bool        variadic;
     size_t      count_offset;
 } cli_positional;
@@ -102,8 +99,7 @@ typedef enum {
     CLI_ERROR,  /* usage error, already reported */
 } cli_status;
 
-/* Fills args, which must be spec->args_size bytes, starting from the spec's
- * defaults. */
+/* Fills args, which must be spec->args_size bytes, starting from the spec's defaults. */
 cli_status cli_parse(const cli_spec *spec, int argc, char **argv, void *args);
 
 void cli_usage(const cli_spec *spec, FILE *out);

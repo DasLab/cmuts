@@ -9,8 +9,8 @@
 
 typedef struct progress progress;
 
-/* NULL where there is no terminal to draw on, or no knowing the size of the
- * input. The other two accept NULL, so a caller never has to check which. */
+/* Returns NULL where there is no terminal to draw on, or where the size of the input is
+ * unknown. The other two accept NULL, so a caller never has to check which. */
 progress *progress_start(const cm_bam_stream *stream);
 
 void progress_follow(progress *bar);

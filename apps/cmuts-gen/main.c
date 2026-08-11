@@ -1,7 +1,7 @@
 /* main.c -- driver for generating alignments and the reference they came from.
  *
- * Writes a BAM and a matching FASTA, for tests that need a known shape and for
- * benchmarks that need volume.
+ * Writes a BAM and a matching FASTA, for tests needing a known shape and benchmarks needing
+ * volume.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -23,8 +23,8 @@ int main(int argc, char **argv)
     dataset_config cfg;
     char           error[CM_ERROR_MAX];
 
-    /* Silenced for the reason cmuts silences it: everything htslib reports it
-     * also returns, so its report would only duplicate ours. */
+    /* Silenced for the reason cmuts silences it: everything htslib reports it also
+     * returns. */
     hts_set_log_level(HTS_LOG_OFF);
 
     switch (cli_parse(&spec, argc, argv, &args)) {

@@ -14,9 +14,9 @@ static bool is_clip(uint32_t op)
     return op == BAM_CSOFT_CLIP || op == BAM_CHARD_CLIP;
 }
 
-/* Only a soft clip moves an offset. A hard clipped base is absent from the
- * stored sequence altogether, so the bases either side of it are already
- * neighbours and nothing has to be stepped over. */
+/* How far an operation moves the query offset, which only a soft clip does. A hard
+ * clipped base is absent from the stored sequence, so the bases either side of it are
+ * already adjacent. */
 static int32_t soft_clipped(uint32_t cigar)
 {
     return bam_cigar_op(cigar) == BAM_CSOFT_CLIP
@@ -30,9 +30,8 @@ aln_span aln_placed_span(const cm_bam_record *read)
     uint32_t first = 0;
     uint32_t last  = read->n_cigar;
 
-    /* A read carrying no CIGAR places nothing, whatever length it stores.
-     * Returning an empty span keeps a caller from reading centers that were
-     * never written. */
+    /* A read carrying no CIGAR places nothing, whatever length it stores. An empty span
+     * keeps a caller from reading places that were never written. */
     if (read->n_cigar == 0)
         return (aln_span){ .begin = 0, .end = 0 };
 
@@ -72,12 +71,11 @@ aln_span aln_places(const cm_bam_record *read, aln_place *places)
                 places[placed].last  = reference;
             }
         } else if (consumes & CIGAR_CONSUMES_REFERENCE) {
-            /* Reference passed over with no base to pair it against. The base
-             * before it keeps where it was placed and gains where the skip
-             * leaves off, so that the stretch it accounts for is the whole of
-             * what the path crosses without the read moving. Several skips in a
-             * row extend the same one, there being one place per base and not
-             * one per operation. */
+            /* Reference passed over with no read base to pair against it. The place
+             * before the skip keeps its start and takes the skip's end, so that it
+             * accounts for the whole stretch the path crosses without the read moving.
+             * Consecutive skips extend the same place, there being one place per base
+             * and not one per operation. */
             reference          += (hts_pos_t)len;
             places[placed].last = reference;
         }

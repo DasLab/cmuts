@@ -108,8 +108,8 @@ static bool length_matches(refseq_source *src, size_t file, int32_t tid)
     return false;
 }
 
-/* The MD5 of the record in hand, taken once however many files ask for it, and
- * not at all where none does. */
+/* The current record's MD5, computed once however many files ask for it, and not at all
+ * where none does. */
 typedef struct {
     char value[CHECKSUM_LEN + 1];
     bool taken;
@@ -127,16 +127,13 @@ static const char *digest_of(digest *md5, const cm_fasta_record *record)
     return md5->value;
 }
 
-/* Whether the sequence is the one the alignments were made against, where the
- * header declares what that was.
+/* Whether the sequence matches the M5 the header declares for it.
  *
- * A name and a length describe a reference without identifying it: another
- * sequence matching both passes the check and is scored against anyway. Only
- * M5 settles it, being taken over the bases. It is optional and frequently
- * absent, so a reference declaring none is accepted; rejecting those would
- * reject most files that exist. A declared value that is not an MD5 is
- * different: the header is wrong, and continuing would mean passing a check
- * that was never made. */
+ * A name and a length describe a reference without identifying it; only M5, taken over
+ * the bases, does. It is optional and frequently absent, so a reference declaring none
+ * is accepted -- rejecting those would reject most files that exist. A declared value
+ * that is not an MD5 is rejected: the header is wrong, and continuing would mean
+ * reporting a check that was never made. */
 static bool checksum_matches(refseq_source *src, size_t file, int32_t tid, digest *md5)
 {
     size_t      declared_len = 0;

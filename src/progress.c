@@ -1,4 +1,4 @@
-/* progress.c -- a bar on the terminal, and nothing anywhere else.
+/* progress.c -- a progress bar, drawn on the terminal and nowhere else.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -18,7 +18,7 @@
 #define BAR_MAX_CELLS   60
 #define ASSUMED_COLUMNS 80
 
-/* Cells are UTF-8, so a cell occupies one column but more than one byte. */
+/* A cell is UTF-8, occupying one column but more than one byte. */
 #define CELL_FILLED "█"
 #define CELL_EMPTY  " "
 #define CELL_MAX_BYTES 4
@@ -70,8 +70,8 @@ progress *progress_start(const cm_bam_stream *stream)
     return bar;
 }
 
-/* Decoding runs ahead of what has been handed on, so the reader can be past the
- * end of the span the bar was drawn across. */
+/* How far along the bar a position is, held to 100. Decoding runs ahead of the records
+ * handed on, so the reader can be past the span the bar was drawn across. */
 static int percentage(const progress *bar, uint64_t position)
 {
     return position >= bar->span ? 100 : (int)(position * 100 / bar->span);
@@ -102,8 +102,8 @@ static void draw(const progress *bar, int percent)
     fflush(stdout);
 }
 
-/* Asking costs a comparison until the moment there is something new to show,
- * which is why the loader may ask on every read. */
+/* Redraws the bar where it has changed. Costs a comparison until there is something new
+ * to show, so the loader may call it on every read. */
 void progress_follow(progress *bar)
 {
     uint64_t position;
@@ -127,8 +127,8 @@ void progress_follow(progress *bar)
     bar->next = redraw_at(bar, percent);
 }
 
-/* The bar stays as it ended, showing how far a failed run got. Whatever is
- * reported next begins on a line of its own. */
+/* Leaves the bar where it ended, showing how far a failed run got, and moves to a new
+ * line so that what is reported next starts on one of its own. */
 void progress_finish(progress *bar)
 {
     if (!bar)

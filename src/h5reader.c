@@ -11,15 +11,15 @@
 #include "error.h"
 #include "h5layout.h"
 
-/* The field whose shape gives the rest. Coverage is one value per base, so the
- * width of its row is the capacity every other field's width derives from. */
+/* The field whose shape gives the rest. Coverage is one value per base, so the width
+ * of its row is the capacity every other field's width derives from. */
 #define SHAPE_FIELD OUT_COVERAGE
 
 struct h5reader {
     hid_t   file;
     hid_t   dataset[OUT_N_FIELDS];
-    /* A dataspace apiece, kept for the life of the reader, as the writer keeps
-     * its own: only the selection differs between one row and the next. */
+    /* A dataspace apiece, kept for the life of the reader as the writer keeps its
+     * own: only the selection differs between one row and the next. */
     hid_t   filespace[OUT_N_FIELDS];
     hid_t   memspace;   /* one row of the widest field, selected down to size */
     hid_t   reads;      /* the group the per-run counts are gathered in */
@@ -44,8 +44,7 @@ static int fail_field(h5reader *r, out_field_id id, const char *what)
 /* Shape                                                                     */
 /* ------------------------------------------------------------------------ */
 
-/* A dataset's own dimensions, which are checked against what the layout says
- * they should be rather than trusted. */
+/* A dataset's dimensions, failing where its rank is not the one expected. */
 static int dataset_dims(hid_t dataset, int rank, hsize_t *dims)
 {
     hid_t space = H5Dget_space(dataset);
@@ -65,9 +64,8 @@ static int dataset_dims(hid_t dataset, int rank, hsize_t *dims)
     return 0;
 }
 
-/* The number of references and the capacity, taken from the one field whose
- * width is the capacity itself. Every other field is then checked against them.
- */
+/* Reads the number of references and the capacity from SHAPE_FIELD, whose width is
+ * the capacity itself. Every other field is then checked against them. */
 static int probe_shape(h5reader *r)
 {
     hid_t   dataset = H5Dopen2(r->file, OUT_FIELDS[SHAPE_FIELD].name, H5P_DEFAULT);
@@ -143,13 +141,13 @@ h5reader *h5reader_open(const char *path)
     if (!r)
         return NULL;
 
-    /* Report failures through h5reader_error rather than HDF5's own stack
-     * trace on stderr. */
+    /* Report failures through h5reader_error rather than HDF5's own stack trace on
+     * stderr. */
     H5Eset_auto2(H5E_DEFAULT, NULL, NULL);
 
     /* Every handle is marked absent before anything can fail, so that a reader
-     * abandoned partway through closes exactly what it opened. Zero, which the
-     * allocation leaves behind, is not a handle HDF5 would refuse. */
+     * abandoned partway through closes exactly what it opened. Zero, which calloc
+     * leaves behind, is a handle HDF5 would accept. */
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
         r->dataset[id]   = H5I_INVALID_HID;
         r->filespace[id] = H5I_INVALID_HID;

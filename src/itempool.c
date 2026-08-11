@@ -12,7 +12,7 @@
 struct itempool {
     workitem *storage;    /* the whole block, retained for teardown */
     size_t    capacity;
-    queue    *available;  /* free list; blocking pop gives the pool its bound */
+    queue    *available;  /* free list; a blocking pop is what bounds the pool */
 };
 
 static void release_storage(itempool *p, size_t n)
