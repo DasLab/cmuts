@@ -1,6 +1,6 @@
 """The read-length histogram, against what samtools makes of the same file.
 
-One bin per stored length from zero to twice the longest reference, the same
+One bin per stored length from one to twice the longest reference, the same
 bins in every row: a length is not a position, so a column means one length
 whatever reference the row belongs to. A read longer than the range is counted
 in no bin, so a row sums to the reads it holds and the reads total says how
@@ -20,12 +20,14 @@ from support import (
 
 def expected_row(histogram, width):
     """The row samtools implies: every length it reports in its own bin, and
-    nothing at all for a length the row has no bin for."""
+    nothing at all for a length the row has no bin for.
+
+    Bin i holds length i + 1, the histogram beginning at 1 rather than 0."""
     row = np.zeros(width)
 
     for length, count in histogram.items():
-        if length < width:
-            row[length] += count
+        if 1 <= length <= width:
+            row[length - 1] += count
 
     return row
 
@@ -47,7 +49,7 @@ def compare(output, data, min_mapq):
         written = handle["reads/lengths"][:]
         width = written.shape[1]
 
-        assert width == 2 * max(lengths.values()) + 1, "the row is not the widest reference"
+        assert width == 2 * max(lengths.values()), "the row is not the widest reference"
 
         for name, histogram in expected.items():
             row = written[row_of[name]]
@@ -55,7 +57,7 @@ def compare(output, data, min_mapq):
             assert np.array_equal(row, expected_row(histogram, width)), \
                 f"{name}: histogram disagrees with samtools"
 
-            outside += sum(c for n, c in histogram.items() if n >= width)
+            outside += sum(c for n, c in histogram.items() if n > width)
 
     return outside
 

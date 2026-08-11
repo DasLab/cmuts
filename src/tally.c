@@ -36,14 +36,18 @@ static void add_at(const context *ctx, accum_field_id field, hts_pos_t pos,
 
 /* Counts the read in its length bin. Binned by stored length, as the length filters are
  * applied, so inserted and soft-clipped bases count. A read longer than the range the
- * bins cover falls in none of them; the reads total gives how many those were. */
+ * bins cover falls in none of them; the reads total gives how many those were.
+ *
+ * The bins begin at length 1, a read storing no sequence having been refused already, so
+ * the guard against zero is against that filter changing rather than against anything
+ * reachable from here. */
 static void add_length(const context *ctx)
 {
     double *bins   = accum_data(ctx->target, ACCUM_LENGTHS);
     size_t  length = (size_t)ctx->read->l_qseq;
 
-    if (length < SHAPE_LENGTH_BINS(ctx->target->cap)) {
-        bins[length] += 1.0;
+    if (length > 0 && length <= SHAPE_LENGTH_BINS(ctx->target->cap)) {
+        bins[length - 1] += 1.0;
     }
 }
 

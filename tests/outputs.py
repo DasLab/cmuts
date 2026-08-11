@@ -112,9 +112,10 @@ def width(kind: str, cap: int) -> int:
 
     A read length is not a position in a reference: a read carrying insertions
     or soft-clipped ends is longer than what it aligns to, so the histogram
-    reaches to twice the longest reference and has a bin for zero.
+    reaches to twice the longest reference. It starts at length 1, a read
+    storing no sequence never reaching the tally, so bin i holds length i + 1.
     """
-    return cap if kind == PER_BASE else 2 * cap + 1
+    return cap if kind == PER_BASE else 2 * cap
 
 
 def shape(field: Field, n_refs: int, cap: int) -> tuple:
