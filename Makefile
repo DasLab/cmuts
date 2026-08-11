@@ -49,10 +49,14 @@ NAME     := cmuts
 # One directory under apps/ per program, named for the binary it builds. A
 # program is its own sources, its own private headers, and whichever members of
 # the library it refers to; adding one means adding a directory and a word here.
-PROGRAMS := cmuts cmuts-gen
+PROGRAMS := cmuts cmuts-gen cmuts-sub
+
+# Of those, the ones a user runs. The generator writes test fixtures and
+# benchmark inputs, which is work done from the build tree; nothing looks for it
+# on PATH.
+INSTALLED := cmuts cmuts-sub
 
 BUILD    := build
-BIN      := $(BUILD)/$(NAME)
 LIB      := $(BUILD)/lib$(NAME).a
 
 # Sources under src/ are the library and nothing else: no entry point lives
@@ -72,9 +76,11 @@ DEP      := $(LIB_OBJ:.o=.d) $(APP_OBJ:.o=.d)
 # What each program needs beyond the library. The archive is searched, not
 # swallowed, so a program links only the members it refers to and only the
 # libraries those in turn require: the generator reaches cli.o alone and so
-# needs nothing of HDF5.
+# needs nothing of HDF5, and the subtraction reads and writes output files
+# without ever opening an alignment.
 LIBS_cmuts     := $(HTS_LIBS) $(HDF5_LIBS) -pthread -lm
 LIBS_cmuts-gen := $(HTS_LIBS)
+LIBS_cmuts-sub := $(HDF5_LIBS) -lm
 
 ifdef SANITIZE
 $(foreach p,$(PROGRAMS),$(eval LIBS_$(p) += $(SANFLAGS)))
@@ -103,14 +109,12 @@ $(BUILD)/src/%.o: src/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# cmuts alone. The generator writes test fixtures and benchmark inputs, which
-# is work done from the build tree; nothing looks for it on PATH.
-install: $(BIN)
+install: $(addprefix $(BUILD)/,$(INSTALLED))
 	$(INSTALL) -d $(DESTDIR)$(BINDIR)
-	$(INSTALL) -m 755 $(BIN) $(DESTDIR)$(BINDIR)/$(NAME)
+	$(INSTALL) -m 755 $^ $(DESTDIR)$(BINDIR)
 
 uninstall:
-	rm -f $(DESTDIR)$(BINDIR)/$(NAME)
+	rm -f $(addprefix $(DESTDIR)$(BINDIR)/,$(INSTALLED))
 
 # Prefers a virtual environment holding the test dependencies, which the
 # programs themselves do not need:

@@ -21,8 +21,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include "bamstream.h"
 #include "h5writer.h"
@@ -31,6 +29,7 @@
 #include "progress.h"
 #include "queue.h"
 #include "refctx.h"
+#include "refrow.h"
 #include "refseq.h"
 #include "tally.h"
 
@@ -46,6 +45,7 @@ typedef struct {
     itempool      *items;
     ctxpool       *contexts;
     h5writer      *out;
+    refrow        *rows;       /* what a finished accumulator is written through */
     progress      *bar;
     tally_tables   tally_tables;
     filter_config  filter_config;
@@ -515,7 +515,7 @@ static void *consumer_main(void *arg)
             /* Keep draining after a failure: the loader and workers must not
              * be left blocked on a queue nobody is emptying. */
             if (c->status == 0 &&
-                h5writer_row(c->pipe->out, ctx->tid, ctx->len, &ctx->acc) < 0)
+                refrow_write(c->pipe->rows, ctx->tid, ctx->len, &ctx->acc) < 0)
                 c->status = -1;
 
             ctxpool_give(c->pipe->contexts, ctx);
@@ -545,6 +545,7 @@ pipeline_config pipeline_defaults(void)
 static void pipeline_teardown(pipeline *p)
 {
     progress_finish(p->bar);
+    refrow_destroy(p->rows);
     h5writer_close(p->out);
     ctxpool_destroy(p->contexts);
     itempool_destroy(p->items);
@@ -552,36 +553,6 @@ static void pipeline_teardown(pipeline *p)
     queue_destroy(p->work);
     refseq_close(p->refs);
     cm_bam_stream_close(p->bam);
-}
-
-/* What is worth refusing is a file with something in it. A path that exists
- * but is empty is what mktemp and shell redirection leave behind, and there is
- * nothing there to lose. */
-static bool holds_data(const char *path)
-{
-    struct stat info;
-
-    return stat(path, &info) == 0 && info.st_size > 0;
-}
-
-/* Checked before anything is opened, so a mistyped path costs nothing and no
- * previous result is at risk while the inputs are still being read. Reports
- * through may_replace whether the create may replace what is there. */
-static int check_output(const pipeline_config *cfg, bool *may_replace,
-                        char *error, size_t error_len)
-{
-    if (!cfg->overwrite && holds_data(cfg->output_path)) {
-        snprintf(error, error_len,
-                 "%s already holds data; pass --overwrite to replace it",
-                 cfg->output_path);
-        return -1;
-    }
-
-    /* Where nothing is at the path, the create stays exclusive, so a file
-     * appearing in between is not quietly replaced. Where an empty one is
-     * already there it has to be truncated instead. */
-    *may_replace = cfg->overwrite || access(cfg->output_path, F_OK) == 0;
-    return 0;
 }
 
 static int pipeline_open_inputs(pipeline *p, const pipeline_config *cfg,
@@ -639,7 +610,7 @@ static int pipeline_open_output(pipeline *p, const pipeline_config *cfg,
                                 bool may_replace, char *error, size_t error_len)
 {
     p->out = h5writer_create(cfg->output_path, cm_bam_stream_nref(p->bam), p->ref_cap,
-                             cfg->rate_config, may_replace);
+                             may_replace);
     if (!p->out) {
         snprintf(error, error_len, "out of memory");
         return -1;
@@ -648,6 +619,12 @@ static int pipeline_open_output(pipeline *p, const pipeline_config *cfg,
     if (h5writer_error(p->out)) {
         snprintf(error, error_len, "%s: %s", cfg->output_path,
                  h5writer_error(p->out));
+        return -1;
+    }
+
+    p->rows = refrow_create(p->out, cfg->rate_config, p->ref_cap);
+    if (!p->rows) {
+        snprintf(error, error_len, "out of memory");
         return -1;
     }
 
@@ -706,7 +683,8 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
         return -1;
     }
 
-    if (check_output(cfg, &may_replace, error, error_len) < 0 ||
+    if (h5writer_may_replace(cfg->output_path, cfg->overwrite, &may_replace,
+                             error, error_len) < 0 ||
         pipeline_open_inputs(&p, cfg, error, error_len) < 0 ||
         pipeline_build_buffers(&p, cfg, error, error_len) < 0 ||
         pipeline_open_output(&p, cfg, may_replace, error, error_len) < 0)
