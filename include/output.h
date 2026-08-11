@@ -80,10 +80,6 @@ typedef struct {
 
 extern const out_field OUT_FIELDS[OUT_N_FIELDS];
 
-/* The group holding the read counts. The field names above include this prefix, and run
- * totals are named relative to it. */
-#define OUT_READS_GROUP "reads"
-
 /* The reference dimension, where a field has one, and the extents of its row. */
 #define OUT_RANK_MAX (1 + SHAPE_RANK_MAX)
 

@@ -8,6 +8,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -22,7 +23,6 @@ struct h5writer {
      * so the handles are made once and reselected. */
     hid_t   filespace[OUT_N_FIELDS];
     hid_t   memspace;   /* one row of the widest field, selected down to size */
-    hid_t   reads;      /* the group the per-run counts are gathered in */
     int32_t n_refs;
     size_t  ref_cap;
     double *padding;    /* NaN, as wide as the longest tail a row can have */
@@ -65,6 +65,86 @@ int h5writer_may_replace(const char *path, bool overwrite, bool *may_replace,
 }
 
 /* ------------------------------------------------------------------------ */
+/* Groups                                                                    */
+/* ------------------------------------------------------------------------ */
+
+/* Long enough for any name in OUT_FIELDS. A name outgrowing it fails the create rather
+ * than being truncated into a group it does not belong to. */
+#define GROUP_PATH_MAX 64
+
+/* Creates the group at this path, or leaves the one already there.
+ *
+ * Untimed, as the file and the datasets are, or two runs over one input would differ by
+ * the moment it was created. This is why the groups are made here rather than left to
+ * H5Pset_create_intermediate_group, which creates them with default properties and so
+ * stamps each with a creation time. */
+static int create_group(h5writer *w, const char *path)
+{
+    htri_t found = H5Lexists(w->file, path, H5P_DEFAULT);
+    hid_t  gcpl, group;
+
+    if (found < 0) {
+        return -1;
+    }
+
+    if (found > 0) {
+        return 0;
+    }
+
+    gcpl = h5layout_untimed_plist(H5P_GROUP_CREATE);
+    if (gcpl < 0) {
+        return -1;
+    }
+
+    group = H5Gcreate2(w->file, path, H5P_DEFAULT, gcpl, H5P_DEFAULT);
+    H5Pclose(gcpl);
+
+    if (group < 0) {
+        return -1;
+    }
+
+    H5Gclose(group);
+    return 0;
+}
+
+/* Creates the groups a field's name places it in, outermost first, so that each is made
+ * inside one already present. */
+static int create_field_groups(h5writer *w, const char *name)
+{
+    char path[GROUP_PATH_MAX];
+
+    for (const char *sep = strchr(name, '/'); sep; sep = strchr(sep + 1, '/')) {
+        size_t len = (size_t)(sep - name);
+
+        if (len >= sizeof path) {
+            return -1;
+        }
+
+        memcpy(path, name, len);
+        path[len] = '\0';
+
+        if (create_group(w, path) < 0) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+/* Creates every group the field names imply, before any dataset is made in one. The names
+ * are where the layout says which groups an output holds; nothing else names them. */
+static int create_groups(h5writer *w)
+{
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (create_field_groups(w, OUT_FIELDS[id].name) < 0) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+/* ------------------------------------------------------------------------ */
 /* Dataset construction                                                      */
 /* ------------------------------------------------------------------------ */
 
@@ -103,7 +183,7 @@ static hid_t create_field(h5writer *w, out_field_id id)
 h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
                           bool overwrite)
 {
-    hid_t     fcpl, gcpl;
+    hid_t     fcpl;
     h5writer *w = calloc(1, sizeof *w);
     if (!w) {
         return NULL;
@@ -122,7 +202,6 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
     }
 
     w->file     = H5I_INVALID_HID;
-    w->reads    = H5I_INVALID_HID;
     w->memspace = H5I_INVALID_HID;
 
     w->n_refs  = n_refs;
@@ -161,19 +240,7 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
         return w;
     }
 
-    /* Created before any dataset inside it, so that a dataset's path names a group
-     * already present. Untimed, as the file and the datasets are, or two runs over
-     * one input would differ by the moment this was created. */
-    gcpl = h5layout_untimed_plist(H5P_GROUP_CREATE);
-    if (gcpl < 0) {
-        fail(w, "unable to prepare the output");
-        return w;
-    }
-
-    w->reads = H5Gcreate2(w->file, OUT_READS_GROUP, H5P_DEFAULT, gcpl, H5P_DEFAULT);
-    H5Pclose(gcpl);
-
-    if (w->reads < 0) {
+    if (create_groups(w) < 0) {
         fail(w, "unable to create a group");
         return w;
     }
@@ -212,10 +279,6 @@ void h5writer_close(h5writer *w)
 
     if (w->memspace >= 0) {
         H5Sclose(w->memspace);
-    }
-
-    if (w->reads >= 0) {
-        H5Gclose(w->reads);
     }
 
     if (w->file >= 0) {
