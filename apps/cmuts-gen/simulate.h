@@ -20,17 +20,17 @@
  * longer than the reference it aligns to, that an upper length bound exists to
  * remove. */
 typedef struct {
-    spec   length;             /* reference span the read covers */
-    double mismatch_rate;      /* per aligned base */
-    spec   insertions;         /* insertion events per read */
-    spec   insertion_length;
-    spec   deletions;
-    spec   deletion_length;
-    spec   soft_clips;         /* clipped ends, none through both */
-    spec   soft_clip_length;
-    spec   mapq;
-    spec   base_quality;
-    double reverse_fraction;
+    distribution length;            /* reference span the read covers */
+    double       mismatch_rate;     /* per aligned base */
+    distribution insertions;        /* insertion events per read */
+    distribution insertion_length;
+    distribution deletions;
+    distribution deletion_length;
+    distribution soft_clips;        /* clipped ends, none through both */
+    distribution soft_clip_length;
+    distribution mapq;
+    distribution base_quality;
+    double       reverse_fraction;
 } sim_model;
 
 /* Buffers reused across reads, sized to the largest the model can produce. */

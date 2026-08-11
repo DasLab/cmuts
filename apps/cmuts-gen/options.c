@@ -18,7 +18,7 @@ static const cli_choice FORMAT_CHOICES[] = {
     { NULL,  0           },
 };
 
-#define SPEC_DETAIL \
+#define DISTRIBUTION_DETAIL \
     "Written as a constant, a range LOW:HIGH, or a comma separated list."
 
 static const cli_option OPTIONS[] = {
@@ -38,8 +38,8 @@ static const cli_option OPTIONS[] = {
       .help = "how many references to write",
       .minimum = 1, .maximum = CLI_UNBOUNDED },
     { .group = "Layout", .name = "ref-length", .type = OPT_STRING,
-      .offset = offsetof(gen_args, ref_length), .metavar = "SPEC",
-      .help = "length of each reference", .detail = SPEC_DETAIL },
+      .offset = offsetof(gen_args, ref_length), .metavar = "DISTRIBUTION",
+      .help = "length of each reference", .detail = DISTRIBUTION_DETAIL },
     { .group = "Layout", .name = "covered", .type = OPT_DOUBLE,
       .offset = offsetof(gen_args, covered), .metavar = "F",
       .help = "fraction of references receiving any reads",
@@ -48,28 +48,29 @@ static const cli_option OPTIONS[] = {
                 "the output are never written.",
       .minimum = 0, .maximum = 1 },
     { .group = "Layout", .name = "reads-per-ref", .type = OPT_STRING,
-      .offset = offsetof(gen_args, reads_per_ref), .metavar = "SPEC",
-      .help = "reads on each covered reference", .detail = SPEC_DETAIL },
+      .offset = offsetof(gen_args, reads_per_ref), .metavar = "DISTRIBUTION",
+      .help = "reads on each covered reference",
+      .detail = DISTRIBUTION_DETAIL },
 
     { .group = "Reads", .name = "read-length", .type = OPT_STRING,
-      .offset = offsetof(gen_args, read_length), .metavar = "SPEC",
+      .offset = offsetof(gen_args, read_length), .metavar = "DISTRIBUTION",
       .help = "reference span each read covers",
       .detail = "The span drawn from the reference. What the read finally "
                 "stores differs from it: insertions and soft clips make it "
-                "longer, deletions shorter. " SPEC_DETAIL },
+                "longer, deletions shorter. " DISTRIBUTION_DETAIL },
     { .group = "Reads", .name = "mapq", .type = OPT_STRING,
-      .offset = offsetof(gen_args, mapq), .metavar = "SPEC",
-      .help = "mapping quality of each read", .detail = SPEC_DETAIL },
+      .offset = offsetof(gen_args, mapq), .metavar = "DISTRIBUTION",
+      .help = "mapping quality of each read", .detail = DISTRIBUTION_DETAIL },
     { .group = "Reads", .name = "base-quality", .type = OPT_STRING,
-      .offset = offsetof(gen_args, base_quality), .metavar = "SPEC",
-      .help = "PHRED score of each base", .detail = SPEC_DETAIL },
+      .offset = offsetof(gen_args, base_quality), .metavar = "DISTRIBUTION",
+      .help = "PHRED score of each base", .detail = DISTRIBUTION_DETAIL },
     { .group = "Reads", .name = "reverse", .type = OPT_DOUBLE,
       .offset = offsetof(gen_args, reverse), .metavar = "F",
       .help = "fraction of reads on the reverse strand",
       .minimum = 0, .maximum = 1 },
     { .group = "Reads", .name = "unmapped", .type = OPT_STRING,
-      .offset = offsetof(gen_args, unmapped), .metavar = "SPEC",
-      .help = "reads aligning nowhere", .detail = SPEC_DETAIL },
+      .offset = offsetof(gen_args, unmapped), .metavar = "DISTRIBUTION",
+      .help = "reads aligning nowhere", .detail = DISTRIBUTION_DETAIL },
 
     { .group = "Differences from the reference", .name = "mismatch-rate",
       .type = OPT_DOUBLE, .offset = offsetof(gen_args, mismatch_rate),
@@ -77,27 +78,34 @@ static const cli_option OPTIONS[] = {
       .minimum = 0, .maximum = 1 },
     { .group = "Differences from the reference", .name = "insertions",
       .type = OPT_STRING, .offset = offsetof(gen_args, insertions),
-      .metavar = "SPEC", .help = "insertion events per read",
+      .metavar = "DISTRIBUTION", .help = "insertion events per read",
       .detail = "Counted as events with their own length rather than drawn "
                 "from a per-base rate, since a rate produces many short "
-                "insertions and effectively never a long one. " SPEC_DETAIL },
+                "insertions and effectively never a long one. "
+                DISTRIBUTION_DETAIL },
     { .group = "Differences from the reference", .name = "insertion-length",
       .type = OPT_STRING, .offset = offsetof(gen_args, insertion_length),
-      .metavar = "SPEC", .help = "bases per insertion", .detail = SPEC_DETAIL },
+      .metavar = "DISTRIBUTION", .help = "bases per insertion",
+      .detail = DISTRIBUTION_DETAIL },
     { .group = "Differences from the reference", .name = "deletions",
       .type = OPT_STRING, .offset = offsetof(gen_args, deletions),
-      .metavar = "SPEC", .help = "deletion events per read", .detail = SPEC_DETAIL },
+      .metavar = "DISTRIBUTION", .help = "deletion events per read",
+      .detail = DISTRIBUTION_DETAIL },
     { .group = "Differences from the reference", .name = "deletion-length",
       .type = OPT_STRING, .offset = offsetof(gen_args, deletion_length),
-      .metavar = "SPEC", .help = "bases per deletion", .detail = SPEC_DETAIL },
+      .metavar = "DISTRIBUTION", .help = "bases per deletion",
+      .detail = DISTRIBUTION_DETAIL },
     { .group = "Differences from the reference", .name = "soft-clips",
       .type = OPT_STRING, .offset = offsetof(gen_args, soft_clips),
-      .metavar = "SPEC", .help = "clipped ends per read, none through both",
+      .metavar = "DISTRIBUTION",
+      .help = "clipped ends per read, none through both",
       .detail = "Soft-clipped bases are stored but align nowhere, so they "
-                "lengthen a read without lengthening its span. " SPEC_DETAIL },
+                "lengthen a read without lengthening its span. "
+                DISTRIBUTION_DETAIL },
     { .group = "Differences from the reference", .name = "soft-clip-length",
       .type = OPT_STRING, .offset = offsetof(gen_args, soft_clip_length),
-      .metavar = "SPEC", .help = "bases per clipped end", .detail = SPEC_DETAIL },
+      .metavar = "DISTRIBUTION", .help = "bases per clipped end",
+      .detail = DISTRIBUTION_DETAIL },
 
     { .group = "Determinism", .name = "seed", .type = OPT_SIZE,
       .offset = offsetof(gen_args, seed), .metavar = "N",
@@ -154,16 +162,17 @@ cli_spec gen_spec(const gen_args *defaults)
 /* Reading the specs                                                         */
 /* ------------------------------------------------------------------------ */
 
-/* Every spec-valued option, paired with the spec it becomes. The two offsets
- * are named together so that an option added here is read by the same loop as
- * the rest, and cannot be given a table row and then left unparsed. */
+/* Every option that carries a distribution, paired with the one it becomes.
+ * The two offsets are named together so that an option added here is read by
+ * the same loop as the rest, and cannot be given a table row and then left
+ * unparsed. */
 typedef struct {
     const char *name;    /* the option it came from, for the message */
     size_t      text;    /* the written form, within gen_args */
-    size_t      parsed;  /* the spec it becomes, within dataset_config */
-} spec_option;
+    size_t      parsed;  /* what it becomes, within dataset_config */
+} distribution_option;
 
-static const spec_option SPEC_OPTIONS[] = {
+static const distribution_option DISTRIBUTION_OPTIONS[] = {
     { "ref-length",       offsetof(gen_args, ref_length),
                           offsetof(dataset_config, ref_length)          },
     { "reads-per-ref",    offsetof(gen_args, reads_per_ref),
@@ -193,29 +202,34 @@ static const spec_option SPEC_OPTIONS[] = {
 /* The option's name goes in first and the reason is written after it, so there
  * is no second buffer whose contents might not fit once the two are put
  * together. */
-static int parse_spec(spec *out, const spec_option *option, const char *text,
-                      char *error, size_t error_len)
+static int parse_distribution(distribution *out,
+                              const distribution_option *option,
+                              const char *text,
+                              char *error, size_t error_len)
 {
     int prefix = snprintf(error, error_len, "--%s: ", option->name);
 
     if (prefix < 0 || (size_t)prefix >= error_len)
         return -1;
 
-    if (spec_parse(out, text, error + prefix, error_len - (size_t)prefix) != 0)
+    if (distribution_parse(out, text, error + prefix,
+                           error_len - (size_t)prefix) != 0)
         return -1;
 
     error[0] = '\0';
     return 0;
 }
 
-static const char *written_form(const gen_args *args, const spec_option *option)
+static const char *written_form(const gen_args *args,
+                                const distribution_option *option)
 {
     return *(const char *const *)((const char *)args + option->text);
 }
 
-static spec *destination(dataset_config *cfg, const spec_option *option)
+static distribution *destination(dataset_config *cfg,
+                                 const distribution_option *option)
 {
-    return (spec *)((char *)cfg + option->parsed);
+    return (distribution *)((char *)cfg + option->parsed);
 }
 
 int gen_configure(dataset_config *cfg, const gen_args *args,
@@ -231,10 +245,12 @@ int gen_configure(dataset_config *cfg, const gen_args *args,
         .model.reverse_fraction = args->reverse,
     };
 
-    for (size_t i = 0; i < sizeof SPEC_OPTIONS / sizeof *SPEC_OPTIONS; i++) {
-        const spec_option *option = &SPEC_OPTIONS[i];
+    size_t n = sizeof DISTRIBUTION_OPTIONS / sizeof *DISTRIBUTION_OPTIONS;
 
-        if (parse_spec(destination(cfg, option), option,
+    for (size_t i = 0; i < n; i++) {
+        const distribution_option *option = &DISTRIBUTION_OPTIONS[i];
+
+        if (parse_distribution(destination(cfg, option), option,
                        written_form(args, option), error, error_len) < 0)
             return -1;
     }

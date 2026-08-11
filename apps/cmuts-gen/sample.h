@@ -25,28 +25,34 @@ double rng_fraction(rng *r);
 /* True with the given probability. */
 bool rng_chance(rng *r, double probability);
 
-/* How a parameter varies, written one of three ways:
+/* The values a parameter may take, drawn from uniformly, written one of three
+ * ways:
  *
  *     40          every draw is 40
  *     20:200      uniform over the range, inclusive
  *     0,1,30,255  drawn from the listed values
  *
+ * All three are a finite set: a constant is a set of one, a range is the whole
+ * span between its endpoints, and a list is exactly what it names. Only the
+ * uniform is expressible; nothing here weights one value above another.
+ *
  * A constant is what pins a value down for a test; a range or a list is what
  * spreads it for a benchmark or a fuzz run. One grammar serves both, so no
  * parameter needs a separate switch to randomise it. */
-#define SPEC_MAX_VALUES 64
+#define DISTRIBUTION_MAX_VALUES 64
 
 typedef struct {
-    long   low;                      /* range endpoints, equal when constant */
+    long   low;       /* range endpoints, equal when constant */
     long   high;
-    long   values[SPEC_MAX_VALUES];  /* the list form */
-    size_t n_values;                 /* zero unless the list form was used */
-} spec;
+    long   values[DISTRIBUTION_MAX_VALUES];  /* the list form */
+    size_t n_values;  /* zero unless the list form was used */
+} distribution;
 
 /* Parses text into out. Returns 0, or -1 with a description in error. */
-int spec_parse(spec *out, const char *text, char *error, size_t error_len);
+int distribution_parse(distribution *out, const char *text,
+                       char *error, size_t error_len);
 
-long spec_draw(const spec *s, rng *r);
+long distribution_draw(const distribution *d, rng *r);
 
-/* The largest value a spec can produce, for sizing buffers up front. */
-long spec_maximum(const spec *s);
+/* The largest value a distribution can produce, for sizing buffers up front. */
+long distribution_maximum(const distribution *d);

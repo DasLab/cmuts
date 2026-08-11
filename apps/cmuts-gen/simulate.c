@@ -57,10 +57,10 @@ struct sim_scratch {
 
 static size_t largest_read(const sim_model *model)
 {
-    size_t span   = (size_t)spec_maximum(&model->length);
-    size_t insert = (size_t)spec_maximum(&model->insertions) *
-                    (size_t)spec_maximum(&model->insertion_length);
-    size_t clip   = 2 * (size_t)spec_maximum(&model->soft_clip_length);
+    size_t span   = (size_t)distribution_maximum(&model->length);
+    size_t insert = (size_t)distribution_maximum(&model->insertions) *
+                    (size_t)distribution_maximum(&model->insertion_length);
+    size_t clip   = 2 * (size_t)distribution_maximum(&model->soft_clip_length);
 
     return span + insert + clip + 1;
 }
@@ -156,7 +156,7 @@ static bool event_falls_here(long remaining, size_t positions_left, rng *r)
 sim_placement sim_place(const sim_model *model, rng *r, size_t reflen)
 {
     sim_placement where;
-    long          span = spec_draw(&model->length, r);
+    long          span = distribution_draw(&model->length, r);
 
     if (span < 1)
         span = 1;
@@ -175,13 +175,14 @@ static size_t lay_out_read(sim_scratch *scratch, const sim_model *model, rng *r,
     sim_event *events = scratch->events;
     size_t     cap    = scratch->capacity;
 
-    long clips     = spec_draw(&model->soft_clips, r);
-    long insertion = spec_draw(&model->insertions, r);
-    long deletion  = spec_draw(&model->deletions, r);
+    long clips     = distribution_draw(&model->soft_clips, r);
+    long insertion = distribution_draw(&model->insertions, r);
+    long deletion  = distribution_draw(&model->deletions, r);
     size_t n       = 0;
 
     if (clips > 0)
-        n = add_clip(events, n, cap, spec_draw(&model->soft_clip_length, r), r);
+        n = add_clip(events, n, cap,
+                     distribution_draw(&model->soft_clip_length, r), r);
 
     for (size_t i = 0; i < out.span && n < cap; ) {
         size_t left = out.span - i;
@@ -192,7 +193,7 @@ static size_t lay_out_read(sim_scratch *scratch, const sim_model *model, rng *r,
         bool interior = i > 0 && left > 1;
 
         if (interior && event_falls_here(deletion, left, r)) {
-            long len = spec_draw(&model->deletion_length, r);
+            long len = distribution_draw(&model->deletion_length, r);
 
             if (len > (long)left - 1)
                 len = (long)left - 1;
@@ -210,7 +211,7 @@ static size_t lay_out_read(sim_scratch *scratch, const sim_model *model, rng *r,
         }
 
         if (interior && event_falls_here(insertion, left, r)) {
-            long len = spec_draw(&model->insertion_length, r);
+            long len = distribution_draw(&model->insertion_length, r);
 
             for (long k = 0; k < len && n < cap; k++) {
                 events[n].kind  = EV_INSERT;
@@ -234,7 +235,8 @@ static size_t lay_out_read(sim_scratch *scratch, const sim_model *model, rng *r,
     }
 
     if (clips > 1)
-        n = add_clip(events, n, cap, spec_draw(&model->soft_clip_length, r), r);
+        n = add_clip(events, n, cap,
+                     distribution_draw(&model->soft_clip_length, r), r);
 
     return n;
 }
@@ -282,7 +284,7 @@ static size_t build_sequence(const sim_event *events, size_t n, const sim_model 
             continue;
 
         seq[len]  = events[i].query;
-        qual[len] = (char)spec_draw(&model->base_quality, r);
+        qual[len] = (char)distribution_draw(&model->base_quality, r);
         len++;
     }
 
@@ -399,7 +401,7 @@ int sim_alignment(bam1_t *rec, sim_scratch *scratch, const sim_model *model,
     size_t   l_seq   = build_sequence(scratch->events, events, model, r,
                                       scratch->seq, scratch->qual);
     uint16_t flag    = rng_chance(r, model->reverse_fraction) ? BAM_FREVERSE : 0;
-    uint8_t  mapq    = (uint8_t)spec_draw(&model->mapq, r);
+    uint8_t  mapq    = (uint8_t)distribution_draw(&model->mapq, r);
 
     build_md(scratch->events, events, scratch->md, scratch->md_capacity);
 
@@ -414,7 +416,7 @@ int sim_alignment(bam1_t *rec, sim_scratch *scratch, const sim_model *model,
 int sim_unmapped(bam1_t *rec, sim_scratch *scratch, const sim_model *model,
                  rng *r, const char *name)
 {
-    long len = spec_draw(&model->length, r);
+    long len = distribution_draw(&model->length, r);
 
     if (len < 1)
         len = 1;
@@ -423,7 +425,7 @@ int sim_unmapped(bam1_t *rec, sim_scratch *scratch, const sim_model *model,
 
     sim_sequence(scratch->seq, (size_t)len, r);
     for (long i = 0; i < len; i++)
-        scratch->qual[i] = (char)spec_draw(&model->base_quality, r);
+        scratch->qual[i] = (char)distribution_draw(&model->base_quality, r);
 
     return bam_set1(rec, strlen(name), name, BAM_FUNMAP, -1, -1, 0,
                     0, NULL, -1, -1, 0,

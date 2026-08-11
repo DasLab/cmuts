@@ -88,11 +88,12 @@ static void seed_stream(rng *r, size_t seed, size_t tid, stream purpose)
               ^ ((uint64_t)purpose * 0xa24baed4963ee407ULL));
 }
 
-/* A count drawn from a spec, held to what there is room for. A spec may be
- * written with a negative bound, and nothing is drawn fewer than zero times. */
-static size_t draw_count(const spec *s, rng *r, size_t limit)
+/* A count drawn from a distribution, held to what there is room for. One may
+ * be written with a negative bound, and nothing is drawn fewer than zero
+ * times. */
+static size_t draw_count(const distribution *d, rng *r, size_t limit)
 {
-    long drawn = spec_draw(s, r);
+    long drawn = distribution_draw(d, r);
 
     if (drawn < 0)
         return 0;
@@ -118,7 +119,7 @@ static size_t *draw_reference_lengths(const dataset_config *cfg)
         long len;
 
         seed_stream(&r, cfg->seed, tid, STREAM_LENGTH);
-        len = spec_draw(&cfg->ref_length, &r);
+        len = distribution_draw(&cfg->ref_length, &r);
 
         /* A reference with no bases is one no read could be placed on. */
         lengths[tid] = len < 1 ? 1 : (size_t)len;
@@ -195,9 +196,9 @@ typedef struct {
 
 /* Room for the most reads a reference can receive, and never for none: an
  * empty allocation is one that cannot be told apart from a failed one. */
-static size_t places_needed(const spec *reads_per_ref)
+static size_t places_needed(const distribution *reads_per_ref)
 {
-    long most = spec_maximum(reads_per_ref);
+    long most = distribution_maximum(reads_per_ref);
 
     return (most > 0 ? (size_t)most : 0) + 1;
 }

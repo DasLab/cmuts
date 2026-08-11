@@ -91,7 +91,8 @@ static int parse_long(const char *text, const char *end, long *out)
     return *stop == '\0' ? 0 : -1;
 }
 
-static int parse_list(spec *out, const char *text, char *error, size_t error_len)
+static int parse_list(distribution *out, const char *text,
+                      char *error, size_t error_len)
 {
     const char *from = text;
 
@@ -101,7 +102,7 @@ static int parse_list(spec *out, const char *text, char *error, size_t error_len
         const char *comma = strchr(from, ',');
         const char *end   = comma ? comma : from + strlen(from);
 
-        if (out->n_values == SPEC_MAX_VALUES)
+        if (out->n_values == DISTRIBUTION_MAX_VALUES)
             return fail(error, error_len, text, "lists more values than are allowed");
 
         if (parse_long(from, end, &out->values[out->n_values]) < 0)
@@ -117,7 +118,7 @@ static int parse_list(spec *out, const char *text, char *error, size_t error_len
     return 0;
 }
 
-static int parse_range(spec *out, const char *text, const char *colon,
+static int parse_range(distribution *out, const char *text, const char *colon,
                        char *error, size_t error_len)
 {
     if (parse_long(text, colon, &out->low) < 0 ||
@@ -130,11 +131,12 @@ static int parse_range(spec *out, const char *text, const char *colon,
     return 0;
 }
 
-int spec_parse(spec *out, const char *text, char *error, size_t error_len)
+int distribution_parse(distribution *out, const char *text,
+                       char *error, size_t error_len)
 {
     const char *colon = strchr(text, ':');
 
-    *out = (spec){ 0 };
+    *out = (distribution){ 0 };
 
     if (text[0] == '\0')
         return fail(error, error_len, text, "is empty");
@@ -152,25 +154,25 @@ int spec_parse(spec *out, const char *text, char *error, size_t error_len)
     return 0;
 }
 
-long spec_draw(const spec *s, rng *r)
+long distribution_draw(const distribution *d, rng *r)
 {
-    if (s->n_values)
-        return s->values[rng_next(r) % s->n_values];
+    if (d->n_values)
+        return d->values[rng_next(r) % d->n_values];
 
-    return rng_between(r, s->low, s->high);
+    return rng_between(r, d->low, d->high);
 }
 
-long spec_maximum(const spec *s)
+long distribution_maximum(const distribution *d)
 {
     long largest;
 
-    if (!s->n_values)
-        return s->high;
+    if (!d->n_values)
+        return d->high;
 
-    largest = s->values[0];
-    for (size_t i = 1; i < s->n_values; i++)
-        if (s->values[i] > largest)
-            largest = s->values[i];
+    largest = d->values[0];
+    for (size_t i = 1; i < d->n_values; i++)
+        if (d->values[i] > largest)
+            largest = d->values[i];
 
     return largest;
 }

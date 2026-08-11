@@ -12,10 +12,10 @@
 
 /* Everything the command line can set.
  *
- * Every parameter that varies arrives as a spec -- a constant, a range, or a
- * list -- so the same option pins a value down for a test and spreads it for a
- * benchmark. They are text here and are turned into the dataset's model once,
- * after the command line has been read.
+ * Every parameter that varies arrives as a distribution -- a constant, a
+ * range, or a list -- so the same option pins a value down for a test and
+ * spreads it for a benchmark. They are text here and are turned into the
+ * dataset's model once, after the command line has been read.
  */
 typedef struct {
     const char *output;

@@ -29,10 +29,10 @@ typedef struct {
     dataset_format format;
 
     size_t         references;
-    spec           ref_length;
-    double         covered;        /* fraction of references receiving any reads */
-    spec           reads_per_ref;
-    spec           unmapped;       /* reads aligning nowhere, over the run */
+    distribution   ref_length;
+    double         covered;    /* fraction of references receiving any reads */
+    distribution   reads_per_ref;
+    distribution   unmapped;   /* reads aligning nowhere, over the run */
 
     sim_model      model;
 
