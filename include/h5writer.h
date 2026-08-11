@@ -50,6 +50,10 @@ void      h5writer_close(h5writer *w);
 int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
                    const double *values);
 
+/* Writes one field's whole row for a reference, in the type the field is stored as. values
+ * must hold out_values(id, ref_cap, ref_cap) of that type, every column being written. */
+int h5writer_row(h5writer *w, out_field_id id, int32_t tid, const void *values);
+
 /* Writes the whole of a field belonging to the run rather than to any one reference, and
  * so having no row. */
 int h5writer_total(h5writer *w, out_field_id id, size_t value);

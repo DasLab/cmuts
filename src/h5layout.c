@@ -26,13 +26,6 @@
 /* Shape                                                                     */
 /* ------------------------------------------------------------------------ */
 
-/* Bytes one value of a field occupies on disk, which is the width of the type it is
- * stored as and not that of the double it is transferred through. */
-static size_t stored_bytes(out_field_id id)
-{
-    return H5Tget_size(h5layout_type(id));
-}
-
 static hsize_t rows_per_chunk(size_t row_bytes, int32_t n_refs)
 {
     hsize_t rows = row_bytes ? TARGET_CHUNK_BYTES / row_bytes : (hsize_t)n_refs;
@@ -61,7 +54,7 @@ void h5layout_shape(out_field_id id, int32_t n_refs, size_t cap,
      * dimension is cut down. A field with no reference dimension is one value, and is
      * not chunked at all. */
     if (OUT_FIELDS[id].per_ref) {
-        chunk[0] = rows_per_chunk(out_values(id, cap, cap) * stored_bytes(id), n_refs);
+        chunk[0] = rows_per_chunk(out_values(id, cap, cap) * out_stored_bytes(id), n_refs);
     }
 }
 
@@ -74,6 +67,19 @@ hid_t h5layout_type(out_field_id id)
     switch (OUT_FIELDS[id].stored) {
         case OUT_F32:      return H5T_IEEE_F32LE;
         case OUT_U64:      return H5T_STD_U64LE;
+        case OUT_N_STORED: break;
+    }
+
+    return H5I_INVALID_HID;
+}
+
+/* The type a field's values are handed over in, which is the one it is stored as. A value
+ * read from a file and written to another passes through nothing wider on the way. */
+hid_t h5layout_memory_type(out_field_id id)
+{
+    switch (OUT_FIELDS[id].stored) {
+        case OUT_F32:      return H5T_NATIVE_FLOAT;
+        case OUT_U64:      return H5T_NATIVE_UINT64;
         case OUT_N_STORED: break;
     }
 
@@ -181,7 +187,7 @@ hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank)
 hid_t h5layout_access_plist(out_field_id id, const hsize_t *chunk, int rank)
 {
     hid_t  dapl  = H5Pcreate(H5P_DATASET_ACCESS);
-    size_t bytes = stored_bytes(id);
+    size_t bytes = out_stored_bytes(id);
 
     if (dapl < 0) {
         return H5I_INVALID_HID;

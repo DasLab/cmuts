@@ -373,6 +373,31 @@ int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
     return write_part(w, id, tid, held, width - held, w->padding);
 }
 
+/* Writes the whole of one reference's row, in the type the field is stored as.
+ *
+ * Every column is given a value, so nothing is left to mark as outside the reference. This
+ * is the path for values that were read from a file of the same layout: they are already
+ * the stored type, and passing them through the double the accumulator uses would widen
+ * and narrow them for nothing. */
+int h5writer_row(h5writer *w, out_field_id id, int32_t tid, const void *values)
+{
+    size_t width = out_values(id, w->ref_cap, w->ref_cap);
+    herr_t status;
+
+    if (tid < 0 || tid >= w->n_refs) {
+        return fail(w, "reference index outside the output");
+    }
+
+    if (h5layout_select_span(w->filespace[id], w->memspace, id, tid, 0, width) < 0) {
+        return fail(w, "unable to select an output row");
+    }
+
+    status = H5Dwrite(w->dataset[id], h5layout_memory_type(id), w->memspace,
+                      w->filespace[id], H5P_DEFAULT, values);
+
+    return status < 0 ? fail(w, "unable to write an output row") : 0;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Totals                                                                    */
 /* ------------------------------------------------------------------------ */

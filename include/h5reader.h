@@ -14,8 +14,8 @@
  * at a time rather than whole datasets, so memory is bounded by the longest reference and not
  * by the size of the file.
  *
- * Values are returned as double whatever they are stored as, which is also how the writer takes
- * them.
+ * Values are returned in the type they are stored as, so that a file read here and written back
+ * out passes through nothing wider.
  *
  * HDF5 is not thread-safe unless built for it, so a reader must be used from one thread
  * only. */
@@ -33,8 +33,8 @@ int32_t h5reader_refs(const h5reader *r);
 size_t  h5reader_capacity(const h5reader *r);
 
 /* Reads one field's whole row for a reference. values must hold
- * out_values(id, capacity, capacity) doubles. */
-int h5reader_field(h5reader *r, out_field_id id, int32_t tid, double *values);
+ * out_values(id, capacity, capacity) of the field's stored type. */
+int h5reader_field(h5reader *r, out_field_id id, int32_t tid, void *values);
 
 /* The whole of a field belonging to the run rather than to any one reference. */
 int h5reader_total(h5reader *r, out_field_id id, size_t *value);

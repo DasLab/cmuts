@@ -23,9 +23,10 @@ typedef struct {
     h5reader *untreated;
     h5writer *out;
 
-    double *left;      /* one row of the treated file */
-    double *right;     /* the same row of the untreated file */
-    double *result;    /* the two combined */
+    /* One row apiece, in whatever type the field being combined is stored as. */
+    void *left;        /* one row of the treated file */
+    void *right;       /* the same row of the untreated file */
+    void *result;      /* the two combined */
 
     int32_t n_refs;
     size_t  ref_cap;
@@ -58,26 +59,93 @@ static int fail_output(const subtraction *s, char *error, size_t error_len)
 /* Arithmetic                                                                */
 /* ------------------------------------------------------------------------ */
 
-/* Combines one value from each input under the given rule. NaN in either input
- * carries through all three, marking the position unmeasured: a difference of rates
- * is known only where both rates are. */
-static double combine(out_combine how, double treated, double untreated)
-{
-    switch (how) {
-        case OUT_ADD:       return treated + untreated;
-        case OUT_SUBTRACT:  return treated - untreated;
-        case OUT_PROPAGATE: return sqrt(treated * treated + untreated * untreated);
-    }
+/* Each rule is carried out in the type the field is stored as, so a value read from one
+ * file and written to another is never widened on the way. A rate combined as a double
+ * and narrowed back gives the same float for a sum or a difference as combining the
+ * floats does, the one rounding standing in for the other; the error is the exception,
+ * and its last bit is not worth a second type to carry.
+ *
+ * The rule is chosen once for a row rather than at every value, which keeps the choice
+ * out of the loop.
+ *
+ * NaN in either input carries through all three rules, marking the position unmeasured: a
+ * difference of rates is known only where both rates are. */
 
-    return (double)NAN;
-}
-
-static void combine_row(out_combine how, const double *treated,
-                        const double *untreated, double *out, size_t n)
+static void add_f32(const float *treated, const float *untreated, float *out, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
-        out[i] = combine(how, treated[i], untreated[i]);
+        out[i] = treated[i] + untreated[i];
     }
+}
+
+static void subtract_f32(const float *treated, const float *untreated, float *out,
+                         size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        out[i] = treated[i] - untreated[i];
+    }
+}
+
+/* Each square is rounded before the two are added, which a single expression would let the
+ * compiler fuse into a multiply-add. Fusing keeps one square at a wider precision than the
+ * other, and the quadrature then depends on which input was named first. */
+static void propagate_f32(const float *treated, const float *untreated, float *out,
+                          size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        float t = treated[i] * treated[i];
+        float u = untreated[i] * untreated[i];
+
+        out[i] = sqrtf(t + u);
+    }
+}
+
+static void add_u64(const uint64_t *treated, const uint64_t *untreated, uint64_t *out,
+                    size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        out[i] = treated[i] + untreated[i];
+    }
+}
+
+static int combine_f32(out_combine how, const float *treated, const float *untreated,
+                       float *out, size_t n)
+{
+    switch (how) {
+        case OUT_ADD:       add_f32(treated, untreated, out, n);       return 0;
+        case OUT_SUBTRACT:  subtract_f32(treated, untreated, out, n);  return 0;
+        case OUT_PROPAGATE: propagate_f32(treated, untreated, out, n); return 0;
+    }
+
+    return -1;
+}
+
+/* A count is only ever added. The difference of two counts is not a count, and neither is
+ * the quadrature of two, so a counted field declaring either rule has no arithmetic here
+ * and is refused. */
+static int combine_u64(out_combine how, const uint64_t *treated,
+                       const uint64_t *untreated, uint64_t *out, size_t n)
+{
+    if (how != OUT_ADD) {
+        return -1;
+    }
+
+    add_u64(treated, untreated, out, n);
+    return 0;
+}
+
+static int combine_row(out_field_id id, const void *treated, const void *untreated,
+                       void *out, size_t n)
+{
+    out_combine how = OUT_FIELDS[id].combine;
+
+    switch (OUT_FIELDS[id].stored) {
+        case OUT_F32:      return combine_f32(how, treated, untreated, out, n);
+        case OUT_U64:      return combine_u64(how, treated, untreated, out, n);
+        case OUT_N_STORED: break;
+    }
+
+    return -1;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -97,13 +165,17 @@ static int subtract_field(subtraction *s, out_field_id id, int32_t tid,
         return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
     }
 
-    combine_row(OUT_FIELDS[id].combine, s->left, s->right, s->result, width);
+    if (combine_row(id, s->left, s->right, s->result, width) < 0) {
+        snprintf(error, error_len, "%s: no rule combines a field of this type",
+                 OUT_FIELDS[id].name);
+        return -1;
+    }
 
-    /* Written at the capacity rather than at the reference's own length, an output
-     * recording no reference lengths. The columns past a reference are NaN in both
-     * inputs and stay NaN through the arithmetic, which is the mark the writer would
-     * otherwise apply itself. */
-    if (h5writer_field(s->out, id, tid, s->ref_cap, s->result) < 0) {
+    /* Written whole rather than to the reference's own length, an output recording no
+     * reference lengths. The columns past a reference are NaN in both inputs and stay
+     * NaN through the arithmetic, which is the mark the writer would otherwise apply
+     * itself. */
+    if (h5writer_row(s->out, id, tid, s->result) < 0) {
         return fail_output(s, error, error_len);
     }
 
@@ -145,7 +217,8 @@ static int subtract_references(subtraction *s, char *error, size_t error_len)
 static int read_totals(subtraction *s, char *error, size_t error_len)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        size_t treated, untreated;
+        size_t   treated, untreated;
+        uint64_t combined;
 
         if (OUT_FIELDS[id].per_ref) {
             continue;
@@ -159,8 +232,14 @@ static int read_totals(subtraction *s, char *error, size_t error_len)
             return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
         }
 
-        s->totals[id] = (size_t)combine(OUT_FIELDS[id].combine, (double)treated,
-                                        (double)untreated);
+        if (combine_row(id, &(uint64_t){ treated }, &(uint64_t){ untreated },
+                        &combined, 1) < 0) {
+            snprintf(error, error_len, "%s: no rule combines a field of this type",
+                     OUT_FIELDS[id].name);
+            return -1;
+        }
+
+        s->totals[id] = (size_t)combined;
     }
 
     return 0;
@@ -238,15 +317,17 @@ static int open_inputs(subtraction *s, char *error, size_t error_len)
     return read_totals(s, error, error_len);
 }
 
-/* Three buffers, each one row of the widest field, so that each holds a row of any
- * field. */
+/* Three buffers, each a row of the widest field at the widest value, so that each holds a
+ * row of any field whatever it is stored as. calloc returns storage aligned for any type,
+ * which is what lets one buffer be read as either. */
 static int build_buffers(subtraction *s, char *error, size_t error_len)
 {
     size_t width = out_widest(s->ref_cap);
+    size_t bytes = out_widest_bytes();
 
-    s->left   = calloc(width, sizeof *s->left);
-    s->right  = calloc(width, sizeof *s->right);
-    s->result = calloc(width, sizeof *s->result);
+    s->left   = calloc(width, bytes);
+    s->right  = calloc(width, bytes);
+    s->result = calloc(width, bytes);
 
     if (!s->left || !s->right || !s->result) {
         snprintf(error, error_len, "out of memory");

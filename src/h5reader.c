@@ -262,7 +262,7 @@ size_t h5reader_capacity(const h5reader *r)
 /* Rows                                                                      */
 /* ------------------------------------------------------------------------ */
 
-int h5reader_field(h5reader *r, out_field_id id, int32_t tid, double *values)
+int h5reader_field(h5reader *r, out_field_id id, int32_t tid, void *values)
 {
     size_t width = out_values(id, r->ref_cap, r->ref_cap);
     herr_t status;
@@ -275,7 +275,7 @@ int h5reader_field(h5reader *r, out_field_id id, int32_t tid, double *values)
         return fail(r, "unable to select an input row");
     }
 
-    status = H5Dread(r->dataset[id], H5T_NATIVE_DOUBLE, r->memspace,
+    status = H5Dread(r->dataset[id], h5layout_memory_type(id), r->memspace,
                      r->filespace[id], H5P_DEFAULT, values);
 
     return status < 0 ? fail(r, "unable to read an input row") : 0;

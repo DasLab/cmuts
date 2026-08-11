@@ -86,19 +86,17 @@ RULES = {
 def combined(name, treated, untreated):
     """What the output should hold, given what the two inputs hold.
 
-    The rates are stored as float32 and combined as double, so the expectation
-    is formed the same way round: widened, combined, narrowed. Comparisons
-    against it are therefore exact, and a combination carried out in float32
-    would not match.
+    Each rule is applied in the type the field is stored as, which is what
+    cmuts-sub does: rates in float32, counts as whole unsigneds. Comparisons
+    against it are therefore exact.
+
+    Widening to double first would agree for a sum or a difference -- one
+    rounding stands in for the other -- but not for the error, where three
+    operations round rather than one.
     """
     rule = RULES[name]
-    treated, untreated = np.asarray(treated), np.asarray(untreated)
 
-    if np.issubdtype(treated.dtype, np.floating):
-        return rule(treated.astype(np.float64),
-                    untreated.astype(np.float64)).astype(np.float32)
-
-    return rule(treated, untreated)
+    return rule(np.asarray(treated), np.asarray(untreated))
 
 
 # ---------------------------------------------------------------------------

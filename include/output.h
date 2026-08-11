@@ -91,6 +91,12 @@ size_t out_values(out_field_id id, size_t len, size_t cap);
  * them. */
 size_t out_widest(size_t cap);
 
+/* Bytes one of a field's values occupies, and the most any field's value occupies. A
+ * buffer taking a row of any field is as long as out_widest values of out_widest_bytes
+ * each. */
+size_t out_stored_bytes(out_field_id id);
+size_t out_widest_bytes(void);
+
 /* Writes the dimensions of one field's dataset into dims, which must have room for
  * OUT_RANK_MAX of them, and returns the rank. Rows hold as many values as the field
  * occupies at the longest reference, so every row of a field is the same width whatever

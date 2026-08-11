@@ -33,6 +33,30 @@ size_t out_widest(size_t cap)
     return widest;
 }
 
+size_t out_stored_bytes(out_field_id id)
+{
+    switch (OUT_FIELDS[id].stored) {
+        case OUT_F32:      return sizeof(float);
+        case OUT_U64:      return sizeof(uint64_t);
+        case OUT_N_STORED: break;
+    }
+
+    return 0;
+}
+
+size_t out_widest_bytes(void)
+{
+    size_t widest = 0;
+
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        size_t bytes = out_stored_bytes(id);
+
+        widest = bytes > widest ? bytes : widest;
+    }
+
+    return widest;
+}
+
 int out_dims(out_field_id id, int32_t n_refs, size_t cap, size_t *dims)
 {
     shape_extents row     = OUT_FIELDS[id].row(cap, cap);
