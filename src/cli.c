@@ -43,7 +43,12 @@
 #define CEILING_MAX 32
 
 /* The column an option's help begins in. The arguments list uses the same one;
- * a difference between them shows as a misaligned step in --help. */
+ * a difference between them shows as a misaligned step in --help.
+ *
+ * A floor rather than a fixed width. A program whose longest invocation does
+ * not fit would otherwise print its help hard against the option it describes,
+ * and a metavar is free to grow. Anything with room to spare is laid out
+ * exactly as it was. */
 #define HELP_COLUMN 28
 
 /* getopt records a short option in optopt, and for a long one leaves the
@@ -341,21 +346,33 @@ static void format_default(const cli_option *opt, const void *defaults,
     }
 }
 
-static void print_option(FILE *out, const cli_option *opt, const void *defaults)
+/* How an option is written on its help line: the short form where it has one,
+ * the long form always, and whatever it takes. The width pass and the print
+ * both read it from here, so neither can measure one thing and write another. */
+static const char *option_form(const cli_option *opt, char *out, size_t len)
+{
+    int n;
+
+    if (opt->key)
+        n = snprintf(out, len, "-%c, --%s", opt->key, opt->name);
+    else
+        n = snprintf(out, len, "    --%s", opt->name);
+
+    if (opt->metavar && n > 0 && (size_t)n < len)
+        snprintf(out + n, len - (size_t)n, " %s", opt->metavar);
+
+    return out;
+}
+
+static void print_option(FILE *out, const cli_option *opt, const void *defaults,
+                         int column)
 {
     char invocation[INVOCATION_MAX];
     char suffix[DEFAULT_NOTE_MAX];
-    int  n;
 
-    if (opt->key)
-        n = snprintf(invocation, sizeof invocation, "-%c, --%s", opt->key, opt->name);
-    else
-        n = snprintf(invocation, sizeof invocation, "    --%s", opt->name);
+    option_form(opt, invocation, sizeof invocation);
 
-    if (opt->metavar && n > 0 && (size_t)n < sizeof invocation)
-        snprintf(invocation + n, sizeof invocation - (size_t)n, " %s", opt->metavar);
-
-    fprintf(out, "  %-*s %s", HELP_COLUMN, invocation, opt->help);
+    fprintf(out, "  %-*s %s", column, invocation, opt->help);
 
     if (opt->choices) {
         fputs(" (", out);
@@ -413,7 +430,36 @@ static void print_usage_line(const cli_spec *spec, FILE *out)
     fputc('\n', out);
 }
 
-static void print_positionals(const cli_spec *spec, FILE *out)
+/* The widest invocation the help will print, so that nothing runs into its own
+ * description. Hidden options are left out: they are never printed, and should
+ * not widen what is. */
+static int help_column(const cli_spec *spec)
+{
+    size_t widest = HELP_COLUMN;
+
+    for (size_t i = 0; i < spec->n_options; i++) {
+        char   form[INVOCATION_MAX];
+        size_t len;
+
+        if (spec->options[i].hidden)
+            continue;
+
+        len = strlen(option_form(&spec->options[i], form, sizeof form));
+        widest = len > widest ? len : widest;
+    }
+
+    for (size_t i = 0; i < spec->n_positionals; i++) {
+        char   form[METAVAR_MAX];
+        size_t len = strlen(positional_form(&spec->positionals[i],
+                                            form, sizeof form));
+
+        widest = len > widest ? len : widest;
+    }
+
+    return (int)widest;
+}
+
+static void print_positionals(const cli_spec *spec, FILE *out, int column)
 {
     if (spec->n_positionals == 0)
         return;
@@ -423,7 +469,7 @@ static void print_positionals(const cli_spec *spec, FILE *out)
     for (size_t i = 0; i < spec->n_positionals; i++) {
         char form[METAVAR_MAX];
 
-        fprintf(out, "  %-*s %s\n", HELP_COLUMN,
+        fprintf(out, "  %-*s %s\n", column,
                 positional_form(&spec->positionals[i], form, sizeof form),
                 spec->positionals[i].help);
     }
@@ -431,9 +477,11 @@ static void print_positionals(const cli_spec *spec, FILE *out)
 
 void cli_usage(const cli_spec *spec, FILE *out)
 {
+    int column = help_column(spec);
+
     fprintf(out, "%s %s -- %s\n\n", spec->program, spec->version, spec->summary);
     print_usage_line(spec, out);
-    print_positionals(spec, out);
+    print_positionals(spec, out, column);
 
     for (size_t i = 0; i < spec->n_options; i++) {
         if (spec->options[i].hidden || group_seen_before(spec, i))
@@ -444,7 +492,7 @@ void cli_usage(const cli_spec *spec, FILE *out)
         for (size_t j = i; j < spec->n_options; j++)
             if (!spec->options[j].hidden &&
                 strcmp(spec->options[j].group, spec->options[i].group) == 0)
-                print_option(out, &spec->options[j], spec->defaults);
+                print_option(out, &spec->options[j], spec->defaults, column);
     }
 }
 
