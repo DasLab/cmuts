@@ -70,7 +70,7 @@ int h5writer_may_replace(const char *path, bool overwrite, bool *may_replace,
 
 /* Long enough for any name in OUT_FIELDS. A name outgrowing it fails the create rather
  * than being truncated into a group it does not belong to. */
-#define GROUP_PATH_MAX 64
+#define GROUP_PATH_MAX 256
 
 /* Creates the group at this path, or leaves the one already there.
  *
