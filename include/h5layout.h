@@ -22,8 +22,8 @@
 
 /* The dataset's shape and that of the chunks it is stored in. A row is as wide as the
  * field's extent at the longest reference, so a field wider than one value per base is
- * sized by the same rule as the rest. Both arrays are OUT_RANK_MAX long, of which only the
- * field's own rank is written. */
+ * sized by the same rule as the rest. Both arrays are SHAPE_RANK_MAX long, of which only
+ * the field's own rank is written. */
 void h5layout_shape(out_field_id id, int32_t n_refs, size_t cap,
                     hsize_t *dims, hsize_t *chunk);
 

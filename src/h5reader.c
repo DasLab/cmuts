@@ -70,14 +70,14 @@ static int dataset_dims(hid_t dataset, int rank, hsize_t *dims)
 static int probe_shape(h5reader *r)
 {
     hid_t   dataset = H5Dopen2(r->file, OUT_FIELDS[SHAPE_FIELD].name, H5P_DEFAULT);
-    hsize_t dims[OUT_RANK_MAX];
+    hsize_t dims[SHAPE_RANK_MAX];
     int     status;
 
     if (dataset < 0) {
         return fail_field(r, SHAPE_FIELD, "not present; this is not a cmuts output");
     }
 
-    status = dataset_dims(dataset, OUT_RANK_VECTOR, dims);
+    status = dataset_dims(dataset, out_rank(SHAPE_FIELD), dims);
     H5Dclose(dataset);
 
     if (status < 0) {
@@ -97,7 +97,7 @@ static int probe_shape(h5reader *r)
 static int check_shape(h5reader *r, out_field_id id, const hsize_t *expected)
 {
     int     rank = out_rank(id);
-    hsize_t dims[OUT_RANK_MAX];
+    hsize_t dims[SHAPE_RANK_MAX];
 
     if (dataset_dims(r->dataset[id], rank, dims) < 0) {
         return fail_field(r, id, "has an unexpected number of dimensions");
@@ -118,8 +118,8 @@ static int check_shape(h5reader *r, out_field_id id, const hsize_t *expected)
 
 static int open_field(h5reader *r, out_field_id id)
 {
-    hsize_t dims[OUT_RANK_MAX]  = { 0, 0 };
-    hsize_t chunk[OUT_RANK_MAX] = { 0, 0 };
+    hsize_t dims[SHAPE_RANK_MAX]  = { 0, 0 };
+    hsize_t chunk[SHAPE_RANK_MAX] = { 0, 0 };
     hid_t   dapl;
 
     h5layout_shape(id, r->n_refs, r->ref_cap, dims, chunk);

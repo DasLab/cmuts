@@ -4,19 +4,20 @@
  * how two files' values of one combine under background subtraction. Everything that
  * reads or writes an output takes the description from here.
  *
- * How those fields are stored is h5layout's. Nothing here names HDF5, so the pipeline,
- * the subtraction and everything else working in terms of fields and values compiles
- * without it.
+ * This is the specification of the file and nothing more. Where a field's values come
+ * from is refrow's, the accumulated fields and the written ones not corresponding one to
+ * one; how those values are stored is h5layout's. Nothing here names HDF5, so the
+ * pipeline, the subtraction and everything else working in terms of fields and values
+ * compiles without it.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
 
 #pragma once
 
-#include <stdbool.h>
 #include <stddef.h>
 
-#include "accum.h"
+#include "shape.h"
 
 /* The fields an output holds, which are not those the accumulator holds. The mutations
  * and the span are the evidence gathered; what is written is the rate they come to and
@@ -49,20 +50,23 @@ typedef enum {
 typedef enum {
     OUT_ZERO,
     OUT_NAN,
+    OUT_N_ABSENT,
 } out_absent;
 
-/* One field of the output.
- *
- * A counted field is written as an unsigned rather than a float, which would round above
- * two to the twenty-fourth -- a total a deeply read reference passes. It is whole
- * regardless of the accumulator being doubles throughout, which it is so that any two
- * accumulators merge. Fields fractional in their own right stay float. */
+/* The type a field's values are narrowed to in the output file. */
+typedef enum {
+    OUT_F32,
+    OUT_U64,
+    OUT_N_STORED,
+} out_stored;
+
+/* One field of the output. */
 typedef struct {
-    const char    *name;
-    accum_field_id shape;    /* the accumulated field whose extent it takes */
-    bool           counted;  /* whole, and written as an unsigned */
-    out_absent     absent;   /* what a value it was never given means */
-    out_combine    combine;  /* how two runs' values of it combine */
+    const char *name;
+    shape_kind  shape;    /* the kind of row it has */
+    out_stored  stored;   /* the type its values are narrowed to */
+    out_absent  absent;   /* what a value it was never given means */
+    out_combine combine;  /* how two runs' values of it combine */
 } out_field;
 
 extern const out_field OUT_FIELDS[OUT_N_FIELDS];
@@ -70,13 +74,6 @@ extern const out_field OUT_FIELDS[OUT_N_FIELDS];
 /* The group holding the read counts. The field names above include this prefix, and run
  * totals are named relative to it. */
 #define OUT_READS_GROUP "reads"
-
-/* A scalar field is one value per reference; every other kind is a reference by
- * something, and so a row. Both shapes are described through arrays sized to the
- * larger. */
-#define OUT_RANK_SCALAR 1
-#define OUT_RANK_VECTOR 2
-#define OUT_RANK_MAX    OUT_RANK_VECTOR
 
 /* Values one field occupies for a reference of len bases, in a file whose longest
  * reference is cap. */
@@ -86,4 +83,5 @@ size_t out_extent(out_field_id id, size_t len, size_t cap);
  * them. */
 size_t out_widest(size_t cap);
 
+/* Dimensions one field's dataset has. */
 int out_rank(out_field_id id);

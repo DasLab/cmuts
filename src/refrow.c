@@ -45,20 +45,31 @@ void refrow_destroy(refrow *r)
     free(r);
 }
 
-/* One field's values. The reactivity and its error are derived rather than accumulated,
- * so they are computed into the scratch row; every other field is read in place. */
+/* One output field's values, taken from the accumulated fields behind it.
+ *
+ * This is where the two descriptions meet, and they do not correspond one to one: the
+ * reactivity and its error are computed from several accumulated fields into the scratch
+ * row, the span they are taken against is never written out, and the rest are read in
+ * place. Every field is named rather than defaulted, so an output field added without a
+ * source of its own draws a warning here and is refused at the write. */
 static const double *values(refrow *r, out_field_id id, const accum *acc,
                             size_t len)
 {
-    if (id == OUT_REACTIVITY) {
-        rate_reactivity(&r->rates, acc, len, r->row);
-    } else if (id == OUT_ERROR) {
-        rate_error(&r->rates, acc, len, r->row);
-    } else {
-        return accum_const_data(acc, OUT_FIELDS[id].shape);
+    switch (id) {
+        case OUT_COVERAGE:   return accum_const_data(acc, ACCUM_COVERAGE);
+        case OUT_LENGTHS:    return accum_const_data(acc, ACCUM_LENGTHS);
+        case OUT_READS:      return accum_const_data(acc, ACCUM_READS);
+        case OUT_REJECTED:   return accum_const_data(acc, ACCUM_FILTERED);
+        case OUT_N_FIELDS:   break;
+        case OUT_REACTIVITY:
+            rate_reactivity(&r->rates, acc, len, r->row);
+            return r->row;
+        case OUT_ERROR:
+            rate_error(&r->rates, acc, len, r->row);
+            return r->row;
     }
 
-    return r->row;
+    return NULL;
 }
 
 int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc)
@@ -68,7 +79,9 @@ int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc)
     }
 
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (h5writer_field(r->out, id, tid, len, values(r, id, acc, len)) < 0) {
+        const double *row = values(r, id, acc, len);
+
+        if (!row || h5writer_field(r->out, id, tid, len, row) < 0) {
             return -1;
         }
     }

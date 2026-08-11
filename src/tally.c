@@ -42,7 +42,7 @@ static void add_length(const context *ctx)
     double *bins   = accum_data(ctx->target, ACCUM_LENGTHS);
     size_t  length = (size_t)ctx->read->l_qseq;
 
-    if (length < ACCUM_LENGTH_BINS(ctx->target->cap)) {
+    if (length < SHAPE_LENGTH_BINS(ctx->target->cap)) {
         bins[length] += 1.0;
     }
 }

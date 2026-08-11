@@ -7,6 +7,8 @@
 
 #include <stddef.h>
 
+#include "shape.h"
+
 /* The quantities every accumulator carries.
  *
  * This enum and ACCUM_FIELDS are the single source of truth for the layout: allocation,
@@ -26,29 +28,10 @@ typedef enum {
     ACCUM_N_FIELDS,
 } accum_field_id;
 
-typedef enum {
-    ACCUM_PER_BASE,    /* one value per reference base */
-    ACCUM_PER_LENGTH,  /* one value per read length, plus an overflow bin */
-    ACCUM_SCALAR,      /* one value per reference */
-} accum_kind;
-
-/* Bins a read-length histogram covers, given the longest reference in the run: one for
- * every length from 0 to twice it. The range reaches past a reference because a read
- * carrying insertions or soft-clipped ends is longer than the one it aligns to.
- *
- * Every row is this wide, whatever its own reference measures. A read length is not a
- * position in a reference, so a column a short reference has no reads for is a count of
- * zero and not padding; sizing rows individually would leave the same column meaning
- * different things in different rows.
- *
- * A read longer than the range is counted in no bin. How many there were is the reads
- * total less the row's own sum. */
-#define ACCUM_LENGTH_BINS(cap) (2 * (cap) + 1)
-
 /* All the accumulator needs of a field. What it is called in the output, and whether it
  * is written at all, is output.h's to say. */
 typedef struct {
-    accum_kind kind;
+    shape_kind shape;
 } accum_field;
 
 extern const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS];
@@ -80,7 +63,7 @@ void accum_zero(accum *acc, size_t len);
  * scalar. Both accumulators must have the same capacity. */
 void accum_add(accum *dst, const accum *src, size_t len);
 
-/* Storage for one field: len values for ACCUM_PER_BASE, one for ACCUM_SCALAR.
+/* Storage for one field: len values for SHAPE_PER_BASE, one for SHAPE_SCALAR.
  *
  * Two forms rather than one taking a const accumulator and returning a writable pointer,
  * which would let anything holding a finished reference alter it. */

@@ -70,9 +70,9 @@ int h5writer_may_replace(const char *path, bool overwrite, bool *may_replace,
 
 static hid_t create_field(h5writer *w, out_field_id id)
 {
-    hsize_t dims[OUT_RANK_MAX]  = { 0, 0 };
-    hsize_t chunk[OUT_RANK_MAX] = { 0, 0 };
-    int     rank                = out_rank(id);
+    hsize_t dims[SHAPE_RANK_MAX]  = { 0, 0 };
+    hsize_t chunk[SHAPE_RANK_MAX] = { 0, 0 };
+    int     rank                  = out_rank(id);
     hid_t   space, dcpl, dapl, dataset;
 
     h5layout_shape(id, w->n_refs, w->ref_cap, dims, chunk);

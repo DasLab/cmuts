@@ -6,6 +6,7 @@
 #include "h5layout.h"
 
 #include <math.h>
+#include <stdbool.h>
 
 /* Chunks are sized in bytes rather than rows, so that a file of few long references
  * and one of many short references both land near this figure. */
@@ -48,7 +49,7 @@ void h5layout_shape(out_field_id id, int32_t n_refs, size_t cap,
     dims[0]  = (hsize_t)n_refs;
     chunk[0] = rows_per_chunk(width, n_refs);
 
-    if (out_rank(id) == OUT_RANK_VECTOR) {
+    if (out_rank(id) > 1) {
         dims[1]  = width;
         chunk[1] = width;
     }
@@ -60,24 +61,32 @@ void h5layout_shape(out_field_id id, int32_t n_refs, size_t cap,
 
 hid_t h5layout_type(out_field_id id)
 {
-    return OUT_FIELDS[id].counted ? H5T_STD_U64LE : H5T_IEEE_F32LE;
-}
-
-/* A field's OUT_ZERO or OUT_NAN, in the type the field is stored as. An unsigned has
- * no NaN, so OUT_NAN is not available to a counted field; the table gives each of
- * them OUT_ZERO, no counted field having padding. */
-const void *h5layout_fill(out_field_id id)
-{
-    static const uint64_t none = 0;
-    static const float    zero = 0.0f;
-    static const float    nan  = (float)NAN;
-
-    if (OUT_FIELDS[id].counted) {
-        return &none;
+    switch (OUT_FIELDS[id].stored) {
+        case OUT_F32:      return H5T_IEEE_F32LE;
+        case OUT_U64:      return H5T_STD_U64LE;
+        case OUT_N_STORED: break;
     }
 
-    return OUT_FIELDS[id].absent == OUT_NAN ? (const void *)&nan
-                                            : (const void *)&zero;
+    return H5I_INVALID_HID;
+}
+
+/* A field's absence marker, in the type the field is stored as.
+ *
+ * An unsigned has no NaN, so that one pairing has no fill and a field declaring it is
+ * refused rather than filled with something that means otherwise. A storage type added
+ * without fills of its own is refused the same way. */
+const void *h5layout_fill(out_field_id id)
+{
+    static const uint64_t u64_zero = 0;
+    static const float    f32_zero = 0.0f;
+    static const float    f32_nan  = (float)NAN;
+
+    static const void *const fill[OUT_N_STORED][OUT_N_ABSENT] = {
+        [OUT_F32] = { [OUT_ZERO] = &f32_zero, [OUT_NAN] = &f32_nan },
+        [OUT_U64] = { [OUT_ZERO] = &u64_zero },
+    };
+
+    return fill[OUT_FIELDS[id].stored][OUT_FIELDS[id].absent];
 }
 
 /* ------------------------------------------------------------------------ */
@@ -97,10 +106,10 @@ hid_t h5layout_row_space(size_t cap)
 int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
                          int32_t tid, size_t from, size_t n)
 {
-    hsize_t start[OUT_RANK_MAX] = { (hsize_t)tid, (hsize_t)from };
-    hsize_t count[OUT_RANK_MAX] = { 1, (hsize_t)n };
-    hsize_t offset              = 0;
-    hsize_t extent              = out_rank(id) == OUT_RANK_VECTOR ? (hsize_t)n : 1;
+    hsize_t start[SHAPE_RANK_MAX] = { (hsize_t)tid, (hsize_t)from };
+    hsize_t count[SHAPE_RANK_MAX] = { 1, (hsize_t)n };
+    hsize_t offset                = 0;
+    hsize_t extent                = out_rank(id) > 1 ? (hsize_t)n : 1;
 
     if (H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, count, NULL) < 0) {
         return -1;
@@ -132,14 +141,16 @@ hid_t h5layout_untimed_plist(hid_t class_id)
 
 hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank)
 {
-    hid_t dcpl = h5layout_untimed_plist(H5P_DATASET_CREATE);
+    const void *fill = h5layout_fill(id);
+    hid_t       dcpl = h5layout_untimed_plist(H5P_DATASET_CREATE);
 
     if (dcpl < 0) {
         return H5I_INVALID_HID;
     }
 
-    if (H5Pset_chunk(dcpl, rank, chunk) < 0 ||
-        H5Pset_fill_value(dcpl, h5layout_type(id), h5layout_fill(id)) < 0 ||
+    if (!fill ||
+        H5Pset_chunk(dcpl, rank, chunk) < 0 ||
+        H5Pset_fill_value(dcpl, h5layout_type(id), fill) < 0 ||
         H5Pset_fill_time(dcpl, H5D_FILL_TIME_ALLOC) < 0 ||
         H5Pset_shuffle(dcpl) < 0 ||
         H5Pset_deflate(dcpl, DEFLATE_LEVEL) < 0) {
