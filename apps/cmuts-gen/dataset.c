@@ -91,8 +91,9 @@ static size_t draw_count(const distribution *d, rng *r, size_t limit)
 {
     long drawn = distribution_draw(d, r);
 
-    if (drawn < 0)
+    if (drawn < 0) {
         return 0;
+    }
 
     return (size_t)drawn < limit ? (size_t)drawn : limit;
 }
@@ -107,8 +108,9 @@ static size_t *draw_reference_lengths(const dataset_config *cfg)
 {
     size_t *lengths = calloc(cfg->references, sizeof *lengths);
 
-    if (!lengths)
+    if (!lengths) {
         return NULL;
+    }
 
     for (size_t tid = 0; tid < cfg->references; tid++) {
         rng  r;
@@ -128,9 +130,11 @@ static size_t longest_reference(const size_t *lengths, size_t n)
 {
     size_t longest = 0;
 
-    for (size_t i = 0; i < n; i++)
-        if (lengths[i] > longest)
+    for (size_t i = 0; i < n; i++) {
+        if (lengths[i] > longest) {
             longest = lengths[i];
+        }
+    }
 
     return longest;
 }
@@ -212,12 +216,14 @@ static int writer_open(writer *w, const dataset_config *cfg, const size_t *lengt
     w->places   = calloc(w->capacity, sizeof *w->places);
     w->sequence = malloc(longest_reference(lengths, cfg->references) + 1);
 
-    if (output_path(path, sizeof path, cfg->prefix, encoding->extension) < 0)
+    if (output_path(path, sizeof path, cfg->prefix, encoding->extension) < 0) {
         return -1;
+    }
     w->alignments = sam_open(path, encoding->mode);
 
-    if (output_path(path, sizeof path, cfg->prefix, "fasta") < 0)
+    if (output_path(path, sizeof path, cfg->prefix, "fasta") < 0) {
         return -1;
+    }
     w->fasta = fopen(path, "w");
 
     return w->header && w->rec && w->scratch && w->places && w->sequence &&
@@ -226,10 +232,12 @@ static int writer_open(writer *w, const dataset_config *cfg, const size_t *lengt
 
 static void writer_close(writer *w)
 {
-    if (w->fasta)
+    if (w->fasta) {
         fclose(w->fasta);
-    if (w->alignments)
+    }
+    if (w->alignments) {
         sam_close(w->alignments);
+    }
 
     free(w->sequence);
     free(w->places);
@@ -257,8 +265,9 @@ static int write_read(writer *w, rng *r, int32_t tid, sim_placement where)
     read_name(name, sizeof name, "read", w->next_read++);
 
     if (sim_alignment(w->rec, w->scratch, &w->cfg->model, r, name, tid,
-                      w->sequence, where) < 0)
+                      w->sequence, where) < 0) {
         return -1;
+    }
 
     return sam_write1(w->alignments, w->header, w->rec) < 0 ? -1 : 0;
 }
@@ -270,14 +279,17 @@ static int write_reference_reads(writer *w, rng *r, int32_t tid, size_t reflen)
 {
     size_t reads = draw_count(&w->cfg->reads_per_ref, r, w->capacity);
 
-    for (size_t i = 0; i < reads; i++)
+    for (size_t i = 0; i < reads; i++) {
         w->places[i] = sim_place(&w->cfg->model, r, reflen);
+    }
 
     qsort(w->places, reads, sizeof *w->places, by_start);
 
-    for (size_t i = 0; i < reads; i++)
-        if (write_read(w, r, tid, w->places[i]) < 0)
+    for (size_t i = 0; i < reads; i++) {
+        if (write_read(w, r, tid, w->places[i]) < 0) {
             return -1;
+        }
+    }
 
     return 0;
 }
@@ -296,8 +308,9 @@ static int write_reference(writer *w, size_t tid, size_t reflen)
     sim_sequence(w->sequence, reflen, &r);
     write_fasta_record(w->fasta, name, w->sequence, reflen);
 
-    if (!rng_chance(&r, w->cfg->covered))
+    if (!rng_chance(&r, w->cfg->covered)) {
         return 0;
+    }
 
     return write_reference_reads(w, &r, (int32_t)tid, reflen);
 }
@@ -318,8 +331,9 @@ static int write_unmapped_reads(writer *w)
         read_name(name, sizeof name, "unmapped", i);
 
         if (sim_unmapped(w->rec, w->scratch, &w->cfg->model, &r, name) < 0 ||
-            sam_write1(w->alignments, w->header, w->rec) < 0)
+            sam_write1(w->alignments, w->header, w->rec) < 0) {
             return -1;
+        }
     }
 
     return 0;
@@ -350,11 +364,12 @@ int dataset_write(const dataset_config *cfg, char *error, size_t error_len)
         goto done;
     }
 
-    for (size_t tid = 0; tid < cfg->references; tid++)
+    for (size_t tid = 0; tid < cfg->references; tid++) {
         if (write_reference(&w, tid, lengths[tid]) < 0) {
             snprintf(error, error_len, "unable to write an alignment");
             goto done;
         }
+    }
 
     if (write_unmapped_reads(&w) < 0) {
         snprintf(error, error_len, "unable to write an unmapped read");

@@ -40,8 +40,9 @@ static size_t arena_extent(size_t cap)
 {
     size_t total = 0;
 
-    for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++)
+    for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++) {
         total += accum_extent(id, cap, cap);
+    }
 
     return total;
 }
@@ -60,8 +61,9 @@ int accum_alloc(accum *acc, size_t cap)
 {
     acc->cap   = cap;
     acc->arena = calloc(arena_extent(cap), sizeof *acc->arena);
-    if (!acc->arena)
+    if (!acc->arena) {
         return -1;
+    }
 
     bind_slots(acc);
     return 0;
@@ -75,9 +77,10 @@ void accum_free(accum *acc)
 
 void accum_zero(accum *acc, size_t len)
 {
-    for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++)
+    for (accum_field_id id = 0; id < ACCUM_N_FIELDS; id++) {
         memset(acc->slot[id], 0,
                accum_extent(id, len, acc->cap) * sizeof *acc->arena);
+    }
 }
 
 void accum_add(accum *dst, const accum *src, size_t len)
@@ -87,7 +90,8 @@ void accum_add(accum *dst, const accum *src, size_t len)
         double       *into = dst->slot[id];
         size_t        n    = accum_extent(id, len, dst->cap);
 
-        for (size_t i = 0; i < n; i++)
+        for (size_t i = 0; i < n; i++) {
             into[i] += from[i];
+        }
     }
 }

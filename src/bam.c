@@ -54,15 +54,17 @@ static uint64_t raw_offset(const cm_bam_reader *reader)
 {
     const htsFile *file = reader->file;
 
-    if (file->is_cram)
+    if (file->is_cram) {
         return (uint64_t)htell(cram_fd_get_fp(file->fp.cram));
+    }
 
     /* Tested rather than switched on the format, a bgzipped SAM also reading through
      * BGZF. A BGZF virtual offset packs two numbers: the compressed block's position
      * in the upper bits, and how far into the inflated block the reader has come in
      * the lower BGZF_OFFSET_BITS. Only the first bears on how much has been read. */
-    if (file->is_bgzf)
+    if (file->is_bgzf) {
         return (uint64_t)(bgzf_tell(file->fp.bgzf) >> BGZF_OFFSET_BITS);
+    }
 
     return file->fp.hfile ? (uint64_t)htell(file->fp.hfile) : 0;
 }
@@ -83,18 +85,22 @@ static uint64_t size_of(const char *path)
  * it is not a reason to reject the file. */
 static void limit_decoding(cm_bam_reader *reader)
 {
-    if (reader->file->format.format == cram)
+    if (reader->file->format.format == cram) {
         (void)hts_set_opt(reader->file, CRAM_OPT_REQUIRED_FIELDS, REQUIRED_FIELDS);
+    }
 }
 
 static void reader_free(cm_bam_reader *reader)
 {
-    if (reader->record)
+    if (reader->record) {
         bam_destroy1(reader->record);
-    if (reader->header)
+    }
+    if (reader->header) {
         sam_hdr_destroy(reader->header);
-    if (reader->file)
+    }
+    if (reader->file) {
         sam_close(reader->file);
+    }
     free(reader);
 }
 
@@ -141,8 +147,9 @@ cm_bam_reader *cm_bam_open(const char *path, const char **why)
 
 void cm_bam_close(cm_bam_reader *reader)
 {
-    if (reader)
+    if (reader) {
         reader_free(reader);
+    }
 }
 
 int cm_bam_set_reference(cm_bam_reader *reader, const char *fasta_path)
@@ -178,8 +185,9 @@ static const uint8_t *quality_scores(const bam1_t *record)
 {
     const uint8_t *qual = bam_get_qual(record);
 
-    if (record->core.l_qseq <= 0 || qual[0] == QUAL_ABSENT)
+    if (record->core.l_qseq <= 0 || qual[0] == QUAL_ABSENT) {
         return NULL;
+    }
 
     return qual;
 }
@@ -236,8 +244,9 @@ uint64_t cm_bam_position(const cm_bam_reader *reader)
 {
     uint64_t at;
 
-    if (reader->at_end)
+    if (reader->at_end) {
         return cm_bam_span(reader);
+    }
 
     at = raw_offset(reader);
 
@@ -278,9 +287,11 @@ static const char *find_tag(const char *line, const char *end, const char *tag)
 {
     size_t len = strlen(tag);
 
-    for (const char *p = line; p + len <= end; p++)
-        if (*p == '\t' && strncmp(p + 1, tag, len) == 0)
+    for (const char *p = line; p + len <= end; p++) {
+        if (*p == '\t' && strncmp(p + 1, tag, len) == 0) {
             return p + 1 + len;
+        }
+    }
 
     return NULL;
 }
@@ -314,8 +325,9 @@ hts_pos_t cm_bam_max_reflen(const cm_bam_reader *reader)
 
     for (int32_t tid = 0; tid < n; tid++) {
         hts_pos_t len = sam_hdr_tid2len(reader->header, tid);
-        if (len > longest)
+        if (len > longest) {
             longest = len;
+        }
     }
 
     return longest;
@@ -336,14 +348,16 @@ bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader)
     const char *order;
     size_t      len = strlen(SORT_ORDER_COORDINATE);
 
-    if (!text || strncmp(text, "@HD", 3) != 0)
+    if (!text || strncmp(text, "@HD", 3) != 0) {
         return false;
+    }
 
     end   = line_end(text);
     order = find_tag(text, end, "SO:");
 
-    if (!order)
+    if (!order) {
         return false;
+    }
 
     /* The value must fill its field, so a longer word beginning with "coordinate" does
      * not match. */
@@ -358,9 +372,11 @@ bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader)
 /* The first @SQ line at or after the given one, or NULL where there is none. */
 static const char *next_declaration(const char *line)
 {
-    for (; line; line = next_line(line))
-        if (strncmp(line, "@SQ", 3) == 0)
+    for (; line; line = next_line(line)) {
+        if (strncmp(line, "@SQ", 3) == 0) {
             return line;
+        }
+    }
 
     return NULL;
 }
@@ -387,14 +403,16 @@ const char *cm_bam_sq_checksum(cm_bam_sq_cursor *cursor, int32_t tid, size_t *le
         cursor->tid++;
     }
 
-    if (!cursor->line || cursor->tid != tid)
+    if (!cursor->line || cursor->tid != tid) {
         return NULL;
+    }
 
     end      = line_end(cursor->line);
     checksum = find_tag(cursor->line, end, "M5:");
 
-    if (checksum)
+    if (checksum) {
         *len = (size_t)(field_end(checksum, end) - checksum);
+    }
 
     return checksum;
 }

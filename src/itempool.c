@@ -17,8 +17,9 @@ struct itempool {
 
 static void release_storage(itempool *p, size_t n)
 {
-    for (size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++) {
         bam_destroy1(p->storage[i].rec);
+    }
 
     free(p->storage);
 }
@@ -26,11 +27,13 @@ static void release_storage(itempool *p, size_t n)
 static int stock_free_list(itempool *p)
 {
     void **handles = calloc(p->capacity, sizeof *handles);
-    if (!handles)
+    if (!handles) {
         return -1;
+    }
 
-    for (size_t i = 0; i < p->capacity; i++)
+    for (size_t i = 0; i < p->capacity; i++) {
         handles[i] = &p->storage[i];
+    }
 
     size_t pushed = queue_push(p->available, handles, p->capacity);
     free(handles);
@@ -41,8 +44,9 @@ static int stock_free_list(itempool *p)
 itempool *itempool_create(size_t capacity)
 {
     itempool *p = calloc(1, sizeof *p);
-    if (!p)
+    if (!p) {
         return NULL;
+    }
 
     p->capacity  = capacity;
     p->storage   = calloc(capacity, sizeof *p->storage);
@@ -72,11 +76,13 @@ itempool *itempool_create(size_t capacity)
 
 void itempool_destroy(itempool *p)
 {
-    if (!p)
+    if (!p) {
         return;
+    }
 
-    if (p->storage)
+    if (p->storage) {
         release_storage(p, p->capacity);
+    }
 
     queue_destroy(p->available);
     free(p);
@@ -89,8 +95,9 @@ size_t itempool_take_many(itempool *p, void **items, size_t n)
 
 void itempool_give_many(itempool *p, void **items, size_t n)
 {
-    for (size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++) {
         ((workitem *)items[i])->ctx = NULL;
+    }
 
     queue_push_all(p->available, items, n);
 }

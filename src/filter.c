@@ -40,11 +40,13 @@ static bool strand_accepted(const filter_config *filter, const cm_bam_record *re
  * the aligner kept. */
 static bool length_accepted(const filter_config *filter, const cm_bam_record *read)
 {
-    if (filter->min_length != FILTER_LENGTH_UNBOUNDED && read->l_qseq < filter->min_length)
+    if (filter->min_length != FILTER_LENGTH_UNBOUNDED && read->l_qseq < filter->min_length) {
         return false;
+    }
 
-    if (filter->max_length != FILTER_LENGTH_UNBOUNDED && read->l_qseq > filter->max_length)
+    if (filter->max_length != FILTER_LENGTH_UNBOUNDED && read->l_qseq > filter->max_length) {
         return false;
+    }
 
     return true;
 }

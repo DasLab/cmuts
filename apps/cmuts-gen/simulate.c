@@ -67,8 +67,9 @@ static size_t largest_read(const sim_model *model)
 sim_scratch *sim_scratch_create(const sim_model *model)
 {
     sim_scratch *scratch = calloc(1, sizeof *scratch);
-    if (!scratch)
+    if (!scratch) {
         return NULL;
+    }
 
     scratch->capacity    = largest_read(model);
     scratch->md_capacity = scratch->capacity * MD_PER_EVENT + MD_TAIL;
@@ -90,8 +91,9 @@ sim_scratch *sim_scratch_create(const sim_model *model)
 
 void sim_scratch_destroy(sim_scratch *scratch)
 {
-    if (!scratch)
+    if (!scratch) {
         return;
+    }
 
     free(scratch->md);
     free(scratch->qual);
@@ -123,8 +125,9 @@ static char different_base(char from, rng *r)
 
 void sim_sequence(char *out, size_t len, rng *r)
 {
-    for (size_t i = 0; i < len; i++)
+    for (size_t i = 0; i < len; i++) {
         out[i] = random_base(r);
+    }
 
     out[len] = '\0';
 }
@@ -157,10 +160,12 @@ sim_placement sim_place(const sim_model *model, rng *r, size_t reflen)
     sim_placement where;
     long          span = distribution_draw(&model->length, r);
 
-    if (span < 1)
+    if (span < 1) {
         span = 1;
-    if ((size_t)span > reflen)
+    }
+    if ((size_t)span > reflen) {
         span = (long)reflen;
+    }
 
     where.span  = (size_t)span;
     where.start = rng_between(r, 0, (long)(reflen - where.span));
@@ -179,9 +184,10 @@ static size_t lay_out_read(sim_scratch *scratch, const sim_model *model, rng *r,
     long deletion  = distribution_draw(&model->deletions, r);
     size_t n       = 0;
 
-    if (clips > 0)
+    if (clips > 0) {
         n = add_clip(events, n, cap,
                      distribution_draw(&model->soft_clip_length, r), r);
+    }
 
     for (size_t i = 0; i < out.span && n < cap; ) {
         size_t left = out.span - i;
@@ -193,8 +199,9 @@ static size_t lay_out_read(sim_scratch *scratch, const sim_model *model, rng *r,
         if (interior && event_falls_here(deletion, left, r)) {
             long len = distribution_draw(&model->deletion_length, r);
 
-            if (len > (long)left - 1)
+            if (len > (long)left - 1) {
                 len = (long)left - 1;
+            }
 
             if (len > 0) {
                 for (long k = 0; k < len && n < cap; k++) {
@@ -219,8 +226,9 @@ static size_t lay_out_read(sim_scratch *scratch, const sim_model *model, rng *r,
             insertion--;
         }
 
-        if (n >= cap)
+        if (n >= cap) {
             break;
+        }
 
         char base     = reference[out.start + i];
         bool mismatch = rng_chance(r, model->mismatch_rate);
@@ -232,9 +240,10 @@ static size_t lay_out_read(sim_scratch *scratch, const sim_model *model, rng *r,
         i++;
     }
 
-    if (clips > 1)
+    if (clips > 1) {
         n = add_clip(events, n, cap,
                      distribution_draw(&model->soft_clip_length, r), r);
+    }
 
     return n;
 }
@@ -262,8 +271,9 @@ static size_t build_cigar(const sim_event *events, size_t n, uint32_t *out)
         int    op  = cigar_op_of(events[i].kind);
         size_t run = 1;
 
-        while (i + run < n && cigar_op_of(events[i + run].kind) == op)
+        while (i + run < n && cigar_op_of(events[i + run].kind) == op) {
             run++;
+        }
 
         out[written++] = bam_cigar_gen((uint32_t)run, op);
         i += run;
@@ -278,8 +288,9 @@ static size_t build_sequence(const sim_event *events, size_t n, const sim_model 
     size_t len = 0;
 
     for (size_t i = 0; i < n; i++) {
-        if (events[i].kind == EV_DELETE)
+        if (events[i].kind == EV_DELETE) {
             continue;
+        }
 
         seq[len]  = events[i].query;
         qual[len] = (char)distribution_draw(&model->base_quality, r);
@@ -301,8 +312,9 @@ static size_t append_run(char *md, size_t used, size_t cap, long run,
 {
     int wrote = snprintf(md + used, cap - used, "%ld%c", run, closing);
 
-    if (wrote < 0)
+    if (wrote < 0) {
         return used;
+    }
 
     return used + (size_t)wrote < cap ? used + (size_t)wrote : cap - 1;
 }
@@ -310,8 +322,9 @@ static size_t append_run(char *md, size_t used, size_t cap, long run,
 /* Appends one deleted base, written only where both it and the terminator after it fit. */
 static size_t append_base(char *md, size_t used, size_t cap, char base)
 {
-    if (used + 1 >= cap)
+    if (used + 1 >= cap) {
         return used;
+    }
 
     md[used++] = base;
     md[used]   = '\0';
@@ -365,9 +378,11 @@ static int count_differences(const sim_event *events, size_t n)
 {
     int nm = 0;
 
-    for (size_t i = 0; i < n; i++)
-        if (events[i].kind != EV_MATCH && events[i].kind != EV_SOFT)
+    for (size_t i = 0; i < n; i++) {
+        if (events[i].kind != EV_MATCH && events[i].kind != EV_SOFT) {
             nm++;
+        }
+    }
 
     return nm;
 }
@@ -380,8 +395,9 @@ static int attach_tags(bam1_t *rec, int nm, const char *md)
 {
     int32_t value = nm;
 
-    if (bam_aux_append(rec, "NM", 'i', sizeof value, (const uint8_t *)&value) < 0)
+    if (bam_aux_append(rec, "NM", 'i', sizeof value, (const uint8_t *)&value) < 0) {
         return -1;
+    }
 
     return bam_aux_append(rec, "MD", 'Z', (int)strlen(md) + 1,
                           (const uint8_t *)md) < 0 ? -1 : 0;
@@ -402,8 +418,9 @@ int sim_alignment(bam1_t *rec, sim_scratch *scratch, const sim_model *model,
 
     if (bam_set1(rec, strlen(name), name, flag, tid, where.start, mapq,
                  n_cigar, scratch->cigar, -1, -1, 0,
-                 l_seq, scratch->seq, scratch->qual, 0) < 0)
+                 l_seq, scratch->seq, scratch->qual, 0) < 0) {
         return -1;
+    }
 
     return attach_tags(rec, count_differences(scratch->events, events), scratch->md);
 }
@@ -413,14 +430,17 @@ int sim_unmapped(bam1_t *rec, sim_scratch *scratch, const sim_model *model,
 {
     long len = distribution_draw(&model->length, r);
 
-    if (len < 1)
+    if (len < 1) {
         len = 1;
-    if ((size_t)len > scratch->capacity)
+    }
+    if ((size_t)len > scratch->capacity) {
         len = (long)scratch->capacity;
+    }
 
     sim_sequence(scratch->seq, (size_t)len, r);
-    for (long i = 0; i < len; i++)
+    for (long i = 0; i < len; i++) {
         scratch->qual[i] = (char)distribution_draw(&model->base_quality, r);
+    }
 
     return bam_set1(rec, strlen(name), name, BAM_FUNMAP, -1, -1, 0,
                     0, NULL, -1, -1, 0,

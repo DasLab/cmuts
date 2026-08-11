@@ -207,12 +207,14 @@ static int parse_distribution(distribution *out,
 {
     int prefix = snprintf(error, error_len, "--%s: ", option->name);
 
-    if (prefix < 0 || (size_t)prefix >= error_len)
+    if (prefix < 0 || (size_t)prefix >= error_len) {
         return -1;
+    }
 
     if (distribution_parse(out, text, error + prefix,
-                           error_len - (size_t)prefix) != 0)
+                           error_len - (size_t)prefix) != 0) {
         return -1;
+    }
 
     error[0] = '\0';
     return 0;
@@ -249,8 +251,9 @@ int gen_configure(dataset_config *cfg, const gen_args *args,
         const distribution_option *option = &DISTRIBUTION_OPTIONS[i];
 
         if (parse_distribution(destination(cfg, option), option,
-                       written_form(args, option), error, error_len) < 0)
+                       written_form(args, option), error, error_len) < 0) {
             return -1;
+        }
     }
 
     return 0;

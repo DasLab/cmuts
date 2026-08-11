@@ -11,6 +11,7 @@
  * wrong, so 0 means no confidence at all and 30 one chance in a thousand. */
 void phred_build(phred *table)
 {
-    for (unsigned quality = 0; quality <= PHRED_MAX; quality++)
+    for (unsigned quality = 0; quality <= PHRED_MAX; quality++) {
         table->error[quality] = pow(10.0, -(double)quality / 10.0);
+    }
 }

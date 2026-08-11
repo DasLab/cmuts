@@ -59,16 +59,18 @@ refseq_source *refseq_open(const char *fasta_path, const cm_bam_stream *bams,
         return NULL;
     }
 
-    for (size_t file = 0; file < files; file++)
+    for (size_t file = 0; file < files; file++) {
         cm_bam_sq_open(&src->declarations[file], header_of(src, file));
+    }
 
     return src;
 }
 
 void refseq_close(refseq_source *src)
 {
-    if (!src)
+    if (!src) {
         return;
+    }
 
     cm_fasta_close(src->fasta);
     free(src->declarations);
@@ -83,8 +85,9 @@ static bool name_matches(refseq_source *src, size_t file, int32_t tid)
 {
     const char *expected = cm_bam_refname(header_of(src, file), tid);
 
-    if (expected && strcmp(src->record.name, expected) == 0)
+    if (expected && strcmp(src->record.name, expected) == 0) {
         return true;
+    }
 
     snprintf(src->error, sizeof src->error,
              "reference %d is \"%s\" in the header of %s but \"%s\" in the FASTA; "
@@ -98,8 +101,9 @@ static bool length_matches(refseq_source *src, size_t file, int32_t tid)
 {
     hts_pos_t expected = cm_bam_reflen(header_of(src, file), tid);
 
-    if ((hts_pos_t)src->record.len == expected)
+    if ((hts_pos_t)src->record.len == expected) {
         return true;
+    }
 
     snprintf(src->error, sizeof src->error,
              "reference \"%s\" is %" PRIhts_pos " bases in the header of %s "
@@ -118,8 +122,9 @@ typedef struct {
 static const char *digest_of(digest *md5, const cm_fasta_record *record)
 {
     if (!md5->taken) {
-        if (!checksum_sequence(record->seq, record->len, md5->value))
+        if (!checksum_sequence(record->seq, record->len, md5->value)) {
             return NULL;
+        }
 
         md5->taken = true;
     }
@@ -141,8 +146,9 @@ static bool checksum_matches(refseq_source *src, size_t file, int32_t tid, diges
                                                   &declared_len);
     const char *computed;
 
-    if (!declared)
+    if (!declared) {
         return true;
+    }
 
     if (declared_len != CHECKSUM_LEN) {
         snprintf(src->error, sizeof src->error,
@@ -161,8 +167,9 @@ static bool checksum_matches(refseq_source *src, size_t file, int32_t tid, diges
         return false;
     }
 
-    if (strncasecmp(declared, computed, CHECKSUM_LEN) == 0)
+    if (strncasecmp(declared, computed, CHECKSUM_LEN) == 0) {
         return true;
+    }
 
     snprintf(src->error, sizeof src->error,
              "reference \"%s\" in the FASTA is not the sequence the alignments "
@@ -183,9 +190,11 @@ static bool matches_headers(refseq_source *src, int32_t tid)
 {
     digest md5 = { 0 };
 
-    for (size_t file = 0; file < cm_bam_stream_count(src->bams); file++)
-        if (!matches_header(src, file, tid, &md5))
+    for (size_t file = 0; file < cm_bam_stream_count(src->bams); file++) {
+        if (!matches_header(src, file, tid, &md5)) {
             return false;
+        }
+    }
 
     return true;
 }
@@ -227,8 +236,9 @@ const cm_fasta_record *refseq_advance(refseq_source *src, int32_t tid)
         return NULL;
     }
 
-    if (!consume_through(src, tid))
+    if (!consume_through(src, tid)) {
         return NULL;
+    }
 
     return matches_headers(src, tid) ? &src->record : NULL;
 }

@@ -76,8 +76,9 @@ static double combine(out_combine how, double treated, double untreated)
 static void combine_row(out_combine how, const double *treated,
                         const double *untreated, double *out, size_t n)
 {
-    for (size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++) {
         out[i] = combine(how, treated[i], untreated[i]);
+    }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -89,11 +90,13 @@ static int subtract_field(subtraction *s, out_field_id id, int32_t tid,
 {
     size_t width = out_extent(id, s->ref_cap, s->ref_cap);
 
-    if (h5reader_field(s->treated, id, tid, s->left) < 0)
+    if (h5reader_field(s->treated, id, tid, s->left) < 0) {
         return fail_input(error, error_len, s->cfg->treated_path, s->treated);
+    }
 
-    if (h5reader_field(s->untreated, id, tid, s->right) < 0)
+    if (h5reader_field(s->untreated, id, tid, s->right) < 0) {
         return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
+    }
 
     combine_row(OUT_FIELDS[id].combine, s->left, s->right, s->result, width);
 
@@ -101,8 +104,9 @@ static int subtract_field(subtraction *s, out_field_id id, int32_t tid,
      * recording no reference lengths. The columns past a reference are NaN in both
      * inputs and stay NaN through the arithmetic, which is the mark the writer would
      * otherwise apply itself. */
-    if (h5writer_field(s->out, id, tid, s->ref_cap, s->result) < 0)
+    if (h5writer_field(s->out, id, tid, s->ref_cap, s->result) < 0) {
         return fail_output(s, error, error_len);
+    }
 
     return 0;
 }
@@ -110,18 +114,22 @@ static int subtract_field(subtraction *s, out_field_id id, int32_t tid,
 static int subtract_reference(subtraction *s, int32_t tid, char *error,
                               size_t error_len)
 {
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++)
-        if (subtract_field(s, id, tid, error, error_len) < 0)
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (subtract_field(s, id, tid, error, error_len) < 0) {
             return -1;
+        }
+    }
 
     return 0;
 }
 
 static int subtract_references(subtraction *s, char *error, size_t error_len)
 {
-    for (int32_t tid = 0; tid < s->n_refs; tid++)
-        if (subtract_reference(s, tid, error, error_len) < 0)
+    for (int32_t tid = 0; tid < s->n_refs; tid++) {
+        if (subtract_reference(s, tid, error, error_len) < 0) {
             return -1;
+        }
+    }
 
     return 0;
 }
@@ -134,11 +142,13 @@ static int read_totals(subtraction *s, char *error, size_t error_len)
 {
     size_t treated, untreated;
 
-    if (metadata_read_run(s->treated, &treated) < 0)
+    if (metadata_read_run(s->treated, &treated) < 0) {
         return fail_input(error, error_len, s->cfg->treated_path, s->treated);
+    }
 
-    if (metadata_read_run(s->untreated, &untreated) < 0)
+    if (metadata_read_run(s->untreated, &untreated) < 0) {
         return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
+    }
 
     s->unmapped = treated + untreated;
     return 0;
@@ -192,14 +202,17 @@ static int open_inputs(subtraction *s, char *error, size_t error_len)
         return -1;
     }
 
-    if (h5reader_error(s->treated))
+    if (h5reader_error(s->treated)) {
         return fail_input(error, error_len, s->cfg->treated_path, s->treated);
+    }
 
-    if (h5reader_error(s->untreated))
+    if (h5reader_error(s->untreated)) {
         return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
+    }
 
-    if (check_agreement(s, error, error_len) < 0)
+    if (check_agreement(s, error, error_len) < 0) {
         return -1;
+    }
 
     return read_totals(s, error, error_len);
 }
@@ -253,16 +266,18 @@ int subtract_run(const subtract_config *cfg, char *error, size_t error_len)
     int         status      = -1;
 
     if (h5writer_may_replace(cfg->output_path, cfg->overwrite, &may_replace,
-                             error, error_len) < 0)
+                             error, error_len) < 0) {
         return -1;
+    }
 
     /* Every way an input can be wrong is found before the output is created, so a run
      * that refuses its inputs leaves whatever is at that path alone. */
     if (open_inputs(&s, error, error_len) == 0 &&
         build_buffers(&s, error, error_len) == 0 &&
         open_output(&s, may_replace, error, error_len) == 0 &&
-        subtract_references(&s, error, error_len) == 0)
+        subtract_references(&s, error, error_len) == 0) {
         status = write_totals(&s, error, error_len);
+    }
 
     subtraction_teardown(&s);
     return status;

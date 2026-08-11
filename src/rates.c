@@ -36,10 +36,11 @@ void rate_reactivity(const rate_config *cfg, const accum *acc, size_t len,
     const double *mutations = accum_const_data(acc, ACCUM_MUTATIONS);
     double        wanted    = cfg->min_depth;
 
-    for (size_t i = 0; i < len; i++)
+    for (size_t i = 0; i < len; i++) {
         out[i] = known_at(wanted, evidence[i])
                ? rate_of(mutations[i], evidence[i])
                : (double)NAN;
+    }
 }
 
 /* The standard error of the rate, taking the evidence as the count it is a proportion

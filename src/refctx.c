@@ -87,8 +87,9 @@ static void release_storage(ctxpool *p, size_t n)
 static int build_context(refctx *ctx, size_t ref_cap)
 {
     ctx->seq = malloc(ref_cap + 1);
-    if (!ctx->seq)
+    if (!ctx->seq) {
         return -1;
+    }
 
     if (accum_alloc(&ctx->acc, ref_cap) < 0) {
         free(ctx->seq);
@@ -104,11 +105,13 @@ static int build_context(refctx *ctx, size_t ref_cap)
 static int stock_free_list(ctxpool *p)
 {
     void **handles = calloc(p->capacity, sizeof *handles);
-    if (!handles)
+    if (!handles) {
         return -1;
+    }
 
-    for (size_t i = 0; i < p->capacity; i++)
+    for (size_t i = 0; i < p->capacity; i++) {
         handles[i] = &p->storage[i];
+    }
 
     size_t pushed = queue_push(p->available, handles, p->capacity);
     free(handles);
@@ -119,8 +122,9 @@ static int stock_free_list(ctxpool *p)
 ctxpool *ctxpool_create(size_t capacity, size_t ref_cap)
 {
     ctxpool *p = calloc(1, sizeof *p);
-    if (!p)
+    if (!p) {
         return NULL;
+    }
 
     p->capacity  = capacity;
     p->ref_cap   = ref_cap;
@@ -150,11 +154,13 @@ ctxpool *ctxpool_create(size_t capacity, size_t ref_cap)
 
 void ctxpool_destroy(ctxpool *p)
 {
-    if (!p)
+    if (!p) {
         return;
+    }
 
-    if (p->storage)
+    if (p->storage) {
         release_storage(p, p->capacity);
+    }
 
     queue_destroy(p->available);
     free(p);

@@ -32,14 +32,17 @@ aln_span aln_placed_span(const cm_bam_record *read)
 
     /* A read carrying no CIGAR places nothing, whatever length it stores. An empty span
      * keeps a caller from reading places that were never written. */
-    if (read->n_cigar == 0)
+    if (read->n_cigar == 0) {
         return (aln_span){ .begin = 0, .end = 0 };
+    }
 
-    while (first < last && is_clip(bam_cigar_op(read->cigar[first])))
+    while (first < last && is_clip(bam_cigar_op(read->cigar[first]))) {
         span.begin += soft_clipped(read->cigar[first++]);
+    }
 
-    while (last > first && is_clip(bam_cigar_op(read->cigar[last - 1])))
+    while (last > first && is_clip(bam_cigar_op(read->cigar[last - 1]))) {
         span.end -= soft_clipped(read->cigar[--last]);
+    }
 
     return span;
 }
@@ -58,13 +61,15 @@ aln_span aln_places(const cm_bam_record *read, aln_place *places)
         uint32_t len      = bam_cigar_oplen(read->cigar[i]);
         int      consumes = bam_cigar_type(op);
 
-        if (is_clip(op))
+        if (is_clip(op)) {
             continue;
+        }
 
         if (consumes & CIGAR_CONSUMES_QUERY) {
             for (uint32_t j = 0; j < len; j++) {
-                if (consumes & CIGAR_CONSUMES_REFERENCE)
+                if (consumes & CIGAR_CONSUMES_REFERENCE) {
                     reference++;
+                }
 
                 placed++;
                 places[placed].first = reference;

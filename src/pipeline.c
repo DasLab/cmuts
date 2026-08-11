@@ -105,21 +105,24 @@ static void worker_flush_shadow(worker *w)
 {
     refctx *ctx = w->held;
 
-    if (!ctx)
+    if (!ctx) {
         return;
+    }
 
     refctx_merge(ctx, &w->shadow);
     accum_zero(&w->shadow, ctx->len);
     w->held = NULL;
 
-    if (refctx_release(ctx, 1))
+    if (refctx_release(ctx, 1)) {
         pipeline_finish_reference(w->pipe, ctx);
+    }
 }
 
 static void worker_switch_shadow(worker *w, refctx *ctx)
 {
-    if (w->held == ctx)
+    if (w->held == ctx) {
         return;
+    }
 
     worker_flush_shadow(w);
     refctx_acquire(ctx, 1);
@@ -149,8 +152,9 @@ static void worker_count_run(worker *w, void **slots, size_t n,
         status = tally(&read, ref, &w->pipe->tally_tables, w->scratch,
                        &w->shadow);
 
-        if (status != PHMM_OK)
+        if (status != PHMM_OK) {
             failure_record(w->failure, status);
+        }
     }
 }
 
@@ -166,8 +170,9 @@ static void worker_process_run(worker *w, void **slots, size_t n)
 
     /* A run reached after a failure is released without being counted, nothing
      * being left to read what it would have contributed. */
-    if (failure_seen(w->failure) == PHMM_OK)
+    if (failure_seen(w->failure) == PHMM_OK) {
         worker_count_run(w, slots, n, &ref);
+    }
 
     /* Returned in one piece, the whole run finishing at once. Nothing reads these
      * carriers afterwards: worker_process_batch scans for runs only at or beyond
@@ -185,8 +190,9 @@ static void worker_process_batch(worker *w, void **slots, size_t n)
         const workitem *head = slots[i];
         size_t          run  = 1;
 
-        while (i + run < n && item_at(slots, i + run)->ctx == head->ctx)
+        while (i + run < n && item_at(slots, i + run)->ctx == head->ctx) {
             run++;
+        }
 
         worker_process_run(w, slots + i, run);
         i += run;
@@ -208,8 +214,9 @@ static void *worker_main(void *arg)
             worker_flush_shadow(w);
 
             n = queue_pop(w->pipe->work, w->slots, batch);
-            if (n == 0)
+            if (n == 0) {
                 break;
+            }
         }
 
         worker_process_batch(w, w->slots, n);
@@ -251,8 +258,9 @@ static int loader_open(loader *l, const pipeline *p, const failure_flag *f)
     l->batch = calloc(p->batch, sizeof *l->batch);
     l->spare = calloc(p->batch, sizeof *l->spare);
 
-    if (l->batch && l->spare)
+    if (l->batch && l->spare) {
         return 0;
+    }
 
     free(l->batch);
     free(l->spare);
@@ -265,8 +273,9 @@ static int loader_open(loader *l, const pipeline *p, const failure_flag *f)
  * the moment the reference is opened, covers that gap. */
 static void loader_dispatch(loader *l)
 {
-    if (l->queued == 0)
+    if (l->queued == 0) {
         return;
+    }
 
     refctx_acquire(l->reference, (int)l->queued);
     queue_push_all(l->pipe->work, l->batch, l->queued);
@@ -280,30 +289,35 @@ static void loader_leave_reference(loader *l)
 {
     refctx *ctx = l->reference;
 
-    if (!ctx)
+    if (!ctx) {
         return;
+    }
 
     loader_dispatch(l);
 
-    if (l->rejected)
+    if (l->rejected) {
         refctx_add_scalar(ctx, ACCUM_FILTERED, (double)l->rejected);
+    }
 
     l->reference = NULL;
     l->rejected  = 0;
 
-    if (refctx_release(ctx, 1))
+    if (refctx_release(ctx, 1)) {
         pipeline_finish_reference(l->pipe, ctx);
+    }
 }
 
 static refctx *pipeline_open_reference(const pipeline *p, int32_t tid)
 {
     const cm_fasta_record *seq = refseq_advance(p->refs, tid);
-    if (!seq)
+    if (!seq) {
         return NULL;
+    }
 
     refctx *ctx = ctxpool_take(p->contexts);
-    if (!ctx)
+    if (!ctx) {
         return NULL;
+    }
 
     refctx_open(ctx, tid, cm_bam_stream_refname(p->bam, tid), seq);
     return ctx;
@@ -317,11 +331,13 @@ static bool loader_emit_empty(loader *l, int32_t tid)
 {
     refctx *ctx = pipeline_open_reference(l->pipe, tid);
 
-    if (!ctx)
+    if (!ctx) {
         return false;
+    }
 
-    if (refctx_release(ctx, 1))
+    if (refctx_release(ctx, 1)) {
         pipeline_finish_reference(l->pipe, ctx);
+    }
 
     return true;
 }
@@ -334,8 +350,9 @@ static bool loader_account_through(loader *l, int32_t upto)
         int32_t tid = l->owed++;
 
         if ((size_t)cm_bam_stream_reflen(p->bam, tid) < p->ref_cap
-            && !loader_emit_empty(l, tid))
+            && !loader_emit_empty(l, tid)) {
             return false;
+        }
     }
 
     return true;
@@ -347,13 +364,15 @@ static bool loader_account_through(loader *l, int32_t upto)
  * received none. */
 static bool loader_on_reference(loader *l, int32_t tid)
 {
-    if (l->reference && l->reference->tid == tid)
+    if (l->reference && l->reference->tid == tid) {
         return true;
+    }
 
     loader_leave_reference(l);
 
-    if (!loader_account_through(l, tid))
+    if (!loader_account_through(l, tid)) {
         return false;
+    }
 
     l->reference = pipeline_open_reference(l->pipe, tid);
     l->owed      = tid + 1;
@@ -366,8 +385,9 @@ static bool loader_on_reference(loader *l, int32_t tid)
  * read. */
 static workitem *loader_carrier(loader *l)
 {
-    if (l->held == 0)
+    if (l->held == 0) {
         l->held = itempool_take_many(l->pipe->items, l->spare, l->pipe->batch);
+    }
 
     return l->held ? l->spare[--l->held] : NULL;
 }
@@ -378,8 +398,9 @@ static int loader_take_read(loader *l)
 {
     workitem *item = loader_carrier(l);
 
-    if (!item)
+    if (!item) {
         return -1;
+    }
 
     if (!bam_copy1(item->rec, cm_bam_stream_raw(l->pipe->bam))) {
         l->spare[l->held++] = item;
@@ -389,8 +410,9 @@ static int loader_take_read(loader *l)
     item->ctx             = l->reference;
     l->batch[l->queued++] = item;
 
-    if (l->queued == l->pipe->batch)
+    if (l->queued == l->pipe->batch) {
         loader_dispatch(l);
+    }
 
     return 0;
 }
@@ -400,8 +422,9 @@ static void loader_finish(loader *l)
 {
     loader_leave_reference(l);
 
-    if (l->held)
+    if (l->held) {
         itempool_give_many(l->pipe->items, l->spare, l->held);
+    }
 
     free(l->spare);
     free(l->batch);
@@ -426,8 +449,9 @@ static int loader_main(const pipeline *p, const failure_flag *f,
 
         /* A worker has failed for a reason no later read would escape, so reading
          * on gains nothing. Not an error here: the worker reports it. */
-        if (failure_seen(l.failure) != PHMM_OK)
+        if (failure_seen(l.failure) != PHMM_OK) {
             break;
+        }
 
         /* Unmapped reads align to no reference, so they are counted for the run as
          * a whole and go no further. */
@@ -496,18 +520,20 @@ static void *consumer_main(void *arg)
     void     *slots[COMPLETION_BATCH];
     size_t    n;
 
-    while ((n = queue_pop(c->pipe->completed, slots, COMPLETION_BATCH)) > 0)
+    while ((n = queue_pop(c->pipe->completed, slots, COMPLETION_BATCH)) > 0) {
         for (size_t i = 0; i < n; i++) {
             refctx *ctx = slots[i];
 
             /* Keep draining after a failure, or the loader and workers block on a
              * queue nothing is emptying. */
             if (c->status == 0 &&
-                refrow_write(c->pipe->rows, ctx->tid, ctx->len, &ctx->acc) < 0)
+                refrow_write(c->pipe->rows, ctx->tid, ctx->len, &ctx->acc) < 0) {
                 c->status = -1;
+            }
 
             ctxpool_give(c->pipe->contexts, ctx);
         }
+    }
 
     return NULL;
 }
@@ -674,8 +700,9 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
                              error, error_len) < 0 ||
         pipeline_open_inputs(&p, cfg, error, error_len) < 0 ||
         pipeline_build_buffers(&p, cfg, error, error_len) < 0 ||
-        pipeline_open_output(&p, cfg, may_replace, error, error_len) < 0)
+        pipeline_open_output(&p, cfg, may_replace, error, error_len) < 0) {
         goto done;
+    }
 
     tally_tables_build(&p.tally_tables, &cfg->tally_config);
 
@@ -689,12 +716,14 @@ int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len)
     }
 
     if (worker_start_all(workers, cfg->workers, &p, &failed, &started,
-                         error, error_len) == 0)
+                         error, error_len) == 0) {
         status = loader_main(&p, &failed, &unmapped, error, error_len);
+    }
 
     queue_close(p.work);
-    for (size_t i = 0; i < started; i++)
+    for (size_t i = 0; i < started; i++) {
         pthread_join(workers[i].thread, NULL);
+    }
 
     queue_close(p.completed);
     pthread_join(cons.thread, NULL);

@@ -104,8 +104,9 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
 {
     hid_t     fcpl, gcpl;
     h5writer *w = calloc(1, sizeof *w);
-    if (!w)
+    if (!w) {
         return NULL;
+    }
 
     /* Report failures through h5writer_error rather than HDF5's own stack trace on
      * stderr. */
@@ -132,8 +133,9 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
         return w;
     }
 
-    for (size_t i = 0; i < ref_cap; i++)
+    for (size_t i = 0; i < ref_cap; i++) {
         w->padding[i] = (double)NAN;
+    }
 
     w->memspace = h5layout_row_space(ref_cap);
     if (w->memspace < 0) {
@@ -194,24 +196,30 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
 
 void h5writer_close(h5writer *w)
 {
-    if (!w)
+    if (!w) {
         return;
-
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (w->filespace[id] >= 0)
-            H5Sclose(w->filespace[id]);
-        if (w->dataset[id] >= 0)
-            H5Dclose(w->dataset[id]);
     }
 
-    if (w->memspace >= 0)
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (w->filespace[id] >= 0) {
+            H5Sclose(w->filespace[id]);
+        }
+        if (w->dataset[id] >= 0) {
+            H5Dclose(w->dataset[id]);
+        }
+    }
+
+    if (w->memspace >= 0) {
         H5Sclose(w->memspace);
+    }
 
-    if (w->reads >= 0)
+    if (w->reads >= 0) {
         H5Gclose(w->reads);
+    }
 
-    if (w->file >= 0)
+    if (w->file >= 0) {
         H5Fclose(w->file);
+    }
 
     free(w->padding);
     free(w);
@@ -231,11 +239,13 @@ static int write_part(h5writer *w, out_field_id id, int32_t tid, size_t from,
 {
     herr_t status;
 
-    if (n == 0)
+    if (n == 0) {
         return 0;
+    }
 
-    if (h5layout_select_span(w->filespace[id], w->memspace, id, tid, from, n) < 0)
+    if (h5layout_select_span(w->filespace[id], w->memspace, id, tid, from, n) < 0) {
         return fail(w, "unable to select an output row");
+    }
 
     status = H5Dwrite(w->dataset[id], H5T_NATIVE_DOUBLE, w->memspace,
                       w->filespace[id], H5P_DEFAULT, values);
@@ -256,14 +266,17 @@ int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
     size_t extent = out_extent(id, len, w->ref_cap);
     size_t width  = out_extent(id, w->ref_cap, w->ref_cap);
 
-    if (tid < 0 || tid >= w->n_refs)
+    if (tid < 0 || tid >= w->n_refs) {
         return fail(w, "reference index outside the output");
+    }
 
-    if (write_part(w, id, tid, 0, extent, values) < 0)
+    if (write_part(w, id, tid, 0, extent, values) < 0) {
         return -1;
+    }
 
-    if (extent == width)
+    if (extent == width) {
         return 0;
+    }
 
     return write_part(w, id, tid, extent, width - extent, w->padding);
 }
@@ -286,20 +299,25 @@ int h5writer_count(h5writer *w, const char *name, size_t value)
     hid_t    dataset = H5I_INVALID_HID;
     herr_t   status  = -1;
 
-    if (space >= 0 && dcpl >= 0)
+    if (space >= 0 && dcpl >= 0) {
         dataset = H5Dcreate2(w->reads, name, H5T_STD_U64LE, space,
                              H5P_DEFAULT, dcpl, H5P_DEFAULT);
+    }
 
-    if (dataset >= 0)
+    if (dataset >= 0) {
         status = H5Dwrite(dataset, H5T_NATIVE_UINT64, H5S_ALL, H5S_ALL,
                           H5P_DEFAULT, &stored);
+    }
 
-    if (dataset >= 0)
+    if (dataset >= 0) {
         H5Dclose(dataset);
-    if (dcpl >= 0)
+    }
+    if (dcpl >= 0) {
         H5Pclose(dcpl);
-    if (space >= 0)
+    }
+    if (space >= 0) {
         H5Sclose(space);
+    }
 
     return status < 0 ? fail(w, "unable to write a run total") : 0;
 }

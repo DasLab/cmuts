@@ -56,20 +56,24 @@ static int open_source(cm_bam_stream *stream, source *src, const char *path,
     src->path   = path;
     src->reader = cm_bam_open(path, &why);
 
-    if (!src->reader)
+    if (!src->reader) {
         return fail(stream, path, why);
+    }
 
-    if (!cm_bam_is_coordinate_sorted(src->reader))
+    if (!cm_bam_is_coordinate_sorted(src->reader)) {
         return fail(stream, path, "not coordinate sorted; references would stay "
                                   "live to the end of the file");
+    }
 
-    if (cm_bam_nref(src->reader) < 1)
+    if (cm_bam_nref(src->reader) < 1) {
         return fail(stream, path, "declares no references");
+    }
 
     /* Set before any record is read, so that a CRAM decodes against the same
      * reference its reads are compared to. */
-    if (cm_bam_set_reference(src->reader, fasta_path) < 0)
+    if (cm_bam_set_reference(src->reader, fasta_path) < 0) {
         return fail(stream, path, cm_bam_error(src->reader));
+    }
 
     return 0;
 }
@@ -79,8 +83,9 @@ static int open_source(cm_bam_stream *stream, source *src, const char *path,
  * others are read. */
 static int share_threads(cm_bam_stream *stream, int threads)
 {
-    if (threads < 1)
+    if (threads < 1) {
         return 0;
+    }
 
     stream->pool.pool = hts_tpool_init(threads);
     if (!stream->pool.pool) {
@@ -89,10 +94,12 @@ static int share_threads(cm_bam_stream *stream, int threads)
         return -1;
     }
 
-    for (size_t i = 0; i < stream->n; i++)
-        if (cm_bam_use_pool(stream->sources[i].reader, &stream->pool) < 0)
+    for (size_t i = 0; i < stream->n; i++) {
+        if (cm_bam_use_pool(stream->sources[i].reader, &stream->pool) < 0) {
             return fail(stream, stream->sources[i].path,
                         cm_bam_error(stream->sources[i].reader));
+        }
+    }
 
     return 0;
 }
@@ -103,11 +110,13 @@ static int advance(cm_bam_stream *stream, source *src)
 {
     int status = cm_bam_next(src->reader, &src->pending);
 
-    if (status == CM_ITER_ERROR)
+    if (status == CM_ITER_ERROR) {
         return fail(stream, src->path, cm_bam_error(src->reader));
+    }
 
-    if (status == CM_ITER_EOF)
+    if (status == CM_ITER_EOF) {
         src->spent = true;
+    }
 
     return 0;
 }
@@ -116,8 +125,9 @@ cm_bam_stream *cm_bam_stream_open(const char *const *paths, size_t n_paths,
                                   const char *fasta_path, int threads)
 {
     cm_bam_stream *stream = calloc(1, sizeof *stream);
-    if (!stream)
+    if (!stream) {
         return NULL;
+    }
 
     stream->sources = calloc(n_paths, sizeof *stream->sources);
     if (!stream->sources) {
@@ -128,31 +138,39 @@ cm_bam_stream *cm_bam_stream_open(const char *const *paths, size_t n_paths,
     stream->n       = n_paths;
     stream->current = ORDER_NONE;
 
-    for (size_t i = 0; i < n_paths; i++)
-        if (open_source(stream, &stream->sources[i], paths[i], fasta_path) < 0)
+    for (size_t i = 0; i < n_paths; i++) {
+        if (open_source(stream, &stream->sources[i], paths[i], fasta_path) < 0) {
             return stream;
+        }
+    }
 
-    if (share_threads(stream, threads) < 0)
+    if (share_threads(stream, threads) < 0) {
         return stream;
+    }
 
-    for (size_t i = 0; i < n_paths; i++)
-        if (advance(stream, &stream->sources[i]) < 0)
+    for (size_t i = 0; i < n_paths; i++) {
+        if (advance(stream, &stream->sources[i]) < 0) {
             return stream;
+        }
+    }
 
     return stream;
 }
 
 void cm_bam_stream_close(cm_bam_stream *stream)
 {
-    if (!stream)
+    if (!stream) {
         return;
+    }
 
-    for (size_t i = 0; i < stream->n; i++)
+    for (size_t i = 0; i < stream->n; i++) {
         cm_bam_close(stream->sources[i].reader);
+    }
 
     /* Destroyed after the readers, which draw on it until they are closed. */
-    if (stream->pool.pool)
+    if (stream->pool.pool) {
         hts_tpool_destroy(stream->pool.pool);
+    }
 
     free(stream->sources);
     free(stream);
@@ -176,11 +194,12 @@ static int64_t order_of(const source *src)
 static bool holder_of(const cm_bam_stream *stream, int64_t reference, size_t from,
                       size_t *out)
 {
-    for (size_t i = from; i < stream->n; i++)
+    for (size_t i = from; i < stream->n; i++) {
         if (!stream->sources[i].spent && order_of(&stream->sources[i]) == reference) {
             *out = i;
             return true;
         }
+    }
 
     return false;
 }
@@ -193,8 +212,9 @@ static bool lowest_holder(const cm_bam_stream *stream, size_t *out)
     bool   found  = false;
 
     for (size_t i = 0; i < stream->n; i++) {
-        if (stream->sources[i].spent)
+        if (stream->sources[i].spent) {
             continue;
+        }
 
         if (!found || order_of(&stream->sources[i]) < order_of(&stream->sources[lowest])) {
             lowest = i;
@@ -202,8 +222,9 @@ static bool lowest_holder(const cm_bam_stream *stream, size_t *out)
         }
     }
 
-    if (found)
+    if (found) {
         *out = lowest;
+    }
 
     return found;
 }
@@ -220,8 +241,9 @@ static bool select_source(cm_bam_stream *stream)
         return true;
     }
 
-    if (!lowest_holder(stream, &at))
+    if (!lowest_holder(stream, &at)) {
         return false;
+    }
 
     stream->at      = at;
     stream->current = order_of(&stream->sources[at]);
@@ -233,13 +255,15 @@ int cm_bam_stream_next(cm_bam_stream *stream, cm_bam_record *out)
 {
     /* The record handed out last time belongs to the source, so it is overwritten only
      * now that the caller is done with it. */
-    if (stream->supplied && advance(stream, &stream->sources[stream->at]) < 0)
+    if (stream->supplied && advance(stream, &stream->sources[stream->at]) < 0) {
         return CM_ITER_ERROR;
+    }
 
     stream->supplied = false;
 
-    if (!select_source(stream))
+    if (!select_source(stream)) {
         return CM_ITER_EOF;
+    }
 
     stream->supplied = true;
     *out             = stream->sources[stream->at].pending;
@@ -260,8 +284,9 @@ uint64_t cm_bam_stream_position(const cm_bam_stream *stream)
 {
     uint64_t total = 0;
 
-    for (size_t i = 0; i < stream->n; i++)
+    for (size_t i = 0; i < stream->n; i++) {
         total += cm_bam_position(stream->sources[i].reader);
+    }
 
     return total;
 }
@@ -274,8 +299,9 @@ uint64_t cm_bam_stream_span(const cm_bam_stream *stream)
     for (size_t i = 0; i < stream->n; i++) {
         uint64_t span = cm_bam_span(stream->sources[i].reader);
 
-        if (span == 0)
+        if (span == 0) {
             return 0;
+        }
 
         total += span;
     }

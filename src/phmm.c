@@ -233,13 +233,15 @@ static cell_terms terms_at(const context *ctx, const row_terms *row,
 {
     nuc theirs;
 
-    if (j < 1 || (size_t)j > ctx->ref->len)
+    if (j < 1 || (size_t)j > ctx->ref->len) {
         return (cell_terms){ .emission = 0.0, .modification = 0.0 };
+    }
 
     theirs = nuc_from_char(ctx->ref->seq[j - 1]);
 
-    if (!nuc_is_base(theirs))
+    if (!nuc_is_base(theirs)) {
         return row->neither;
+    }
 
     return theirs == row->ours ? row->agree : row->differ;
 }
@@ -515,8 +517,9 @@ static double forward_row(const context *ctx, size_t i)
  * the row. */
 static bool record_total(const context *ctx, size_t i, double total)
 {
-    if (!(total > 0.0) || !isfinite(total))
+    if (!(total > 0.0) || !isfinite(total)) {
         return false;
+    }
 
     ctx->scratch->scale[i] = 1.0 / total;
 
@@ -527,12 +530,15 @@ static bool record_total(const context *ctx, size_t i, double total)
  * from. */
 static bool forward(const context *ctx)
 {
-    if (!record_total(ctx, 0, forward_first_row(ctx)))
+    if (!record_total(ctx, 0, forward_first_row(ctx))) {
         return false;
+    }
 
-    for (size_t i = 1; i < ctx->rows; i++)
-        if (!record_total(ctx, i, forward_row(ctx, i)))
+    for (size_t i = 1; i < ctx->rows; i++) {
+        if (!record_total(ctx, i, forward_row(ctx, i))) {
             return false;
+        }
+    }
 
     return true;
 }
@@ -767,13 +773,15 @@ static void backward_row(const context *ctx, size_t i)
         double    deleted  = k + 1 < width ? right_deletion : 0.0;
         double    cell[N_STATES];
 
-        if (within(diagonal, below_width))
+        if (within(diagonal, below_width)) {
             pairing = below_terms[diagonal].emission
                     * below[diagonal][STATE_MATCH] * below_scale;
+        }
 
-        if (within(straight, below_width))
+        if (within(straight, below_width)) {
             inserted = UNINFORMATIVE
                      * below[straight][STATE_INSERTION] * below_scale;
+        }
 
         cell[STATE_MATCH] = model->match_to_match     * pairing
                           + model->match_to_insertion * inserted
@@ -820,13 +828,15 @@ static void backward_first_row(const context *ctx)
         double    pairing  = 0.0;
         double    inserted = 0.0;
 
-        if (within(diagonal, below_width))
+        if (within(diagonal, below_width)) {
             pairing = below_terms[diagonal].emission
                     * below[diagonal][STATE_MATCH] * below_scale;
+        }
 
-        if (within(straight, below_width))
+        if (within(straight, below_width)) {
             inserted = UNINFORMATIVE
                      * below[straight][STATE_INSERTION] * below_scale;
+        }
 
         row[k][STATE_MATCH] = model->match_to_match     * pairing
                             + model->match_to_insertion * inserted;
@@ -846,9 +856,11 @@ static bool normalized(const context *ctx)
     const band_cell *back  = read_backward_row_of(ctx, 0);
     double           total = 0.0;
 
-    for (hts_pos_t k = 0; k < width_at(ctx, 0); k++)
-        for (int s = 0; s < N_STATES; s++)
+    for (hts_pos_t k = 0; k < width_at(ctx, 0); k++) {
+        for (int s = 0; s < N_STATES; s++) {
             total += forward_at(&front, k, s) * back[k][s];
+        }
+    }
 
     return fabs(total - 1.0) < NORMALIZATION_TOLERANCE;
 }
@@ -859,8 +871,9 @@ static bool backward(const context *ctx)
 {
     backward_last_row(ctx);
 
-    for (size_t i = ctx->rows - 1; i-- > 1; )
+    for (size_t i = ctx->rows - 1; i-- > 1; ) {
         backward_row(ctx, i);
+    }
 
     backward_first_row(ctx);
 
@@ -878,8 +891,9 @@ phmm_scratch *phmm_scratch_create(void)
 
 void phmm_scratch_destroy(phmm_scratch *scratch)
 {
-    if (!scratch)
+    if (!scratch) {
         return;
+    }
 
     free(scratch->places);
     free(scratch->forward);
@@ -902,19 +916,23 @@ static int grow_rows(phmm_scratch *scratch, size_t rows)
     aln_place *places;
     double    *scale;
 
-    if (rows <= scratch->rows)
+    if (rows <= scratch->rows) {
         return 0;
+    }
 
     places = realloc(scratch->places, rows * sizeof *places);
     scale  = realloc(scratch->scale, rows * sizeof *scale);
 
-    if (places)
+    if (places) {
         scratch->places = places;
-    if (scale)
+    }
+    if (scale) {
         scratch->scale = scale;
+    }
 
-    if (!places || !scale)
+    if (!places || !scale) {
         return -1;
+    }
 
     scratch->rows = rows;
 
@@ -930,8 +948,9 @@ static int grow_band(phmm_scratch *scratch, size_t rows, size_t widest)
     band_cell  *backward;
     cell_terms *terms;
 
-    if (rows <= scratch->matrix_rows && widest <= scratch->widest)
+    if (rows <= scratch->matrix_rows && widest <= scratch->widest) {
         return 0;
+    }
 
     rows   = rows   > scratch->matrix_rows ? rows   : scratch->matrix_rows;
     widest = widest > scratch->widest      ? widest : scratch->widest;
@@ -940,15 +959,19 @@ static int grow_band(phmm_scratch *scratch, size_t rows, size_t widest)
     backward = realloc(scratch->backward, 2 * widest * sizeof *backward);
     terms    = realloc(scratch->terms, rows * widest * sizeof *terms);
 
-    if (forward)
+    if (forward) {
         scratch->forward = forward;
-    if (backward)
+    }
+    if (backward) {
         scratch->backward = backward;
-    if (terms)
+    }
+    if (terms) {
         scratch->terms = terms;
+    }
 
-    if (!forward || !backward || !terms)
+    if (!forward || !backward || !terms) {
         return -1;
+    }
 
     scratch->matrix_rows = rows;
     scratch->widest      = widest;
@@ -962,22 +985,27 @@ static int grow_window(phmm_scratch *scratch, size_t window)
     double *spanned;
     double *mutations;
 
-    if (window <= scratch->window)
+    if (window <= scratch->window) {
         return 0;
+    }
 
     coverage  = realloc(scratch->coverage, window * sizeof *coverage);
     spanned   = realloc(scratch->spanned, window * sizeof *spanned);
     mutations = realloc(scratch->mutations, window * sizeof *mutations);
 
-    if (coverage)
+    if (coverage) {
         scratch->coverage = coverage;
-    if (spanned)
+    }
+    if (spanned) {
         scratch->spanned = spanned;
-    if (mutations)
+    }
+    if (mutations) {
         scratch->mutations = mutations;
+    }
 
-    if (!coverage || !spanned || !mutations)
+    if (!coverage || !spanned || !mutations) {
         return -1;
+    }
 
     scratch->window = window;
 
@@ -998,8 +1026,9 @@ static hts_pos_t widest_row(const context *ctx)
     for (size_t i = 0; i < ctx->rows; i++) {
         hts_pos_t width = width_at(ctx, i);
 
-        if (width > widest)
+        if (width > widest) {
             widest = width;
+        }
     }
 
     return widest;
@@ -1017,10 +1046,12 @@ static extent window_of(const context *ctx)
         hts_pos_t lo = origin_of(ctx, i);
         hts_pos_t hi = lo + width_at(ctx, i);
 
-        if (lo < first)
+        if (lo < first) {
             first = lo;
-        if (hi > last)
+        }
+        if (hi > last) {
             last = hi;
+        }
     }
 
     return (extent){
@@ -1045,20 +1076,23 @@ static bool prepare(context *ctx)
 {
     const cm_bam_record *read = ctx->read;
 
-    if (grow_rows(ctx->scratch, (size_t)read->l_qseq + 1) < 0)
+    if (grow_rows(ctx->scratch, (size_t)read->l_qseq + 1) < 0) {
         return false;
+    }
 
     ctx->span   = aln_places(read, ctx->scratch->places);
     ctx->rows   = (size_t)(ctx->span.end - ctx->span.begin) + 1;
     ctx->widest = widest_row(ctx);
 
-    if (grow_band(ctx->scratch, ctx->rows, (size_t)ctx->widest) < 0)
+    if (grow_band(ctx->scratch, ctx->rows, (size_t)ctx->widest) < 0) {
         return false;
+    }
 
     ctx->window = window_of(ctx);
 
-    if (grow_window(ctx->scratch, ctx->window.len) < 0)
+    if (grow_window(ctx->scratch, ctx->window.len) < 0) {
         return false;
+    }
 
     clear_window(ctx);
 
@@ -1078,11 +1112,13 @@ phmm_status phmm_run(const phmm *model, const phred *quality,
         .half    = half,
     };
 
-    if (!prepare(&ctx))
+    if (!prepare(&ctx)) {
         return PHMM_NO_MEMORY;
+    }
 
-    if (!forward(&ctx) || !backward(&ctx))
+    if (!forward(&ctx) || !backward(&ctx)) {
         return PHMM_UNSOUND;
+    }
 
     out->origin    = ctx.window.origin;
     out->len       = ctx.window.len;

@@ -29,8 +29,9 @@ static void add_at(const context *ctx, accum_field_id field, hts_pos_t pos,
 {
     double *values = accum_data(ctx->target, field);
 
-    if (pos >= 0 && (size_t)pos < ctx->ref->len)
+    if (pos >= 0 && (size_t)pos < ctx->ref->len) {
         values[pos] += value;
+    }
 }
 
 /* Counts the read in its length bin. Binned by stored length, as the length filters are
@@ -41,8 +42,9 @@ static void add_length(const context *ctx)
     double *bins   = accum_data(ctx->target, ACCUM_LENGTHS);
     size_t  length = (size_t)ctx->read->l_qseq;
 
-    if (length < ACCUM_LENGTH_BINS(ctx->target->cap))
+    if (length < ACCUM_LENGTH_BINS(ctx->target->cap)) {
         bins[length] += 1.0;
+    }
 }
 
 static void add_window(const context *ctx, const phmm_window *window)
@@ -65,16 +67,19 @@ static const int *uniform_band(tally_scratch *scratch, const cm_bam_record *read
     size_t rows = (size_t)read->l_qseq + 1;
     int   *half;
 
-    if (rows <= scratch->rows)
+    if (rows <= scratch->rows) {
         return scratch->half;
+    }
 
     half = realloc(scratch->half, rows * sizeof *half);
 
-    if (!half)
+    if (!half) {
         return NULL;
+    }
 
-    for (size_t i = 0; i < rows; i++)
+    for (size_t i = 0; i < rows; i++) {
         half[i] = band;
+    }
 
     scratch->half = half;
     scratch->rows = rows;
@@ -88,14 +93,16 @@ static phmm_status marginalize(const context *ctx, tally_scratch *scratch)
     phmm_status status;
     const int  *half = uniform_band(scratch, ctx->read, ctx->tables->band);
 
-    if (!half)
+    if (!half) {
         return PHMM_NO_MEMORY;
+    }
 
     status = phmm_run(&ctx->tables->model, &ctx->tables->quality,
                       ctx->read, ctx->ref, half, scratch->phmm, &window);
 
-    if (status == PHMM_OK)
+    if (status == PHMM_OK) {
         add_window(ctx, &window);
+    }
 
     return status;
 }
@@ -125,8 +132,9 @@ tally_scratch *tally_scratch_create(void)
 {
     tally_scratch *scratch = calloc(1, sizeof *scratch);
 
-    if (!scratch)
+    if (!scratch) {
         return NULL;
+    }
 
     scratch->phmm = phmm_scratch_create();
 
@@ -140,8 +148,9 @@ tally_scratch *tally_scratch_create(void)
 
 void tally_scratch_destroy(tally_scratch *scratch)
 {
-    if (!scratch)
+    if (!scratch) {
         return;
+    }
 
     phmm_scratch_destroy(scratch->phmm);
     free(scratch->half);
@@ -160,8 +169,9 @@ phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
     };
     phmm_status status = marginalize(&ctx, scratch);
 
-    if (status != PHMM_OK)
+    if (status != PHMM_OK) {
         return status;
+    }
 
     *accum_data(target, ACCUM_READS) += 1.0;
     add_length(&ctx);

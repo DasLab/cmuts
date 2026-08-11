@@ -1,25 +1,15 @@
-# Checks that find bugs, rather than checks that hold opinions about style.
-# Clean as the tree stands, so anything reported is new.
-#
-# Left off, each firing constantly on code written the way it is on purpose:
-#   readability-*        brace-less statements, short names, aligned declarations
-#   misc-include-cleaner an include for every transitively used symbol
-#   cert-err33-c         snprintf and fprintf returns, deliberately unchecked
-#   bugprone-easily-swappable-parameters   most functions taking two of a type
-#   bugprone-multi-level-implicit-pointer-conversion   the void ** the queue and
-#                        the pools are built on
-#   ...DeprecatedOrUnsafeBufferHandling    the Annex K printf_s family, absent
-#                        from every libc this builds against
-
 Checks: >
   -*,
   clang-analyzer-*,
   bugprone-*,
   concurrency-*,
   portability-*,
+  readability-braces-around-statements,
   -bugprone-easily-swappable-parameters,
   -bugprone-multi-level-implicit-pointer-conversion,
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
 
-# Diagnostics for our own headers, not for htslib's or HDF5's.
-HeaderFilterRegex: '.*/(src|include)/.*'
+CheckOptions:
+  readability-braces-around-statements.ShortStatementLines: 0
+
+HeaderFilterRegex: '.*/(src|include|apps)/.*'

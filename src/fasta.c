@@ -35,10 +35,12 @@ struct cm_fasta_reader {
 
 static void reader_free(cm_fasta_reader *reader)
 {
-    if (reader->seq)
+    if (reader->seq) {
         kseq_destroy(reader->seq);
-    if (reader->file)
+    }
+    if (reader->file) {
         bgzf_close(reader->file);
+    }
     free(reader);
 }
 
@@ -71,8 +73,9 @@ cm_fasta_reader *cm_fasta_open(const char *path, const char **why)
 
 void cm_fasta_close(cm_fasta_reader *reader)
 {
-    if (reader)
+    if (reader) {
         reader_free(reader);
+    }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -113,8 +116,9 @@ int cm_fasta_next(cm_fasta_reader *reader, cm_fasta_record *out)
         return CM_ITER_OK;
     }
 
-    if (status == KSEQ_END_OF_FILE)
+    if (status == KSEQ_END_OF_FILE) {
         return CM_ITER_EOF;
+    }
 
     reader->error = parse_error_message(status);
     return CM_ITER_ERROR;

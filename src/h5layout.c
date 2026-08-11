@@ -30,10 +30,12 @@ static hsize_t rows_per_chunk(size_t row_values, int32_t n_refs)
     size_t  row_bytes = row_values * sizeof(float);
     hsize_t rows      = row_bytes ? TARGET_CHUNK_BYTES / row_bytes : (hsize_t)n_refs;
 
-    if (rows < 1)
+    if (rows < 1) {
         rows = 1;
-    if (rows > (hsize_t)n_refs)
+    }
+    if (rows > (hsize_t)n_refs) {
         rows = (hsize_t)n_refs;
+    }
 
     return rows;
 }
@@ -70,8 +72,9 @@ const void *h5layout_fill(out_field_id id)
     static const float    zero = 0.0f;
     static const float    nan  = (float)NAN;
 
-    if (OUT_FIELDS[id].counted)
+    if (OUT_FIELDS[id].counted) {
         return &none;
+    }
 
     return OUT_FIELDS[id].absent == OUT_NAN ? (const void *)&nan
                                             : (const void *)&zero;
@@ -99,8 +102,9 @@ int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
     hsize_t offset              = 0;
     hsize_t extent              = out_rank(id) == OUT_RANK_VECTOR ? (hsize_t)n : 1;
 
-    if (H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, count, NULL) < 0)
+    if (H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, count, NULL) < 0) {
         return -1;
+    }
 
     return H5Sselect_hyperslab(memspace, H5S_SELECT_SET, &offset, NULL,
                                &extent, NULL);
@@ -114,8 +118,9 @@ hid_t h5layout_untimed_plist(hid_t class_id)
 {
     hid_t plist = H5Pcreate(class_id);
 
-    if (plist < 0)
+    if (plist < 0) {
         return H5I_INVALID_HID;
+    }
 
     if (H5Pset_obj_track_times(plist, false) < 0) {
         H5Pclose(plist);
@@ -129,8 +134,9 @@ hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank)
 {
     hid_t dcpl = h5layout_untimed_plist(H5P_DATASET_CREATE);
 
-    if (dcpl < 0)
+    if (dcpl < 0) {
         return H5I_INVALID_HID;
+    }
 
     if (H5Pset_chunk(dcpl, rank, chunk) < 0 ||
         H5Pset_fill_value(dcpl, h5layout_type(id), h5layout_fill(id)) < 0 ||
@@ -149,11 +155,13 @@ hid_t h5layout_access_plist(const hsize_t *chunk, int rank)
     hid_t  dapl  = H5Pcreate(H5P_DATASET_ACCESS);
     size_t bytes = sizeof(float);
 
-    if (dapl < 0)
+    if (dapl < 0) {
         return H5I_INVALID_HID;
+    }
 
-    for (int i = 0; i < rank; i++)
+    for (int i = 0; i < rank; i++) {
         bytes *= (size_t)chunk[i];
+    }
 
     if (H5Pset_chunk_cache(dapl, CACHE_SLOTS, CACHED_CHUNKS * bytes,
                            CACHE_PREEMPTION) < 0) {

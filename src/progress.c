@@ -37,15 +37,18 @@ static int terminal_cells(void)
     int            columns = ASSUMED_COLUMNS;
     int            cells;
 
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == 0 && size.ws_col > BAR_FURNITURE)
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == 0 && size.ws_col > BAR_FURNITURE) {
         columns = size.ws_col;
+    }
 
     cells = columns - BAR_FURNITURE;
 
-    if (cells < BAR_MIN_CELLS)
+    if (cells < BAR_MIN_CELLS) {
         return BAR_MIN_CELLS;
-    if (cells > BAR_MAX_CELLS)
+    }
+    if (cells > BAR_MAX_CELLS) {
         return BAR_MAX_CELLS;
+    }
 
     return cells;
 }
@@ -55,12 +58,14 @@ progress *progress_start(const cm_bam_stream *stream)
     uint64_t  span = cm_bam_stream_span(stream);
     progress *bar;
 
-    if (span == 0 || !isatty(STDOUT_FILENO))
+    if (span == 0 || !isatty(STDOUT_FILENO)) {
         return NULL;
+    }
 
     bar = calloc(1, sizeof *bar);
-    if (!bar)
+    if (!bar) {
         return NULL;
+    }
 
     bar->stream = stream;
     bar->span   = span;
@@ -109,13 +114,15 @@ void progress_follow(progress *bar)
     uint64_t position;
     int      percent;
 
-    if (!bar)
+    if (!bar) {
         return;
+    }
 
     position = cm_bam_stream_position(bar->stream);
 
-    if (position < bar->next)
+    if (position < bar->next) {
         return;
+    }
 
     percent = percentage(bar, position);
 
@@ -131,8 +138,9 @@ void progress_follow(progress *bar)
  * line so that what is reported next starts on one of its own. */
 void progress_finish(progress *bar)
 {
-    if (!bar)
+    if (!bar) {
         return;
+    }
 
     if (bar->shown >= 0) {
         putchar('\n');

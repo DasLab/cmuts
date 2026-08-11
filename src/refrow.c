@@ -19,8 +19,9 @@ refrow *refrow_create(h5writer *out, rate_config rates, size_t ref_cap)
 {
     refrow *r = calloc(1, sizeof *r);
 
-    if (!r)
+    if (!r) {
         return NULL;
+    }
 
     r->out   = out;
     r->rates = rates;
@@ -36,8 +37,9 @@ refrow *refrow_create(h5writer *out, rate_config rates, size_t ref_cap)
 
 void refrow_destroy(refrow *r)
 {
-    if (!r)
+    if (!r) {
         return;
+    }
 
     free(r->row);
     free(r);
@@ -48,24 +50,28 @@ void refrow_destroy(refrow *r)
 static const double *values(refrow *r, out_field_id id, const accum *acc,
                             size_t len)
 {
-    if (id == OUT_REACTIVITY)
+    if (id == OUT_REACTIVITY) {
         rate_reactivity(&r->rates, acc, len, r->row);
-    else if (id == OUT_ERROR)
+    } else if (id == OUT_ERROR) {
         rate_error(&r->rates, acc, len, r->row);
-    else
+    } else {
         return accum_const_data(acc, OUT_FIELDS[id].shape);
+    }
 
     return r->row;
 }
 
 int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc)
 {
-    if (len == 0)
+    if (len == 0) {
         return 0;
+    }
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++)
-        if (h5writer_field(r->out, id, tid, len, values(r, id, acc, len)) < 0)
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (h5writer_field(r->out, id, tid, len, values(r, id, acc, len)) < 0) {
             return -1;
+        }
+    }
 
     return 0;
 }

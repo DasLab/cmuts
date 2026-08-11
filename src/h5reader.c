@@ -50,8 +50,9 @@ static int dataset_dims(hid_t dataset, int rank, hsize_t *dims)
     hid_t space = H5Dget_space(dataset);
     int   found;
 
-    if (space < 0)
+    if (space < 0) {
         return -1;
+    }
 
     found = H5Sget_simple_extent_ndims(space);
 
@@ -72,17 +73,20 @@ static int probe_shape(h5reader *r)
     hsize_t dims[OUT_RANK_MAX];
     int     status;
 
-    if (dataset < 0)
+    if (dataset < 0) {
         return fail_field(r, SHAPE_FIELD, "not present; this is not a cmuts output");
+    }
 
     status = dataset_dims(dataset, OUT_RANK_VECTOR, dims);
     H5Dclose(dataset);
 
-    if (status < 0)
+    if (status < 0) {
         return fail_field(r, SHAPE_FIELD, "is not a row per reference");
+    }
 
-    if (dims[0] == 0 || dims[0] > INT32_MAX || dims[1] == 0)
+    if (dims[0] == 0 || dims[0] > INT32_MAX || dims[1] == 0) {
         return fail(r, "the file holds no references");
+    }
 
     r->n_refs  = (int32_t)dims[0];
     r->ref_cap = (size_t)dims[1];
@@ -95,12 +99,15 @@ static int check_shape(h5reader *r, out_field_id id, const hsize_t *expected)
     int     rank = out_rank(id);
     hsize_t dims[OUT_RANK_MAX];
 
-    if (dataset_dims(r->dataset[id], rank, dims) < 0)
+    if (dataset_dims(r->dataset[id], rank, dims) < 0) {
         return fail_field(r, id, "has an unexpected number of dimensions");
+    }
 
-    for (int i = 0; i < rank; i++)
-        if (dims[i] != expected[i])
+    for (int i = 0; i < rank; i++) {
+        if (dims[i] != expected[i]) {
             return fail_field(r, id, "does not agree with the shape of the file");
+        }
+    }
 
     return 0;
 }
@@ -118,17 +125,20 @@ static int open_field(h5reader *r, out_field_id id)
     h5layout_shape(id, r->n_refs, r->ref_cap, dims, chunk);
 
     dapl = h5layout_access_plist(chunk, out_rank(id));
-    if (dapl < 0)
+    if (dapl < 0) {
         return fail(r, "unable to prepare a dataset for reading");
+    }
 
     r->dataset[id] = H5Dopen2(r->file, OUT_FIELDS[id].name, dapl);
     H5Pclose(dapl);
 
-    if (r->dataset[id] < 0)
+    if (r->dataset[id] < 0) {
         return fail_field(r, id, "not present");
+    }
 
-    if (check_shape(r, id, dims) < 0)
+    if (check_shape(r, id, dims) < 0) {
         return -1;
+    }
 
     r->filespace[id] = H5Dget_space(r->dataset[id]);
 
@@ -138,8 +148,9 @@ static int open_field(h5reader *r, out_field_id id)
 h5reader *h5reader_open(const char *path)
 {
     h5reader *r = calloc(1, sizeof *r);
-    if (!r)
+    if (!r) {
         return NULL;
+    }
 
     /* Report failures through h5reader_error rather than HDF5's own stack trace on
      * stderr. */
@@ -163,8 +174,9 @@ h5reader *h5reader_open(const char *path)
         return r;
     }
 
-    if (probe_shape(r) < 0)
+    if (probe_shape(r) < 0) {
         return r;
+    }
 
     r->memspace = h5layout_row_space(r->ref_cap);
     if (r->memspace < 0) {
@@ -172,37 +184,46 @@ h5reader *h5reader_open(const char *path)
         return r;
     }
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++)
-        if (open_field(r, id) < 0)
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (open_field(r, id) < 0) {
             return r;
+        }
+    }
 
     r->reads = H5Gopen2(r->file, OUT_READS_GROUP, H5P_DEFAULT);
-    if (r->reads < 0)
+    if (r->reads < 0) {
         fail(r, "the group holding the counts about reads is not present");
+    }
 
     return r;
 }
 
 void h5reader_close(h5reader *r)
 {
-    if (!r)
+    if (!r) {
         return;
-
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (r->filespace[id] >= 0)
-            H5Sclose(r->filespace[id]);
-        if (r->dataset[id] >= 0)
-            H5Dclose(r->dataset[id]);
     }
 
-    if (r->memspace >= 0)
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (r->filespace[id] >= 0) {
+            H5Sclose(r->filespace[id]);
+        }
+        if (r->dataset[id] >= 0) {
+            H5Dclose(r->dataset[id]);
+        }
+    }
+
+    if (r->memspace >= 0) {
         H5Sclose(r->memspace);
+    }
 
-    if (r->reads >= 0)
+    if (r->reads >= 0) {
         H5Gclose(r->reads);
+    }
 
-    if (r->file >= 0)
+    if (r->file >= 0) {
         H5Fclose(r->file);
+    }
 
     free(r);
 }
@@ -231,11 +252,13 @@ int h5reader_field(h5reader *r, out_field_id id, int32_t tid, double *values)
     size_t width = out_extent(id, r->ref_cap, r->ref_cap);
     herr_t status;
 
-    if (tid < 0 || tid >= r->n_refs)
+    if (tid < 0 || tid >= r->n_refs) {
         return fail(r, "reference index outside the file");
+    }
 
-    if (h5layout_select_span(r->filespace[id], r->memspace, id, tid, 0, width) < 0)
+    if (h5layout_select_span(r->filespace[id], r->memspace, id, tid, 0, width) < 0) {
         return fail(r, "unable to select an input row");
+    }
 
     status = H5Dread(r->dataset[id], H5T_NATIVE_DOUBLE, r->memspace,
                      r->filespace[id], H5P_DEFAULT, values);

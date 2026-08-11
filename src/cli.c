@@ -47,17 +47,19 @@ static void report_rejected_option(const cli_spec *spec, int argc, char **argv,
 {
     char rejected[REJECTED_MAX];
 
-    if (optopt > 0 && optopt < OPTION_ID_BASE)
+    if (optopt > 0 && optopt < OPTION_ID_BASE) {
         snprintf(rejected, sizeof rejected, "-%c", optopt);
-    else if (optind >= 1 && optind <= argc)
+    } else if (optind >= 1 && optind <= argc) {
         snprintf(rejected, sizeof rejected, "%s", argv[optind - 1]);
-    else
+    } else {
         snprintf(rejected, sizeof rejected, "an option");
+    }
 
-    if (needs_value)
+    if (needs_value) {
         fprintf(stderr, "%s: %s needs a value\n", spec->program, rejected);
-    else
+    } else {
         fprintf(stderr, "%s: unrecognized option %s\n", spec->program, rejected);
+    }
 }
 
 static bool takes_argument(const cli_option *opt)
@@ -78,9 +80,11 @@ static bool stores_a_value(const cli_option *opt)
 
 static const cli_option *option_by_key(const cli_spec *spec, char key)
 {
-    for (size_t i = 0; i < spec->n_options; i++)
-        if (spec->options[i].key == key)
+    for (size_t i = 0; i < spec->n_options; i++) {
+        if (spec->options[i].key == key) {
             return &spec->options[i];
+        }
+    }
 
     return NULL;
 }
@@ -105,12 +109,14 @@ static void build_short_options(const cli_spec *spec, char *out, size_t size)
     out[n++] = ':';
 
     for (size_t i = 0; i < spec->n_options && n + 3 < size; i++) {
-        if (!spec->options[i].key)
+        if (!spec->options[i].key) {
             continue;
+        }
 
         out[n++] = spec->options[i].key;
-        if (takes_argument(&spec->options[i]))
+        if (takes_argument(&spec->options[i])) {
             out[n++] = ':';
+        }
     }
 
     out[n] = '\0';
@@ -135,18 +141,20 @@ static void build_long_options(const cli_spec *spec, struct option *out)
 
 static void print_choices(FILE *out, const cli_option *opt)
 {
-    for (const cli_choice *choice = opt->choices; choice->name; choice++)
+    for (const cli_choice *choice = opt->choices; choice->name; choice++) {
         fprintf(out, "%s%s", choice == opt->choices ? "" : "|", choice->name);
+    }
 }
 
 static int parse_choice(const cli_option *opt, const char *text, const char *program,
                         int *out)
 {
-    for (const cli_choice *choice = opt->choices; choice->name; choice++)
+    for (const cli_choice *choice = opt->choices; choice->name; choice++) {
         if (strcmp(choice->name, text) == 0) {
             *out = choice->value;
             return 0;
         }
+    }
 
     fprintf(stderr, "%s: --%s: \"%s\" is not one of ", program, opt->name, text);
     print_choices(stderr, opt);
@@ -160,8 +168,9 @@ static int parse_choice(const cli_option *opt, const char *text, const char *pro
  * would silently truncate. */
 static long integer_ceiling(const cli_option *opt)
 {
-    if (opt->maximum != CLI_UNBOUNDED)
+    if (opt->maximum != CLI_UNBOUNDED) {
         return opt->maximum;
+    }
 
     return opt->type == OPT_INT ? INT32_MAX : LONG_MAX;
 }
@@ -174,10 +183,11 @@ static double real_ceiling(const cli_option *opt)
 /* The largest value an option will take, written out. */
 static const char *ceiling_text(const cli_option *opt, char *out, size_t size)
 {
-    if (opt->type == OPT_DOUBLE)
+    if (opt->type == OPT_DOUBLE) {
         snprintf(out, size, "%g", real_ceiling(opt));
-    else
+    } else {
         snprintf(out, size, "%ld", integer_ceiling(opt));
+    }
 
     return out;
 }
@@ -191,15 +201,16 @@ static void report_out_of_range(const cli_option *opt, const char *text,
 {
     char limit[CEILING_MAX];
 
-    if (opt->maximum != CLI_UNBOUNDED)
+    if (opt->maximum != CLI_UNBOUNDED) {
         fprintf(stderr, "%s: --%s: %s is outside %ld..%ld\n",
                 program, opt->name, text, opt->minimum, opt->maximum);
-    else if (below)
+    } else if (below) {
         fprintf(stderr, "%s: --%s: %s is below %ld\n",
                 program, opt->name, text, opt->minimum);
-    else
+    } else {
         fprintf(stderr, "%s: --%s: %s is above %s\n",
                 program, opt->name, text, ceiling_text(opt, limit, sizeof limit));
+    }
 }
 
 static int parse_number(const cli_option *opt, const char *text, const char *program,
@@ -252,14 +263,16 @@ static int assign(const cli_option *opt, void *args, const char *value,
 
     switch (opt->type) {
         case OPT_DOUBLE:
-            if (parse_double(opt, value, program, &real) < 0)
+            if (parse_double(opt, value, program, &real) < 0) {
                 return -1;
+            }
             *(double *)field = real;
             return 0;
 
         case OPT_ENUM:
-            if (parse_choice(opt, value, program, &choice) < 0)
+            if (parse_choice(opt, value, program, &choice) < 0) {
                 return -1;
+            }
             *(int *)field = choice;
             return 0;
 
@@ -272,14 +285,16 @@ static int assign(const cli_option *opt, void *args, const char *value,
             return 0;
 
         case OPT_SIZE:
-            if (parse_number(opt, value, program, &number) < 0)
+            if (parse_number(opt, value, program, &number) < 0) {
                 return -1;
+            }
             *(size_t *)field = (size_t)number;
             return 0;
 
         case OPT_INT:
-            if (parse_number(opt, value, program, &number) < 0)
+            if (parse_number(opt, value, program, &number) < 0) {
                 return -1;
+            }
             *(int *)field = (int)number;
             return 0;
     }
@@ -300,8 +315,9 @@ static void format_default(const cli_option *opt, const void *defaults,
 
     out[0] = '\0';
 
-    if (!stores_a_value(opt))
+    if (!stores_a_value(opt)) {
         return;
+    }
 
     /* An optional setting shows its label, not the sentinel value that means
      * "not applied". */
@@ -321,13 +337,16 @@ static void format_default(const cli_option *opt, const void *defaults,
             snprintf(out, size, " (default %g)", *(const double *)field);
             break;
         case OPT_STRING:
-            if (*(const char *const *)field)
+            if (*(const char *const *)field) {
                 snprintf(out, size, " (default %s)", *(const char *const *)field);
+            }
             break;
         case OPT_ENUM:
-            for (const cli_choice *choice = opt->choices; choice->name; choice++)
-                if (choice->value == *(const int *)field)
+            for (const cli_choice *choice = opt->choices; choice->name; choice++) {
+                if (choice->value == *(const int *)field) {
                     snprintf(out, size, " (default %s)", choice->name);
+                }
+            }
             break;
         default:
             break;
@@ -341,13 +360,15 @@ static const char *option_form(const cli_option *opt, char *out, size_t len)
 {
     int n;
 
-    if (opt->key)
+    if (opt->key) {
         n = snprintf(out, len, "-%c, --%s", opt->key, opt->name);
-    else
+    } else {
         n = snprintf(out, len, "    --%s", opt->name);
+    }
 
-    if (opt->metavar && n > 0 && (size_t)n < len)
+    if (opt->metavar && n > 0 && (size_t)n < len) {
         snprintf(out + n, len - (size_t)n, " %s", opt->metavar);
+    }
 
     return out;
 }
@@ -377,10 +398,12 @@ static void print_option(FILE *out, const cli_option *opt, const void *defaults,
  * lands under the right heading and a group of only hidden rows prints none. */
 static bool group_seen_before(const cli_spec *spec, size_t index)
 {
-    for (size_t i = 0; i < index; i++)
+    for (size_t i = 0; i < index; i++) {
         if (!spec->options[i].hidden &&
-            strcmp(spec->options[i].group, spec->options[index].group) == 0)
+            strcmp(spec->options[i].group, spec->options[index].group) == 0) {
             return true;
+        }
+    }
 
     return false;
 }
@@ -398,13 +421,15 @@ static void print_usage_line(const cli_spec *spec, FILE *out)
     fprintf(out, "usage: %s [options]", spec->program);
 
     for (size_t i = 0; i < spec->n_options; i++) {
-        if (!spec->options[i].required)
+        if (!spec->options[i].required) {
             continue;
+        }
 
-        if (spec->options[i].key)
+        if (spec->options[i].key) {
             fprintf(out, " -%c %s", spec->options[i].key, spec->options[i].metavar);
-        else
+        } else {
             fprintf(out, " --%s %s", spec->options[i].name, spec->options[i].metavar);
+        }
     }
 
     for (size_t i = 0; i < spec->n_positionals; i++) {
@@ -427,8 +452,9 @@ static int help_column(const cli_spec *spec)
         char   form[INVOCATION_MAX];
         size_t len;
 
-        if (spec->options[i].hidden)
+        if (spec->options[i].hidden) {
             continue;
+        }
 
         len = strlen(option_form(&spec->options[i], form, sizeof form));
         widest = len > widest ? len : widest;
@@ -447,8 +473,9 @@ static int help_column(const cli_spec *spec)
 
 static void print_positionals(const cli_spec *spec, FILE *out, int column)
 {
-    if (spec->n_positionals == 0)
+    if (spec->n_positionals == 0) {
         return;
+    }
 
     fprintf(out, "\nArguments\n");
 
@@ -470,15 +497,18 @@ void cli_usage(const cli_spec *spec, FILE *out)
     print_positionals(spec, out, column);
 
     for (size_t i = 0; i < spec->n_options; i++) {
-        if (spec->options[i].hidden || group_seen_before(spec, i))
+        if (spec->options[i].hidden || group_seen_before(spec, i)) {
             continue;
+        }
 
         fprintf(out, "\n%s\n", spec->options[i].group);
 
-        for (size_t j = i; j < spec->n_options; j++)
+        for (size_t j = i; j < spec->n_options; j++) {
             if (!spec->options[j].hidden &&
-                strcmp(spec->options[j].group, spec->options[i].group) == 0)
+                strcmp(spec->options[j].group, spec->options[i].group) == 0) {
                 print_option(out, &spec->options[j], spec->defaults, column);
+            }
+        }
     }
 }
 
@@ -501,10 +531,11 @@ static void print_json_string(FILE *out, const char *text)
             case '\n': fputs("\\n", out);  break;
             case '\t': fputs("\\t", out);  break;
             default:
-                if (*p < 0x20)
+                if (*p < 0x20) {
                     fprintf(out, "\\u%04x", *p);
-                else
+                } else {
                     fputc(*p, out);
+                }
         }
     }
     fputc('"', out);
@@ -533,8 +564,9 @@ static void print_json_choices(FILE *out, const cli_option *opt)
 
     fputc('[', out);
     for (const cli_choice *choice = opt->choices; choice->name; choice++) {
-        if (choice != opt->choices)
+        if (choice != opt->choices) {
             fputs(", ", out);
+        }
         print_json_string(out, choice->name);
     }
     fputc(']', out);
@@ -556,9 +588,11 @@ static void print_json_default(FILE *out, const cli_option *opt, const void *def
         case OPT_INT:    fprintf(out, "%d", *(const int *)field);             break;
         case OPT_DOUBLE: fprintf(out, "%g", *(const double *)field);          break;
         case OPT_ENUM:
-            for (const cli_choice *choice = opt->choices; choice->name; choice++)
-                if (choice->value == *(const int *)field)
+            for (const cli_choice *choice = opt->choices; choice->name; choice++) {
+                if (choice->value == *(const int *)field) {
                     print_json_string(out, choice->name);
+                }
+            }
             break;
     }
 }
@@ -572,10 +606,11 @@ static void print_json_bounds(FILE *out, const cli_option *opt)
 
     fprintf(out, "      \"minimum\": %ld, \"maximum\": ", opt->minimum);
 
-    if (opt->maximum == CLI_UNBOUNDED)
+    if (opt->maximum == CLI_UNBOUNDED) {
         fputs("null\n", out);
-    else
+    } else {
         fprintf(out, "%ld\n", opt->maximum);
+    }
 }
 
 static void print_json_option(FILE *out, const cli_option *opt, const void *defaults,
@@ -620,13 +655,15 @@ void cli_dump_options(const cli_spec *spec, FILE *out)
     fputs(",\n  \"summary\": ", out); print_json_string(out, spec->summary);
     fputs(",\n  \"options\": [\n", out);
 
-    for (size_t i = 0; i < spec->n_options; i++)
+    for (size_t i = 0; i < spec->n_options; i++) {
         print_json_option(out, &spec->options[i], spec->defaults,
                           i + 1 == spec->n_options);
+    }
 
     fputs("  ],\n  \"positionals\": [\n", out);
-    for (size_t i = 0; i < spec->n_positionals; i++)
+    for (size_t i = 0; i < spec->n_positionals; i++) {
         print_json_positional(out, &spec->positionals[i], i + 1 == spec->n_positionals);
+    }
 
     fputs("  ]\n}\n", out);
 }
@@ -638,8 +675,9 @@ void cli_dump_options(const cli_spec *spec, FILE *out)
 static cli_status check_required_options(const cli_spec *spec, const bool *seen)
 {
     for (size_t i = 0; i < spec->n_options; i++) {
-        if (!spec->options[i].required || seen[i])
+        if (!spec->options[i].required || seen[i]) {
             continue;
+        }
 
         fprintf(stderr, "%s: missing required option --%s (%s)\n",
                 spec->program, spec->options[i].name, spec->options[i].help);
@@ -655,9 +693,11 @@ static int fewest_arguments(const cli_spec *spec)
 {
     int fewest = 0;
 
-    for (size_t i = 0; i < spec->n_positionals; i++)
-        if (!spec->positionals[i].variadic || spec->positionals[i].required)
+    for (size_t i = 0; i < spec->n_positionals; i++) {
+        if (!spec->positionals[i].variadic || spec->positionals[i].required) {
             fewest++;
+        }
+    }
 
     return fewest;
 }
@@ -770,8 +810,9 @@ cli_status cli_parse(const cli_spec *spec, int argc, char **argv, void *args)
             continue;
         }
 
-        if (assign(opt, args, optarg, spec->program) < 0)
+        if (assign(opt, args, optarg, spec->program) < 0) {
             goto done;
+        }
     }
 
     if (answer(spec, requested)) {
@@ -779,8 +820,9 @@ cli_status cli_parse(const cli_spec *spec, int argc, char **argv, void *args)
         goto done;
     }
 
-    if (check_required_options(spec, seen) != CLI_OK)
+    if (check_required_options(spec, seen) != CLI_OK) {
         goto done;
+    }
 
     status = take_positionals(spec, argc, argv, args);
 
