@@ -46,6 +46,24 @@ typedef enum {
     OUT_PROPAGATE,
 } out_combine;
 
+/* The meaning of a value the run never wrote.
+ *
+ * For a count, zero is correct: a position no read reached has a count of zero,
+ * and the absence is itself the measurement. A rate is different. A reference
+ * with no reads has no rate at all, and zero would mark its every position as
+ * measured and found unmodified -- the most confident result the output can
+ * hold, for a reference nothing was observed of. Those fields are left NaN,
+ * which no arithmetic turns back into a result.
+ *
+ * Applies to values never written. Columns past a reference's own length are
+ * marked NaN regardless of this setting, being outside the reference rather
+ * than unmeasured within it, which is what makes coverage a record of a
+ * reference's extent as well as of its depth. */
+typedef enum {
+    OUT_ZERO,
+    OUT_NAN,
+} out_absent;
+
 /* A count is whole however it was accumulated: the arena is doubles throughout,
  * so that any two accumulators merge, and what is only ever a tally of ones
  * comes back out of it as one. Written as a float it would round above two to
@@ -55,6 +73,7 @@ typedef struct {
     const char    *name;
     accum_field_id shape;    /* the accumulated field whose extent it takes */
     bool           counted;  /* whole, and written as an unsigned */
+    out_absent     absent;   /* what a value it was never given means */
     out_combine    combine;  /* how two runs' values of it come together */
 } out_field;
 

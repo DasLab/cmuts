@@ -6,12 +6,12 @@
 #include "output.h"
 
 const out_field OUT_FIELDS[OUT_N_FIELDS] = {
-    [OUT_COVERAGE]   = { "coverage",       ACCUM_COVERAGE,  false, OUT_ADD       },
-    [OUT_REACTIVITY] = { "reactivity",     ACCUM_MUTATIONS, false, OUT_SUBTRACT  },
-    [OUT_ERROR]      = { "error",          ACCUM_MUTATIONS, false, OUT_PROPAGATE },
-    [OUT_LENGTHS]    = { "reads/lengths",  ACCUM_LENGTHS,   true,  OUT_ADD       },
-    [OUT_READS]      = { "reads/counted",  ACCUM_READS,     true,  OUT_ADD       },
-    [OUT_REJECTED]   = { "reads/rejected", ACCUM_FILTERED,  true,  OUT_ADD       },
+    [OUT_COVERAGE]   = { "coverage",       ACCUM_COVERAGE,  false, OUT_ZERO, OUT_ADD       },
+    [OUT_REACTIVITY] = { "reactivity",     ACCUM_MUTATIONS, false, OUT_NAN,  OUT_SUBTRACT  },
+    [OUT_ERROR]      = { "error",          ACCUM_MUTATIONS, false, OUT_NAN,  OUT_PROPAGATE },
+    [OUT_LENGTHS]    = { "reads/lengths",  ACCUM_LENGTHS,   true,  OUT_ZERO, OUT_ADD       },
+    [OUT_READS]      = { "reads/counted",  ACCUM_READS,     true,  OUT_ZERO, OUT_ADD       },
+    [OUT_REJECTED]   = { "reads/rejected", ACCUM_FILTERED,  true,  OUT_ZERO, OUT_ADD       },
 };
 
 size_t out_extent(out_field_id id, size_t len, size_t cap)

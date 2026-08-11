@@ -62,14 +62,11 @@ hid_t h5layout_type(out_field_id id)
     return OUT_FIELDS[id].counted ? H5T_STD_U64LE : H5T_IEEE_F32LE;
 }
 
-/* Zero for a count and for what is measured, NaN for a rate that was not.
+/* A field's OUT_ZERO or OUT_NAN, in the type the field is stored as.
  *
- * A position no read reached was reached by no read, which is what a count of
- * zero says. A rate is not a count: a reference no read named has no rate, and
- * filling one with zero would say its every position was measured and found
- * unmodified, which is the most confident thing the output can say and it would
- * be saying it about nothing at all. A count has no NaN to be had, being an
- * unsigned, and needs none: nothing it is written for has padding. */
+ * An unsigned has no NaN, so OUT_NAN is not available to a counted field; the
+ * table gives each of them OUT_ZERO. None requires anything else, no counted
+ * field having padding. */
 const void *h5layout_fill(out_field_id id)
 {
     static const uint64_t none = 0;
@@ -79,8 +76,8 @@ const void *h5layout_fill(out_field_id id)
     if (OUT_FIELDS[id].counted)
         return &none;
 
-    return id == OUT_REACTIVITY || id == OUT_ERROR ? (const void *)&nan
-                                                   : (const void *)&zero;
+    return OUT_FIELDS[id].absent == OUT_NAN ? (const void *)&nan
+                                            : (const void *)&zero;
 }
 
 /* ------------------------------------------------------------------------ */
