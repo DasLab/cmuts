@@ -9,7 +9,7 @@
 #include <stdlib.h>
 
 #include "error.h"
-#include "output.h"
+#include "h5layout.h"
 
 /* The field whose shape gives the rest. Coverage is one value per base, so the
  * width of its row is the capacity every other field's width derives from. */
@@ -117,9 +117,9 @@ static int open_field(h5reader *r, out_field_id id)
     hsize_t chunk[OUT_RANK_MAX] = { 0, 0 };
     hid_t   dapl;
 
-    out_shape(id, r->n_refs, r->ref_cap, dims, chunk);
+    h5layout_shape(id, r->n_refs, r->ref_cap, dims, chunk);
 
-    dapl = out_access_plist(chunk, out_rank(id));
+    dapl = h5layout_access_plist(chunk, out_rank(id));
     if (dapl < 0)
         return fail(r, "unable to prepare a dataset for reading");
 
@@ -168,7 +168,7 @@ h5reader *h5reader_open(const char *path)
     if (probe_shape(r) < 0)
         return r;
 
-    r->memspace = out_row_space(r->ref_cap);
+    r->memspace = h5layout_row_space(r->ref_cap);
     if (r->memspace < 0) {
         fail(r, "unable to prepare the file for reading");
         return r;
@@ -236,7 +236,7 @@ int h5reader_field(h5reader *r, out_field_id id, int32_t tid, double *values)
     if (tid < 0 || tid >= r->n_refs)
         return fail(r, "reference index outside the file");
 
-    if (out_select_span(r->filespace[id], r->memspace, id, tid, 0, width) < 0)
+    if (h5layout_select_span(r->filespace[id], r->memspace, id, tid, 0, width) < 0)
         return fail(r, "unable to select an input row");
 
     status = H5Dread(r->dataset[id], H5T_NATIVE_DOUBLE, r->memspace,

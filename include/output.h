@@ -1,9 +1,13 @@
-/* output.h -- the layout of an output file.
+/* output.h -- what an output file holds.
  *
- * Defines the fields an output holds: their names, the width of a row of each,
- * how each is stored, and how two files' values of one combine under background
- * subtraction. The writer, the reader and the subtraction all take the layout
- * from here, so it cannot fall out of step between them.
+ * Defines the fields an output is made of: their names, the width of a row of
+ * each, and how two files' values of one combine under background subtraction.
+ * Everything that reads or writes an output takes the description from here, so
+ * it cannot fall out of step between them.
+ *
+ * How those fields are stored is a separate matter, and is h5layout's. Nothing
+ * here names HDF5, so the pipeline, the subtraction and everything else working
+ * in terms of fields and values compiles without it.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -12,9 +16,6 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
-
-#include <hdf5.h>
 
 #include "accum.h"
 
@@ -79,46 +80,3 @@ size_t out_extent(out_field_id id, size_t len, size_t cap);
 size_t out_widest(size_t cap);
 
 int out_rank(out_field_id id);
-
-/* The dataset's shape and that of the chunks it is stored in. The width of a
- * row is the field's own extent at the longest reference, so a field wider than
- * one value per base is sized by the same rule as the rest. Both arrays are
- * OUT_RANK_MAX long, and only the field's own rank is written. */
-void out_shape(out_field_id id, int32_t n_refs, size_t cap,
-               hsize_t *dims, hsize_t *chunk);
-
-hid_t       out_type(out_field_id id);
-const void *out_fill(out_field_id id);
-
-/* A dataspace holding one row of the widest field, which a span of any field's
- * row is then selected from. */
-hid_t out_row_space(size_t cap);
-
-/* Selects n values of one reference's row of a field, starting at column from:
- * in the file, and in the memory row the values are moved through. The two are
- * selected together so that they cannot disagree on how many values move.
- *
- * The selections replace whatever was there, so both dataspaces may be kept for
- * as long as the file is open and reselected for each row. */
-int out_select_span(hid_t filespace, hid_t memspace, out_field_id id,
-                    int32_t tid, size_t from, size_t n);
-
-/* A creation property list with object timestamping turned off.
- *
- * HDF5 stamps every object header with the time it was written, so two runs
- * over the same input would produce files differing in bytes that say nothing
- * about the result. Applied to the file as well as the datasets: an fcpl also
- * carries the root group's creation properties, and that group is stamped like
- * any other. */
-hid_t out_untimed_plist(hid_t class_id);
-
-/* A dataset creation property list: chunked, filtered, and filled as the field
- * requires. */
-hid_t out_layout_plist(out_field_id id, const hsize_t *chunk, int rank);
-
-/* A dataset access property list whose chunk cache holds several chunks of
- * this shape.
- *
- * The writer and the reader both work through rows in roughly ascending order,
- * so caching a few chunks avoids inflating a chunk again for each row in it. */
-hid_t out_access_plist(const hsize_t *chunk, int rank);

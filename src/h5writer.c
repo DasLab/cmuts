@@ -12,7 +12,7 @@
 #include <unistd.h>
 
 #include "error.h"
-#include "output.h"
+#include "h5layout.h"
 
 struct h5writer {
     hid_t   file;
@@ -79,16 +79,16 @@ static hid_t create_field(h5writer *w, out_field_id id)
     int     rank                = out_rank(id);
     hid_t   space, dcpl, dapl, dataset;
 
-    out_shape(id, w->n_refs, w->ref_cap, dims, chunk);
+    h5layout_shape(id, w->n_refs, w->ref_cap, dims, chunk);
 
     space = H5Screate_simple(rank, dims, NULL);
-    dcpl  = out_layout_plist(id, chunk, rank);
-    dapl  = out_access_plist(chunk, rank);
+    dcpl  = h5layout_creation_plist(id, chunk, rank);
+    dapl  = h5layout_access_plist(chunk, rank);
 
     if (space < 0 || dcpl < 0 || dapl < 0) {
         dataset = H5I_INVALID_HID;
     } else {
-        dataset = H5Dcreate2(w->file, OUT_FIELDS[id].name, out_type(id),
+        dataset = H5Dcreate2(w->file, OUT_FIELDS[id].name, h5layout_type(id),
                              space, H5P_DEFAULT, dcpl, dapl);
     }
 
@@ -139,13 +139,13 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
     for (size_t i = 0; i < ref_cap; i++)
         w->padding[i] = (double)NAN;
 
-    w->memspace = out_row_space(ref_cap);
+    w->memspace = h5layout_row_space(ref_cap);
     if (w->memspace < 0) {
         fail(w, "unable to prepare the output");
         return w;
     }
 
-    fcpl = out_untimed_plist(H5P_FILE_CREATE);
+    fcpl = h5layout_untimed_plist(H5P_FILE_CREATE);
     if (fcpl < 0) {
         fail(w, "unable to prepare the output file");
         return w;
@@ -165,7 +165,7 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
     /* Named before any dataset inside it, so a path names a group that is
      * already there. Untimed as the file and the datasets are, or two runs over
      * one input would differ by the moment this was made. */
-    gcpl = out_untimed_plist(H5P_GROUP_CREATE);
+    gcpl = h5layout_untimed_plist(H5P_GROUP_CREATE);
     if (gcpl < 0) {
         fail(w, "unable to prepare the output");
         return w;
@@ -238,7 +238,7 @@ static int write_part(h5writer *w, out_field_id id, int32_t tid, size_t from,
     if (n == 0)
         return 0;
 
-    if (out_select_span(w->filespace[id], w->memspace, id, tid, from, n) < 0)
+    if (h5layout_select_span(w->filespace[id], w->memspace, id, tid, from, n) < 0)
         return fail(w, "unable to select an output row");
 
     status = H5Dwrite(w->dataset[id], H5T_NATIVE_DOUBLE, w->memspace,
@@ -287,7 +287,7 @@ int h5writer_count(h5writer *w, const char *name, size_t value)
 {
     uint64_t stored  = value;
     hid_t    space   = H5Screate(H5S_SCALAR);
-    hid_t    dcpl    = out_untimed_plist(H5P_DATASET_CREATE);
+    hid_t    dcpl    = h5layout_untimed_plist(H5P_DATASET_CREATE);
     hid_t    dataset = H5I_INVALID_HID;
     herr_t   status  = -1;
 
