@@ -7,9 +7,8 @@ exercise each rule. Tests built this way cover only the subtraction, and remain
 valid if the reactivity calculation changes.
 
 The layout is the one thing the two programs share. It is written out here
-rather than read from a cmuts run, so that a field added to the output fails a
-single named test rather than the whole suite; see test_subtraction.py, which
-checks this description against a real run.
+rather than read from a cmuts run, so that the description is a contract and
+not a copy of whatever cmuts currently produces.
 """
 
 from __future__ import annotations

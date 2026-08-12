@@ -31,8 +31,8 @@ bool rng_chance(rng *r, double probability);
  *     20:200      uniform over the range, inclusive
  *     0,1,30,255  drawn from the listed values
  *
- * All three name a finite set: a constant is a set of one, a range is the whole span between
- * its endpoints, and a list is exactly what it names. Only the uniform is expressible; there
+ * All three describe a finite set: a constant is a set of one, a range is the whole span
+ * between its endpoints, and a list is its own contents. Only the uniform is expressible; there
  * is no way to weight one value above another.
  *
  * A constant pins a value down for a test; a range or a list spreads it for a benchmark or a

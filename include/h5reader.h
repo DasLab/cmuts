@@ -21,7 +21,7 @@
  * only. */
 typedef struct h5reader h5reader;
 
-/* Opens a file, checking that it holds every field the layout names and that their shapes
+/* Opens a file, checking that it holds every field the layout declares and that their shapes
  * agree. Returns NULL only when out of memory; every other failure is reported through
  * h5reader_error. */
 h5reader *h5reader_open(const char *path);

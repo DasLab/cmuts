@@ -199,7 +199,7 @@ def placements(directory, name, reference, read, cigars) -> Dataset:
     per CIGAR so that a single run scores them all.
 
     Every reference holds the same sequence and carries one read, so the rows of
-    the output differ only in how the alignment was written. Each is named after
+    the output differ only in how the alignment was written. Each takes the name of
     the CIGAR it carries, which is what a failure has to report.
 
     SAM is written directly: cmuts reads it as it reads BAM, and neither an

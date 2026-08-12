@@ -20,8 +20,8 @@ typedef struct {
 } aln_span;
 
 /* The placed span, empty where the alignment places nothing: a record carrying no CIGAR, one
- * whose every operation is a clip, or one naming only reference operations. Costs a look at either
- * end, both stopping at the first operation that is not a clip. */
+ * whose every operation is a clip, or one consuming reference but no read. Costs a look
+ * at either end, both stopping at the first operation that is not a clip. */
 aln_span aln_placed_span(const cm_bam_record *read);
 
 /* How far into the reference the CIGAR has reached at one point of the placed span: first

@@ -18,9 +18,9 @@
  * reference once per file, and the result written for it would be overwritten by the next
  * file's.
  *
- * A record names its reference by an index into its own file's header, so the headers must
- * agree. Nothing here checks that; refseq compares each of them against the FASTA, which is
- * equivalent wherever it matters. */
+ * A record refers to its reference by an index into its own file's header, so the headers
+ * must agree. Nothing here checks that; refseq compares each of them against the FASTA,
+ * which is equivalent wherever it matters. */
 typedef struct cm_bam_stream cm_bam_stream;
 
 /* Opens every path and reads the first record of each, which is why the reference and the

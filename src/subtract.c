@@ -137,7 +137,7 @@ static void clip_f32(float *out, size_t n)
 
 /* Each square is rounded before the two are added, which a single expression would let the
  * compiler fuse into a multiply-add. Fusing keeps one square at a wider precision than the
- * other, and the quadrature then depends on which input was named first. */
+ * other, and the quadrature then depends on which input came first. */
 static void propagate_f32(const float *treated, const float *untreated, float *out,
                           size_t n)
 {

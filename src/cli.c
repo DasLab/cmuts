@@ -29,7 +29,7 @@
 #define INVOCATION_MAX 64  /* both forms of an option, and its placeholder */
 #define CEILING_MAX    32  /* an option's largest value, written out */
 
-/* The note naming an option's default. A string default is written out in full,
+/* The note giving an option's default. A string default is written out in full,
  * so this is the one of these a row can outgrow, and the note is truncated where
  * it does. */
 #define DEFAULT_NOTE_MAX 64
@@ -39,7 +39,7 @@
  * be wider than it leaves room for. */
 #define HELP_COLUMN 28
 
-/* Reports an option getopt would not accept, naming it as the caller wrote it.
+/* Reports an option getopt would not accept, quoting it as the caller wrote it.
  * getopt records a short option in optopt but leaves a long one as the identifier
  * it was assigned, so a long one is read back from the word getopt stopped on. */
 static void report_rejected_option(const cli_spec *spec, int argc, char **argv,
@@ -306,7 +306,7 @@ static int assign(const cli_option *opt, void *args, const char *value,
 /* Help                                                                      */
 /* ------------------------------------------------------------------------ */
 
-/* Renders the note naming an option's default, read from the spec's defaults so
+/* Renders the note giving an option's default, read from the spec's defaults so
  * that the help cannot advertise a value the program does not use. */
 static void format_default(const cli_option *opt, const void *defaults,
                            char *out, size_t size)

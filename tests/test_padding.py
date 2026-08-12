@@ -3,7 +3,7 @@
 The arrays with a row per reference are rectangular and the references are not,
 so every row runs to the width the longest reference needs. NaN is what tells
 the difference: a column past what its own reference needs, and a reference no
-alignment ever named.
+read was ever aligned to.
 
 A zero means something else: the position was reached and nothing was counted
 there. Anything summing these arrays depends on the distinction, so what each
@@ -22,7 +22,7 @@ from support import (
 REJECTS_EVERYTHING = 61
 
 
-# Both kinds of row have the same shape, so this names the ones indexed by read
+# Both kinds of row have the same shape, so this lists the ones indexed by read
 # length. Every other row is indexed by reference position and runs only as far
 # as its own reference; a length is not a position, so these rows hold data to
 # their full width.
@@ -102,11 +102,11 @@ def test_positions_within_a_reference_are_never_nan(ragged):
 
 
 # ---------------------------------------------------------------------------
-# A reference no alignment named
+# A reference no read was aligned to
 # ---------------------------------------------------------------------------
 
 
-def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path):
+def test_a_reference_with_no_reads_is_zero_over_its_own_bases(datasets, tmp_path):
     data = datasets("patchy")
     output = tmp_path / "patchy.h5"
     run_cmuts(data, output)
@@ -129,7 +129,7 @@ def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path
                 extent = row_extent(field, lengths[name], width)
 
                 assert (row[:extent] == 0).all(), \
-                    f"{field}: {name} was named by nothing and is not zero"
+                    f"{field}: {name} has no reads and is not zero"
                 assert np.isnan(row[extent:]).all(), \
                     f"{field}: {name} has padding that is not NaN"
 
@@ -138,7 +138,7 @@ def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path
         for field, values in per_reference(handle).items():
             for name in missing:
                 assert values[row_of[name]] == 0, \
-                    f"{field}: {name} was never named but is not zero"
+                    f"{field}: {name} has no reads but is not zero"
 
 
 def test_an_uncovered_reference_of_full_length_holds_no_nan(datasets, tmp_path):

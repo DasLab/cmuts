@@ -163,8 +163,8 @@ cli_spec gen_spec(const gen_args *defaults)
 /* ------------------------------------------------------------------------ */
 
 /* One option carrying a distribution, paired with the field it is parsed into. The two offsets
- * are named together so that an option added here is read by the same loop as the rest, and
- * cannot be given a table row and then left unparsed. */
+ * are declared together so that an option added here is read by the same loop as the rest,
+ * and cannot be given a table row and then left unparsed. */
 typedef struct {
     const char *name;    /* the option it came from, for the message */
     size_t      text;    /* the written form, within gen_args */

@@ -6,7 +6,7 @@
  *
  * This is the specification of the file and nothing more. Where a field's values come
  * from is refrow's, the accumulated fields and the written ones not corresponding one to
- * one; how those values are stored is h5layout's. Nothing here names HDF5, so the
+ * one; how those values are stored is h5layout's. Nothing here refers to HDF5, so the
  * pipeline, the subtraction and everything else working in terms of fields and values
  * compiles without it.
  *

@@ -59,8 +59,8 @@ static bool sequence_present(const cm_bam_record *read)
 }
 
 /* Whether the record places any of its read. It may place none three ways: no CIGAR at
- * all, a CIGAR made wholly of clips, or one naming only reference operations. There is then no
- * position for the read to contribute to. */
+ * all, a CIGAR made wholly of clips, or one consuming reference but no read. There is
+ * then no position for the read to contribute to. */
 static bool placement_present(const cm_bam_record *read)
 {
     aln_span placed = aln_placed_span(read);

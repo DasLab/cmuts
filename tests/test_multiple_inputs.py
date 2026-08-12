@@ -44,7 +44,7 @@ def test_more_files_than_references_still_counts_the_same(datasets, tmp_path):
     assert outputs_agree(tmp_path / "whole.h5", tmp_path / "split.h5")
 
 
-def test_the_order_the_files_are_named_in_does_not_matter(data, tmp_path):
+def test_the_order_of_the_input_files_does_not_matter(data, tmp_path):
     split = dealt_out(data, tmp_path, 4)
 
     run_cmuts(split, tmp_path / "forwards.h5")
@@ -77,7 +77,7 @@ def test_the_same_file_twice_counts_everything_twice(data, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_a_file_naming_its_references_differently_is_refused(data, tmp_path):
+def test_a_file_declaring_different_references_is_refused(data, tmp_path):
     renamed = reheadered(data, tmp_path,
                          lambda text: text.replace("SN:ref0000", "SN:other000"))
 
@@ -88,7 +88,7 @@ def test_a_file_naming_its_references_differently_is_refused(data, tmp_path):
     assert "must be in the same order" in attempt.stderr
 
 
-def test_a_file_that_is_not_coordinate_sorted_is_refused_by_name(data, tmp_path):
+def test_an_unsorted_file_is_reported_by_path(data, tmp_path):
     unsorted = reheadered(data, tmp_path,
                           lambda text: text.replace("SO:coordinate", "SO:unknown"))
 

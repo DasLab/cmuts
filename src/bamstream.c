@@ -37,7 +37,7 @@ struct cm_bam_stream {
     char          error[CM_ERROR_MAX];
 };
 
-/* Failures name a file, which of them is at fault not being otherwise clear. */
+/* A failure reports the file at fault, which is not otherwise clear. */
 static int fail(cm_bam_stream *stream, const char *path, const char *what)
 {
     snprintf(stream->error, sizeof stream->error, "%s: %s", path, what);
@@ -205,7 +205,7 @@ static bool holder_of(const cm_bam_stream *stream, int64_t reference, size_t fro
 }
 
 /* The source holding the lowest reference any of them has left. Ties go to the first,
- * so the files are drained in the order they were named. */
+ * so the files are drained in the order given on the command line. */
 static bool lowest_holder(const cm_bam_stream *stream, size_t *out)
 {
     size_t lowest = 0;

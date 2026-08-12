@@ -3,7 +3,7 @@
  * Three states: M pairs a read base with a reference base, I consumes a read
  * base with no reference base, D consumes a reference base with no read base.
  * Both indices are prefix lengths, so cell (i, j) is the first i placed read
- * bases against the first j reference bases, with the state naming the last
+ * bases against the first j reference bases, with the state giving the last
  * operation. A cell in M or I compares reference base j - 1 with read base
  * i - 1.
  *
@@ -42,11 +42,11 @@ typedef struct {
 } cell_terms;
 
 /* Emission of a comparison that distinguishes nothing: an inserted base, or a
- * base one side does not name. */
+ * base one side does not hold. */
 #define UNINFORMATIVE (1.0 / NUC_BASES)
 
 /* A misread or modified base is equally likely to be any base the reference does
- * not name. Derived from the alphabet width, as UNINFORMATIVE is. */
+ * not hold. Derived from the alphabet width, as UNINFORMATIVE is. */
 #define OTHER_BASES ((double)(NUC_BASES - 1))
 
 /* Forward times backward sums to one on every row. A departure past this
@@ -197,10 +197,10 @@ static cell_terms terms_from(const context *ctx, bool agree, double error)
     };
 }
 
-/* The three values a cell naming a reference position can take: the reference
+/* The three values a cell at a reference position can take: the reference
  * holds the same base, a different one, or nothing comparable. All three are
  * computed on entering the row, keeping the divisions in phmm_modification out
- * of the per-cell path. Where the read names no base they are equal. */
+ * of the per-cell path. Where the read holds no base they are equal. */
 typedef struct {
     cell_terms agree;
     cell_terms differ;
@@ -345,7 +345,7 @@ static hts_pos_t position_of(const context *ctx, size_t i, hts_pos_t k)
     return origin_of(ctx, i) + k;
 }
 
-/* What to add to a cell index to name the same position on another row. Rows may
+/* What to add to a cell index to reach the same position on another row. Rows may
  * widen or narrow, so the offset is the distance between their first cells. */
 static hts_pos_t shift_between(const context *ctx, size_t from, size_t to)
 {
@@ -555,7 +555,7 @@ static bool forward(const context *ctx)
  * [j0 - 1, j0 + width - 1]. That every such position lies inside the window,
  * contiguously and at a fixed offset, is an invariant of window_of.
  *
- * The band is not clamped, so a row near either end of the reference names a few
+ * The band is not clamped, so a row near either end of the reference covers a few
  * positions outside it. Those are addressed like any other and never written
  * to. */
 typedef struct {
@@ -1034,7 +1034,7 @@ static hts_pos_t widest_row(const context *ctx)
     return widest;
 }
 
-/* Every position any cell can name, plus the one before the earliest, where a
+/* Every position any cell can reach, plus the one before the earliest, where a
  * row's first cell lays what it pairs. Rows may widen or narrow along the read,
  * so neither end belongs to a fixed row and both are searched for. */
 static extent window_of(const context *ctx)
