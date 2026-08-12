@@ -77,7 +77,10 @@ typedef struct {
     const char *path[SUB_N_INPUTS];  /* what to name each in a failure */
     size_t      n_inputs;
 
-    sub_mode  mode;
+    /* Settled with n_inputs and never apart from it: the rules a controlled mode selects
+     * are the ones reaching for the third input, and nothing else bounds that reach. */
+    sub_mode mode;
+
     h5writer *out;
 
     row_set rows[SUB_N_INPUTS];  /* one reference, read from each input */
@@ -124,8 +127,8 @@ static int fail_output(const subtraction *s, char *error, size_t error_len)
  * The rule is chosen once for a row rather than at every value, which keeps the choice
  * out of the loop.
  *
- * NaN in any input carries through every rule, marking the position unmeasured: a
- * difference of rates is known only where both rates are. */
+ * NaN in any input carries through every rule, marking the position unmeasured: a result
+ * combining several rates is known only where every one of them is. */
 
 static void add_f32(const float *const *in, size_t n_in, float *out, size_t n)
 {
@@ -278,9 +281,9 @@ static int combine_f32(const subtraction *s, sub_rule how, const void *const *in
     return -1;
 }
 
-/* A count is only ever added. The difference of two counts is not a count, and neither is
- * the quadrature of two, so a counted field declaring either rule has no arithmetic here
- * and is refused. */
+/* A count is only ever added. No difference, quadrature or ratio of two counts is a count,
+ * so a counted field declaring any rule but the sum has no arithmetic here and is
+ * refused. */
 static int combine_u64(const subtraction *s, sub_rule how, const void *const *in,
                        uint64_t *out, size_t n)
 {
@@ -404,7 +407,9 @@ static int subtract_references(subtraction *s, char *error, size_t error_len)
  * rules their per-reference neighbors follow.
  *
  * Read while the inputs are being opened rather than when the result is written, so that a
- * file missing one is refused before the output is created. */
+ * file missing one is refused before the output is created. That is before the row sets
+ * exist, so a field with no row may only follow a rule reading the values passed to it:
+ * one reaching for another field would find nothing allocated to read. */
 static int read_totals(subtraction *s, char *error, size_t error_len)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
