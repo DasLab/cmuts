@@ -78,8 +78,8 @@ def test_histogram_matches_samtools_under_a_filter(datasets, tmp_path, shape):
 
 
 def test_each_row_sums_to_the_reads_counted_for_its_reference(datasets, tmp_path):
-    """A shape whose lengths are all in range, so no read is left out of a
-    bin."""
+    """Uses a shape whose lengths are all in range, so no read is left out of
+    a bin."""
     data = datasets("ragged")
     output = tmp_path / "sums.h5"
     run_cmuts(data, output, min_mapq=0)
@@ -95,8 +95,7 @@ def test_each_row_sums_to_the_reads_counted_for_its_reference(datasets, tmp_path
 
 
 def test_a_read_longer_than_the_range_is_counted_by_the_total_alone(datasets, tmp_path):
-    """A shape whose soft clips leave reads longer than twice the longest
-    reference, which is past the last bin."""
+    """Uses a shape whose soft clips leave reads past the last bin."""
     data = datasets("overflowing")
     output = tmp_path / "overflowing.h5"
     run_cmuts(data, output, min_mapq=0)

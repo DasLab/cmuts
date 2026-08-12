@@ -107,8 +107,8 @@ def test_positions_within_a_reference_are_never_nan(ragged):
 
 
 def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path):
-    """A ragged, sparsely covered shape, so an uncovered reference carries
-    padding of its own alongside the bases it counted nothing at."""
+    """Uses a ragged, sparsely covered shape, so an uncovered reference carries
+    padding as well as bases it counted nothing at."""
     data = datasets("patchy")
     output = tmp_path / "patchy.h5"
     run_cmuts(data, output)
@@ -144,8 +144,8 @@ def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path
 
 
 def test_an_uncovered_reference_of_full_length_holds_no_nan(datasets, tmp_path):
-    """Every reference of this shape is the same length, so no row has padding
-    and an uncovered row is zero throughout."""
+    """Uses a shape of one length throughout, so no row has padding and an
+    uncovered row is zero to its full width."""
     data = datasets("flat")
     output = tmp_path / "flat.h5"
     run_cmuts(data, output)
@@ -196,9 +196,8 @@ def test_a_reference_whose_reads_were_all_rejected_is_zero(datasets, tmp_path):
 
 
 def test_raising_the_minimum_depth_only_adds_nan_to_a_rate(datasets, tmp_path):
-    """A rate is NaN both outside a reference and inside it where the evidence
-    falls short. Coverage is NaN for the first case alone, which is what
-    separates them here."""
+    """Separates the two reasons a rate is NaN by the coverage, which is NaN
+    outside a reference alone."""
     data = datasets("patchy")
     seen = {}
 
@@ -231,8 +230,8 @@ def test_raising_the_minimum_depth_only_adds_nan_to_a_rate(datasets, tmp_path):
 
 
 def test_an_error_at_a_full_read_of_depth_is_at_most_a_half(datasets, tmp_path):
-    """The standard error of a proportion over n exceeds a half only where n is
-    below one, which --min-depth of 1 excludes."""
+    """Runs at --min-depth 1, below which the standard error of a proportion
+    can exceed a half."""
     data = datasets("patchy")
     output = tmp_path / "bounded.h5"
     run_cmuts(data, output, min_depth=1)

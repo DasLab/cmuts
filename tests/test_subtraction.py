@@ -245,7 +245,6 @@ def test_each_field_follows_its_rule_against_a_control(build, subtract, name):
 
 
 def test_a_control_divides_the_difference(build, subtract):
-    """Values chosen so that the ratio is exact in a float."""
     treated = build({"reactivity": 0.75})
     untreated = build({"reactivity": 0.25})
     denatured = build({"reactivity": 0.5})
@@ -281,8 +280,6 @@ def test_a_control_of_nan_leaves_no_reactivity(build, subtract):
 
 
 def test_a_control_of_ones_leaves_the_difference_alone(build, tmp_path):
-    """A control of one divides by one, so the result must match the same pair
-    run with no control."""
     treated, untreated = build(everything(seed=34)), build(everything(seed=35))
     ones = build({"reactivity": 1.0})
 
@@ -295,8 +292,6 @@ def test_a_control_of_ones_leaves_the_difference_alone(build, tmp_path):
 
 
 def test_a_control_can_only_widen_the_error(build, subtract, tmp_path):
-    """The control is one throughout with an error of its own, so it changes
-    the error without changing the difference."""
     treated, untreated = build(everything(seed=36)), build(everything(seed=37))
     ones = build({"reactivity": 1.0, "error": spread("error", seed=38)})
 
@@ -330,7 +325,7 @@ def test_clipping_holds_a_ratio_at_zero(build, subtract):
 
 @pytest.mark.parametrize("wrong", ["references", "wide"])
 def test_a_control_disagreeing_with_the_inputs_is_refused(build, tmp_path, wrong):
-    control ={"references": lambda: build(n_refs=N_REFS + 1),
+    control = {"references": lambda: build(n_refs=N_REFS + 1),
                "wide": lambda: build(cap=CAP + 1)}[wrong]()
 
     attempt = try_subtract(build(), build(), tmp_path / "out.h5",
@@ -355,8 +350,6 @@ def test_a_control_missing_a_dataset_is_refused(build, tmp_path):
 
 @pytest.mark.parametrize("name", FLOATING)
 def test_a_value_either_input_lacks_is_missing_from_the_output(build, subtract, name):
-    """Each row carries one of the four cases, so a single run covers them
-    all."""
     known, missing = np.float32(0.5), np.float32(np.nan)
 
     left = np.full((N_REFS, CAP), known, dtype=np.float32)
@@ -374,8 +367,6 @@ def test_a_value_either_input_lacks_is_missing_from_the_output(build, subtract, 
 
 
 def test_the_columns_past_a_reference_stay_nan(build, subtract):
-    """An output holds no reference lengths, so NaN in every input is the only
-    thing marking a column as outside a reference."""
     lengths = [6, 4, 2, 1]
     rows = np.full((N_REFS, CAP), np.float32(0.25))
 
@@ -448,7 +439,6 @@ def test_two_runs_agree_byte_for_byte(build, tmp_path):
 
 @pytest.mark.parametrize("n_refs, cap", [(1, 1), (1, 40), (3, 1), (400, 2)])
 def test_each_field_follows_its_rule_at_any_shape(build, subtract, n_refs, cap):
-    """One reference, one base, and more references than fit in a chunk."""
     values = {"reactivity": spread("reactivity", n_refs, cap, seed=11),
               "reads/counted": spread("reads/counted", n_refs, cap, seed=12)}
     other = {"reactivity": spread("reactivity", n_refs, cap, seed=21),
@@ -477,8 +467,6 @@ def test_inputs_of_different_reference_counts_are_refused(build, tmp_path):
 
 
 def test_inputs_of_different_widths_are_refused(build, tmp_path):
-    """Two files holding the same number of references, counted against
-    references of different lengths."""
     attempt = try_subtract(build(cap=6), build(cap=7), tmp_path / "out.h5")
 
     assert attempt.returncode != 0
@@ -486,7 +474,6 @@ def test_inputs_of_different_widths_are_refused(build, tmp_path):
 
 
 def test_a_file_holding_no_references_is_refused(tmp_path):
-    """A file of the right shape in every other respect, with no rows in it."""
     empty = write_output(tmp_path / "empty.h5", n_refs=0, cap=CAP)
 
     attempt = try_subtract(empty, empty, tmp_path / "out.h5")
@@ -514,8 +501,6 @@ def test_an_input_missing_any_dataset_is_refused(build, tmp_path, missing):
 
 
 def test_an_input_whose_datasets_disagree_is_refused(build, tmp_path):
-    """The width of the coverage gives the length of the longest reference, and
-    every other field is checked against it rather than assumed to match."""
     broken = rewidened(build(), "error", CAP + 3)
 
     attempt = try_subtract(broken, build(), tmp_path / "out.h5")
@@ -581,7 +566,6 @@ def test_a_run_that_refuses_its_inputs_leaves_the_output_intact(build, subtract,
 
 
 def test_both_inputs_are_required(build, tmp_path):
-    """Invoked directly, the helper used elsewhere always passing two."""
     given = subprocess.run(
         [str(CMUTS_SUB), "-o", str(tmp_path / "out.h5"), str(build())],
         capture_output=True, text=True,

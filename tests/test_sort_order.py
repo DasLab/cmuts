@@ -39,8 +39,6 @@ def test_a_header_without_an_hd_line_is_refused(data, tmp_path):
 
 
 def test_a_sort_order_that_merely_starts_the_same_is_refused(data, tmp_path):
-    """The value runs to the end of its field, so "coordinated" does not
-    match."""
     altered = reheadered(data, tmp_path,
                          lambda text: text.replace("SO:coordinate", "SO:coordinated"))
 
@@ -51,7 +49,6 @@ def test_a_sort_order_that_merely_starts_the_same_is_refused(data, tmp_path):
 
 
 def test_other_tags_on_the_hd_line_do_not_hide_the_sort_order(data, tmp_path):
-    """SO may sit anywhere among the tags, and other tags may contain its name."""
     altered = reheadered(
         data, tmp_path,
         lambda text: text.replace("@HD\tVN:1.6\tSO:coordinate",
@@ -62,7 +59,7 @@ def test_other_tags_on_the_hd_line_do_not_hide_the_sort_order(data, tmp_path):
 
 
 def test_an_hd_line_without_a_sort_order_is_refused(data, tmp_path):
-    altered =reheadered(data, tmp_path,
+    altered = reheadered(data, tmp_path,
                          lambda text: text.replace("\tSO:coordinate", ""))
     attempt = try_cmuts(altered, tmp_path / "out.h5")
 

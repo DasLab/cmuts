@@ -36,8 +36,6 @@ def test_a_split_file_counts_the_same_as_the_whole(data, tmp_path, parts):
 
 
 def test_more_files_than_references_still_counts_the_same(datasets, tmp_path):
-    """Sixteen files over a sparse dataset, so most hold nothing for most
-    references."""
     data = datasets("sparse")
 
     run_cmuts(data, tmp_path / "whole.h5")
@@ -80,8 +78,6 @@ def test_the_same_file_twice_counts_everything_twice(data, tmp_path):
 
 
 def test_a_file_naming_its_references_differently_is_refused(data, tmp_path):
-    """A record names its reference by an index into its own header, so
-    disagreeing headers put reads in the wrong rows."""
     renamed = reheadered(data, tmp_path,
                          lambda text: text.replace("SN:ref0000", "SN:other000"))
 
@@ -93,7 +89,7 @@ def test_a_file_naming_its_references_differently_is_refused(data, tmp_path):
 
 
 def test_a_file_that_is_not_coordinate_sorted_is_refused_by_name(data, tmp_path):
-    unsorted =reheadered(data, tmp_path,
+    unsorted = reheadered(data, tmp_path,
                           lambda text: text.replace("SO:coordinate", "SO:unknown"))
 
     attempt = try_cmuts(replace(data, bams=data.bams + unsorted.bams),

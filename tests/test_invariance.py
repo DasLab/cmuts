@@ -53,8 +53,6 @@ def test_decode_threads_do_not_change_the_result(datasets, unvaried, tmp_path,
 @pytest.mark.parametrize("batch", [1, 7, 4096])
 def test_batch_size_does_not_change_the_result(datasets, unvaried, tmp_path,
                                                shape, batch):
-    """A batch of one exercises the single-item path rather than the batched
-    one."""
     run_cmuts(datasets(shape), tmp_path / "sized.h5", workers=4, batch=batch)
 
     assert outputs_agree(unvaried(shape), tmp_path / "sized.h5")
@@ -63,7 +61,6 @@ def test_batch_size_does_not_change_the_result(datasets, unvaried, tmp_path,
 @pytest.mark.parametrize("shape", SHAPES)
 def test_a_queue_of_one_does_not_change_the_result(datasets, unvaried, tmp_path,
                                                    shape):
-    """Forces the loader to block on the carrier pool for every read."""
     run_cmuts(datasets(shape), tmp_path / "starved.h5",
               workers=4, queue_capacity=1, batch=1)
 
@@ -73,8 +70,6 @@ def test_a_queue_of_one_does_not_change_the_result(datasets, unvaried, tmp_path,
 @pytest.mark.parametrize("shape", SHAPES)
 def test_one_reference_in_flight_does_not_change_the_result(datasets, unvaried,
                                                             tmp_path, shape):
-    """A reference must be finished and recycled before the next is opened, so
-    the loader blocks on the workers and on the consumer for every one."""
     run_cmuts(datasets(shape), tmp_path / "single-file.h5", workers=4, live_refs=1)
 
     assert outputs_agree(unvaried(shape), tmp_path / "single-file.h5")

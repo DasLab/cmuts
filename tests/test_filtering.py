@@ -80,8 +80,6 @@ def test_rejecting_everything_leaves_a_valid_file(datasets, tmp_path, shape):
 
 
 def test_secondary_alignments_are_refused(datasets, tmp_path):
-    """Every third read is marked secondary, which cmuts must reject and
-    samtools must agree on."""
     data, marked = with_secondary(datasets("plain"), tmp_path, every=3)
     assert marked > 0, "the case being tested has to appear in the data"
 
