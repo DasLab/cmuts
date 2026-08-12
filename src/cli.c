@@ -625,7 +625,6 @@ static void print_json_option(FILE *out, const cli_option *opt, const void *defa
     fprintf(out, ",\n      \"type\": \"%s\"", type_name(opt->type));
     fputs(",\n      \"metavar\": ", out);     print_json_string(out, opt->metavar);
     fputs(",\n      \"help\": ", out);        print_json_string(out, opt->help);
-    fputs(",\n      \"detail\": ", out);      print_json_string(out, opt->detail);
     fprintf(out, ",\n      \"required\": %s", opt->required ? "true" : "false");
     fprintf(out, ",\n      \"hidden\": %s", opt->hidden ? "true" : "false");
     fputs(",\n      \"unset_label\": ", out); print_json_string(out, opt->unset_label);
@@ -641,7 +640,6 @@ static void print_json_positional(FILE *out, const cli_positional *pos, bool las
     fputs("      \"name\": ", out);       print_json_string(out, pos->name);
     fputs(",\n      \"metavar\": ", out); print_json_string(out, pos->metavar);
     fputs(",\n      \"help\": ", out);    print_json_string(out, pos->help);
-    fputs(",\n      \"detail\": ", out);  print_json_string(out, pos->detail);
     fprintf(out, ",\n      \"required\": %s", pos->required ? "true" : "false");
     fprintf(out, ",\n      \"variadic\": %s\n", pos->variadic ? "true" : "false");
     fprintf(out, "    }%s\n", last ? "" : ",");

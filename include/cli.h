@@ -55,7 +55,6 @@ typedef struct {
     size_t            offset;   /* destination within the args struct */
     const char       *metavar;  /* argument placeholder; NULL when it takes none */
     const char       *help;     /* one line, for the help output */
-    const char       *detail;   /* paragraph for manual pages; NULL to reuse help */
     bool              required;
     /* The word the help prints in place of a default, for an option that need not be
      * applied at all. NULL where every value is a real setting. */
@@ -71,7 +70,6 @@ typedef struct {
     const char *name;     /* identifier for documentation and completions */
     const char *metavar;  /* placeholder in the usage line */
     const char *help;
-    const char *detail;
     size_t      offset;
     bool        required;
     /* Takes every remaining argument rather than one, so it must come last. The array goes

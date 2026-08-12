@@ -18,9 +18,6 @@ static const cli_choice FORMAT_CHOICES[] = {
     { NULL,  0           },
 };
 
-#define DISTRIBUTION_DETAIL \
-    "Written as a constant, a range LOW:HIGH, or a comma separated list."
-
 static const cli_option OPTIONS[] = {
     { .group = "Output", .name = "output", .key = 'o', .type = OPT_STRING,
       .offset = offsetof(gen_args, output), .metavar = "PREFIX",
@@ -29,8 +26,6 @@ static const cli_option OPTIONS[] = {
     { .group = "Output", .name = "format", .type = OPT_ENUM,
       .offset = offsetof(gen_args, format), .metavar = "FORMAT",
       .help = "alignment format to write",
-      .detail = "SAM is readable in a diff, which is worth having for a small "
-                "fixture; BAM is what anything large should be.",
       .choices = FORMAT_CHOICES },
 
     { .group = "Layout", .name = "references", .type = OPT_SIZE,
@@ -39,38 +34,31 @@ static const cli_option OPTIONS[] = {
       .minimum = 1, .maximum = CLI_UNBOUNDED },
     { .group = "Layout", .name = "ref-length", .type = OPT_STRING,
       .offset = offsetof(gen_args, ref_length), .metavar = "DISTRIBUTION",
-      .help = "length of each reference", .detail = DISTRIBUTION_DETAIL },
+      .help = "length of each reference" },
     { .group = "Layout", .name = "covered", .type = OPT_DOUBLE,
       .offset = offsetof(gen_args, covered), .metavar = "F",
       .help = "fraction of references receiving any reads",
-      .detail = "Below one, some references get nothing at all, which is the "
-                "shape of a sparse experiment and the case where most rows of "
-                "the output are never written.",
       .minimum = 0, .maximum = 1 },
     { .group = "Layout", .name = "reads-per-ref", .type = OPT_STRING,
       .offset = offsetof(gen_args, reads_per_ref), .metavar = "DISTRIBUTION",
-      .help = "reads on each covered reference",
-      .detail = DISTRIBUTION_DETAIL },
+      .help = "reads on each covered reference" },
 
     { .group = "Reads", .name = "read-length", .type = OPT_STRING,
       .offset = offsetof(gen_args, read_length), .metavar = "DISTRIBUTION",
-      .help = "reference span each read covers",
-      .detail = "The span drawn from the reference. What the read finally "
-                "stores differs from it: insertions and soft clips make it "
-                "longer, deletions shorter. " DISTRIBUTION_DETAIL },
+      .help = "reference span each read covers" },
     { .group = "Reads", .name = "mapq", .type = OPT_STRING,
       .offset = offsetof(gen_args, mapq), .metavar = "DISTRIBUTION",
-      .help = "mapping quality of each read", .detail = DISTRIBUTION_DETAIL },
+      .help = "mapping quality of each read" },
     { .group = "Reads", .name = "base-quality", .type = OPT_STRING,
       .offset = offsetof(gen_args, base_quality), .metavar = "DISTRIBUTION",
-      .help = "PHRED score of each base", .detail = DISTRIBUTION_DETAIL },
+      .help = "PHRED score of each base" },
     { .group = "Reads", .name = "reverse", .type = OPT_DOUBLE,
       .offset = offsetof(gen_args, reverse), .metavar = "F",
       .help = "fraction of reads on the reverse strand",
       .minimum = 0, .maximum = 1 },
     { .group = "Reads", .name = "unmapped", .type = OPT_STRING,
       .offset = offsetof(gen_args, unmapped), .metavar = "DISTRIBUTION",
-      .help = "reads aligning nowhere", .detail = DISTRIBUTION_DETAIL },
+      .help = "reads aligning nowhere" },
 
     { .group = "Differences from the reference", .name = "mismatch-rate",
       .type = OPT_DOUBLE, .offset = offsetof(gen_args, mismatch_rate),
@@ -78,34 +66,23 @@ static const cli_option OPTIONS[] = {
       .minimum = 0, .maximum = 1 },
     { .group = "Differences from the reference", .name = "insertions",
       .type = OPT_STRING, .offset = offsetof(gen_args, insertions),
-      .metavar = "DISTRIBUTION", .help = "insertion events per read",
-      .detail = "Counted as events with their own length rather than drawn "
-                "from a per-base rate, since a rate produces many short "
-                "insertions and effectively never a long one. "
-                DISTRIBUTION_DETAIL },
+      .metavar = "DISTRIBUTION", .help = "insertion events per read" },
     { .group = "Differences from the reference", .name = "insertion-length",
       .type = OPT_STRING, .offset = offsetof(gen_args, insertion_length),
-      .metavar = "DISTRIBUTION", .help = "bases per insertion",
-      .detail = DISTRIBUTION_DETAIL },
+      .metavar = "DISTRIBUTION", .help = "bases per insertion" },
     { .group = "Differences from the reference", .name = "deletions",
       .type = OPT_STRING, .offset = offsetof(gen_args, deletions),
-      .metavar = "DISTRIBUTION", .help = "deletion events per read",
-      .detail = DISTRIBUTION_DETAIL },
+      .metavar = "DISTRIBUTION", .help = "deletion events per read" },
     { .group = "Differences from the reference", .name = "deletion-length",
       .type = OPT_STRING, .offset = offsetof(gen_args, deletion_length),
-      .metavar = "DISTRIBUTION", .help = "bases per deletion",
-      .detail = DISTRIBUTION_DETAIL },
+      .metavar = "DISTRIBUTION", .help = "bases per deletion" },
     { .group = "Differences from the reference", .name = "soft-clips",
       .type = OPT_STRING, .offset = offsetof(gen_args, soft_clips),
       .metavar = "DISTRIBUTION",
-      .help = "clipped ends per read, none through both",
-      .detail = "Soft-clipped bases are stored but align nowhere, so they "
-                "lengthen a read without lengthening its span. "
-                DISTRIBUTION_DETAIL },
+      .help = "clipped ends per read, none through both" },
     { .group = "Differences from the reference", .name = "soft-clip-length",
       .type = OPT_STRING, .offset = offsetof(gen_args, soft_clip_length),
-      .metavar = "DISTRIBUTION", .help = "bases per clipped end",
-      .detail = DISTRIBUTION_DETAIL },
+      .metavar = "DISTRIBUTION", .help = "bases per clipped end" },
 
     { .group = "Determinism", .name = "seed", .type = OPT_SIZE,
       .offset = offsetof(gen_args, seed), .metavar = "N",
