@@ -6,13 +6,13 @@
 #include "output.h"
 
 const out_field OUT_FIELDS[OUT_N_FIELDS] = {
-    [OUT_COVERAGE]   = { "coverage",       shape_per_base,   true,  OUT_F32, OUT_ZERO, OUT_ADD       },
-    [OUT_REACTIVITY] = { "reactivity",     shape_per_base,   true,  OUT_F32, OUT_NAN,  OUT_SUBTRACT  },
-    [OUT_ERROR]      = { "error",          shape_per_base,   true,  OUT_F32, OUT_NAN,  OUT_PROPAGATE },
-    [OUT_LENGTHS]    = { "reads/lengths",  shape_per_length, true,  OUT_U64, OUT_ZERO, OUT_ADD       },
-    [OUT_READS]      = { "reads/counted",  shape_none,       true,  OUT_U64, OUT_ZERO, OUT_ADD       },
-    [OUT_REJECTED]   = { "reads/rejected", shape_none,       true,  OUT_U64, OUT_ZERO, OUT_ADD       },
-    [OUT_UNMAPPED]   = { "reads/unmapped", shape_none,       false, OUT_U64, OUT_ZERO, OUT_ADD       },
+    [OUT_COVERAGE]   = { "coverage",       shape_per_base,   true,  OUT_F32, OUT_ZERO },
+    [OUT_REACTIVITY] = { "reactivity",     shape_per_base,   true,  OUT_F32, OUT_NAN  },
+    [OUT_ERROR]      = { "error",          shape_per_base,   true,  OUT_F32, OUT_NAN  },
+    [OUT_LENGTHS]    = { "reads/lengths",  shape_per_length, true,  OUT_U64, OUT_ZERO },
+    [OUT_READS]      = { "reads/counted",  shape_none,       true,  OUT_U64, OUT_ZERO },
+    [OUT_REJECTED]   = { "reads/rejected", shape_none,       true,  OUT_U64, OUT_ZERO },
+    [OUT_UNMAPPED]   = { "reads/unmapped", shape_none,       false, OUT_U64, OUT_ZERO },
 };
 
 size_t out_values(out_field_id id, size_t len, size_t cap)

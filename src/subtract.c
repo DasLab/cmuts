@@ -27,6 +27,29 @@ typedef enum {
     SUB_N_INPUTS,
 } sub_input;
 
+/* How each field's values from several files come to one value.
+ *
+ * Kept here rather than in the field table: what an output holds is one thing, and what a
+ * combination of several makes of it is another. Coverage and the read counts are totals,
+ * so they add. Reactivity is a rate, so the background's is subtracted from the treated
+ * one. The error of that difference is the two errors in quadrature, the runs being
+ * independent. */
+typedef enum {
+    SUB_SUM,         /* every input's value, added */
+    SUB_DIFFERENCE,  /* the treated file's less the untreated one's */
+    SUB_QUADRATURE,  /* the error of that difference */
+} sub_rule;
+
+static const sub_rule RULES[OUT_N_FIELDS] = {
+    [OUT_COVERAGE]   = SUB_SUM,
+    [OUT_REACTIVITY] = SUB_DIFFERENCE,
+    [OUT_ERROR]      = SUB_QUADRATURE,
+    [OUT_LENGTHS]    = SUB_SUM,
+    [OUT_READS]      = SUB_SUM,
+    [OUT_REJECTED]   = SUB_SUM,
+    [OUT_UNMAPPED]   = SUB_SUM,
+};
+
 /* One reference's rows for one file: a buffer per field indexed by reference, each in the
  * type that field is stored as. */
 typedef struct {
@@ -151,7 +174,7 @@ static void add_u64(const uint64_t *const *in, size_t n_in, uint64_t *out, size_
 
 /* Only a difference is clipped. A sum of counts and a quadrature of errors are both
  * nonnegative wherever their inputs are, so there is nothing for a clip to raise. */
-static int combine_f32(out_combine how, bool clip, const void *const *in, size_t n_in,
+static int combine_f32(sub_rule how, bool clip, const void *const *in, size_t n_in,
                        float *out, size_t n)
 {
     const float *v[SUB_N_INPUTS];
@@ -161,16 +184,16 @@ static int combine_f32(out_combine how, bool clip, const void *const *in, size_t
     }
 
     switch (how) {
-        case OUT_ADD:
+        case SUB_SUM:
             add_f32(v, n_in, out, n);
             return 0;
-        case OUT_SUBTRACT:
+        case SUB_DIFFERENCE:
             subtract_f32(v[SUB_TREATED], v[SUB_UNTREATED], out, n);
             if (clip) {
                 clip_f32(out, n);
             }
             return 0;
-        case OUT_PROPAGATE:
+        case SUB_QUADRATURE:
             propagate_f32(v[SUB_TREATED], v[SUB_UNTREATED], out, n);
             return 0;
     }
@@ -181,12 +204,12 @@ static int combine_f32(out_combine how, bool clip, const void *const *in, size_t
 /* A count is only ever added. The difference of two counts is not a count, and neither is
  * the quadrature of two, so a counted field declaring either rule has no arithmetic here
  * and is refused. */
-static int combine_u64(out_combine how, const void *const *in, size_t n_in,
+static int combine_u64(sub_rule how, const void *const *in, size_t n_in,
                        uint64_t *out, size_t n)
 {
     const uint64_t *v[SUB_N_INPUTS];
 
-    if (how != OUT_ADD) {
+    if (how != SUB_SUM) {
         return -1;
     }
 
@@ -201,7 +224,7 @@ static int combine_u64(out_combine how, const void *const *in, size_t n_in,
 static int combine_values(out_field_id id, bool clip, const void *const *in,
                           size_t n_in, void *out, size_t n)
 {
-    out_combine how = OUT_FIELDS[id].combine;
+    sub_rule how = RULES[id];
 
     switch (OUT_FIELDS[id].stored) {
         case OUT_F32:      return combine_f32(how, clip, in, n_in, out, n);

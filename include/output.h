@@ -1,8 +1,8 @@
 /* output.h -- what an output file holds.
  *
  * Defines the fields an output is made of: their names, the width of a row of each, and
- * how two files' values of one combine under background subtraction. Everything that
- * reads or writes an output takes the description from here.
+ * the type each is stored as. Everything that reads or writes an output takes the
+ * description from here.
  *
  * This is the specification of the file and nothing more. Where a field's values come
  * from is refrow's, the accumulated fields and the written ones not corresponding one to
@@ -35,16 +35,6 @@ typedef enum {
     OUT_N_FIELDS,
 } out_field_id;
 
-/* How a field's values from two files combine under background subtraction. Coverage and
- * the read counts are totals, so they add. Reactivity is a rate, so the background's is
- * subtracted from the treated one. The error of that difference is the two errors in
- * quadrature, the runs being independent. */
-typedef enum {
-    OUT_ADD,
-    OUT_SUBTRACT,
-    OUT_PROPAGATE,
-} out_combine;
-
 /* What a value the run never wrote means. Counts read zero; rates read NaN, since zero
  * would claim an unread position was measured and unmodified.
  *
@@ -75,7 +65,6 @@ typedef struct {
     bool        per_ref;  /* whether there is one such row per reference */
     out_stored  stored;   /* the type its values are narrowed to */
     out_absent  absent;   /* what a value it was never given means */
-    out_combine combine;  /* how two runs' values of it combine */
 } out_field;
 
 extern const out_field OUT_FIELDS[OUT_N_FIELDS];
