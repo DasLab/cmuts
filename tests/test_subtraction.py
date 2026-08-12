@@ -1,12 +1,8 @@
 """Taking an untreated background off a treated run.
 
 The result depends on the values in the input files and on nothing else, so the
-inputs are written by hand rather than counted from an alignment and each test
-states the values it uses. Nothing below depends on how cmuts computes a
-reactivity, so that calculation may change without affecting any of it.
-
-The layout is the one thing the two programs share, and one test checks the
-description in outputs.py against a real run of cmuts.
+inputs are written by hand rather than counted from an alignment. outputs.py
+describes the layout the two programs share.
 """
 
 from __future__ import annotations
@@ -103,13 +99,10 @@ def everything(seed):
 
 
 def test_the_layout_written_here_is_the_one_cmuts_writes(data, tmp_path):
-    """The one place these tests run cmuts.
+    """Checks the description in outputs.py against a real cmuts run.
 
-    Every other test builds its inputs from the description in outputs.py, so
-    that description must match what cmuts produces. This test compares the
-    names, types and widths and never a value, which keeps the reactivity
-    calculation outside the suite. Adding a field to the output fails this test
-    and no other.
+    Compares names, types and widths and never a value, which keeps the
+    reactivity calculation out of the comparison.
     """
     counted = tmp_path / "counted.h5"
     run_cmuts(data, counted)
@@ -135,11 +128,6 @@ def test_the_layout_written_here_is_the_one_cmuts_writes(data, tmp_path):
 
 @pytest.mark.parametrize("name", COMBINED)
 def test_each_field_follows_its_rule(build, subtract, name):
-    """Checks every dataset of the output against the rule for it.
-
-    The rules come from a table rather than one test per rule, so adding a
-    field without adding a rule fails this test.
-    """
     treated = build(everything(seed=1), unmapped=17)
     untreated = build(everything(seed=50), unmapped=3)
 
@@ -151,8 +139,6 @@ def test_each_field_follows_its_rule(build, subtract, name):
 
 
 def test_a_background_above_the_signal_leaves_a_negative_reactivity(build, subtract):
-    """Without --clip the difference is reported as it stands, a rate below its
-    background being a measurement like any other."""
     treated = build({"reactivity": 0.25})
     untreated = build({"reactivity": 0.75})
 
@@ -162,8 +148,6 @@ def test_a_background_above_the_signal_leaves_a_negative_reactivity(build, subtr
 
 
 def test_clipping_holds_the_difference_at_zero(build, subtract):
-    """--clip reports a rate below its background as unmodified rather than as
-    negative."""
     treated = build({"reactivity": 0.25})
     untreated = build({"reactivity": 0.75})
 
@@ -171,9 +155,7 @@ def test_clipping_holds_the_difference_at_zero(build, subtract):
 
 
 def test_clipping_leaves_a_difference_above_zero_alone(build, tmp_path):
-    """Only what fell below zero is raised. Against the same pair of inputs run
-    without the flag, so what the clip changes is stated as a difference from
-    what the arithmetic gives on its own."""
+    """Compared against the same pair of inputs run without the flag."""
     treated, untreated = build(everything(seed=13)), build(everything(seed=14))
 
     plain = run_subtract(treated, untreated, tmp_path / "plain.h5")
@@ -186,9 +168,6 @@ def test_clipping_leaves_a_difference_above_zero_alone(build, tmp_path):
 
 
 def test_clipping_does_not_raise_a_missing_value_to_zero(build, subtract):
-    """A position either run left unmeasured is NaN clipped or not. Zero is
-    what the clip writes for a measurement, so it must not also mean that
-    nothing was measured."""
     known, missing = np.float32(0.25), np.float32(np.nan)
 
     left = np.full((N_REFS, CAP), known, dtype=np.float32)
@@ -206,8 +185,6 @@ def test_clipping_does_not_raise_a_missing_value_to_zero(build, subtract):
 
 
 def test_clipping_reaches_no_field_but_the_reactivity(build, tmp_path):
-    """A sum of counts and a quadrature of errors are never negative, so the
-    clip has nothing to raise in either."""
     treated = build(everything(seed=15), unmapped=11)
     untreated = build(everything(seed=16), unmapped=4)
 
@@ -219,8 +196,6 @@ def test_clipping_reaches_no_field_but_the_reactivity(build, tmp_path):
 
 
 def test_an_error_is_never_reduced_by_subtracting(build, subtract):
-    """The errors combine in quadrature, so the difference of two measurements
-    is less certain than either of them."""
     treated = build({"error": spread("error", seed=7)})
     untreated = build({"error": spread("error", seed=8)})
 
@@ -252,15 +227,8 @@ def test_counts_stay_whole_and_exact(build, subtract):
 
 @pytest.mark.parametrize("name", COMBINED)
 def test_each_field_follows_its_rule_against_a_control(build, subtract, name):
-    """The same statement as without a control, over the rules a control puts in
-    place: the reactivity a ratio, its error propagated through that ratio, and
-    everything counted still added.
-
-    The error is compared to a tolerance rather than exactly. It rounds eight
-    times over a division and a root, so reproducing it bit for bit would test
-    that the same expression had been typed the same way twice rather than that
-    the arithmetic is right; every other rule rounds once and is exact.
-    """
+    """The error is compared to a tolerance because it rounds eight times over
+    a division and a root; every other rule rounds once and is exact."""
     treated = build(everything(seed=31), unmapped=17)
     untreated = build(everything(seed=32), unmapped=3)
     denatured = build(everything(seed=33), unmapped=5)
@@ -277,7 +245,7 @@ def test_each_field_follows_its_rule_against_a_control(build, subtract, name):
 
 
 def test_a_control_divides_the_difference(build, subtract):
-    """The rule at its plainest, on values whose ratio is exact in a float."""
+    """Values chosen so that the ratio is exact in a float."""
     treated = build({"reactivity": 0.75})
     untreated = build({"reactivity": 0.25})
     denatured = build({"reactivity": 0.5})
@@ -288,9 +256,6 @@ def test_a_control_divides_the_difference(build, subtract):
 
 
 def test_a_control_that_measured_nothing_leaves_no_reactivity(build, subtract):
-    """A control of zero is a failed measurement rather than a reactivity of
-    any size, so the position is reported as unmeasured rather than as a
-    division by zero."""
     treated = build({"reactivity": 0.75})
     untreated = build({"reactivity": 0.25})
     denatured = build({"reactivity": 0.0})
@@ -302,8 +267,6 @@ def test_a_control_that_measured_nothing_leaves_no_reactivity(build, subtract):
 
 
 def test_a_control_of_nan_leaves_no_reactivity(build, subtract):
-    """A ratio is known only where all three rates are, so NaN in the control
-    carries through as it does in either other input."""
     known, missing = np.float32(0.5), np.float32(np.nan)
 
     control = np.full((N_REFS, CAP), known, dtype=np.float32)
@@ -318,8 +281,8 @@ def test_a_control_of_nan_leaves_no_reactivity(build, subtract):
 
 
 def test_a_control_of_ones_leaves_the_difference_alone(build, tmp_path):
-    """A control finding every position equally accessible divides by one, which
-    is the difference the same run gives with no control at all."""
+    """A control of one divides by one, so the result must match the same pair
+    run with no control."""
     treated, untreated = build(everything(seed=34)), build(everything(seed=35))
     ones = build({"reactivity": 1.0})
 
@@ -332,8 +295,8 @@ def test_a_control_of_ones_leaves_the_difference_alone(build, tmp_path):
 
 
 def test_a_control_can_only_widen_the_error(build, subtract, tmp_path):
-    """Dividing by a measurement adds that measurement's own uncertainty, so a
-    control of one leaves the difference alone but not its error."""
+    """The control is one throughout with an error of its own, so it changes
+    the error without changing the difference."""
     treated, untreated = build(everything(seed=36)), build(everything(seed=37))
     ones = build({"reactivity": 1.0, "error": spread("error", seed=38)})
 
@@ -345,8 +308,6 @@ def test_a_control_can_only_widen_the_error(build, subtract, tmp_path):
 
 
 def test_a_control_is_counted_in_the_totals(build, subtract):
-    """Everything counted adds across all three inputs, so that the field means
-    the same in every file."""
     treated = build({"reads/counted": 3}, unmapped=11)
     untreated = build({"reads/counted": 5}, unmapped=13)
     denatured = build({"reads/counted": 7}, unmapped=17)
@@ -358,8 +319,6 @@ def test_a_control_is_counted_in_the_totals(build, subtract):
 
 
 def test_clipping_holds_a_ratio_at_zero(build, subtract):
-    """A ratio takes the sign of its numerator, since the control is positive
-    at every position that reports a value."""
     treated = build({"reactivity": 0.25})
     untreated = build({"reactivity": 0.75})
     denatured = build({"reactivity": 0.5})
@@ -371,8 +330,7 @@ def test_clipping_holds_a_ratio_at_zero(build, subtract):
 
 @pytest.mark.parametrize("wrong", ["references", "wide"])
 def test_a_control_disagreeing_with_the_inputs_is_refused(build, tmp_path, wrong):
-    """Checked against the treated file exactly as the background is."""
-    control = {"references": lambda: build(n_refs=N_REFS + 1),
+    control ={"references": lambda: build(n_refs=N_REFS + 1),
                "wide": lambda: build(cap=CAP + 1)}[wrong]()
 
     attempt = try_subtract(build(), build(), tmp_path / "out.h5",
@@ -397,12 +355,8 @@ def test_a_control_missing_a_dataset_is_refused(build, tmp_path):
 
 @pytest.mark.parametrize("name", FLOATING)
 def test_a_value_either_input_lacks_is_missing_from_the_output(build, subtract, name):
-    """NaN marks a position nothing was measured at, and the output holds one
-    at every position either input does: a difference of rates is known only
-    where both rates are known.
-
-    Each row carries one of the four cases, so a single run covers them all.
-    """
+    """Each row carries one of the four cases, so a single run covers them
+    all."""
     known, missing = np.float32(0.5), np.float32(np.nan)
 
     left = np.full((N_REFS, CAP), known, dtype=np.float32)
@@ -420,12 +374,8 @@ def test_a_value_either_input_lacks_is_missing_from_the_output(build, subtract, 
 
 
 def test_the_columns_past_a_reference_stay_nan(build, subtract):
-    """A row is as ragged after a subtraction as before it.
-
-    An output holds no reference lengths, so what marks a column as outside a
-    reference is that every input holds NaN there. The arithmetic carries that
-    through without knowing where a reference ends.
-    """
+    """An output holds no reference lengths, so NaN in every input is the only
+    thing marking a column as outside a reference."""
     lengths = [6, 4, 2, 1]
     rows = np.full((N_REFS, CAP), np.float32(0.25))
 
@@ -446,15 +396,12 @@ def test_the_columns_past_a_reference_stay_nan(build, subtract):
 
 
 def test_the_output_is_shaped_and_typed_like_its_inputs(build, subtract):
-    """The same datasets at the same widths and types, so that anything reading
-    a cmuts output reads this one."""
     treated, untreated = build(everything(seed=2)), build(everything(seed=9))
 
     assert datasets_of(subtract(treated, untreated)) == datasets_of(treated)
 
 
 def test_a_file_against_itself_leaves_a_reactivity_of_zero(build, subtract):
-    """Zero at every position holding a rate, and NaN at the rest."""
     values = everything(seed=3)
     values["reactivity"][2, 3] = np.nan
 
@@ -468,9 +415,6 @@ def test_a_file_against_itself_leaves_a_reactivity_of_zero(build, subtract):
 
 
 def test_swapping_the_two_inputs_negates_only_the_reactivity(build, subtract, tmp_path):
-    """The argument order determines which file is the background, and that
-    decides the sign of the difference and nothing else: an error, a coverage
-    and a count are the same either way round."""
     treated, untreated = build(everything(seed=4)), build(everything(seed=40))
 
     forward = subtract(treated, untreated)
@@ -484,7 +428,6 @@ def test_swapping_the_two_inputs_negates_only_the_reactivity(build, subtract, tm
 
 
 def test_a_background_of_zeros_leaves_the_treated_run_unchanged(build, subtract):
-    """Rates, error and counts alike."""
     treated = build(everything(seed=5))
     nothing = build({"reactivity": 0.0, "error": 0.0})
 
@@ -495,9 +438,6 @@ def test_a_background_of_zeros_leaves_the_treated_run_unchanged(build, subtract)
 
 
 def test_two_runs_agree_byte_for_byte(build, tmp_path):
-    """The work is single-threaded and rows are written in reference order, so
-    the same inputs produce the same bytes. This does not hold of cmuts, whose
-    rows are written as its workers finish them."""
     treated, untreated = build(everything(seed=6)), build(everything(seed=60))
 
     first = run_subtract(treated, untreated, tmp_path / "first.h5")
@@ -538,8 +478,7 @@ def test_inputs_of_different_reference_counts_are_refused(build, tmp_path):
 
 def test_inputs_of_different_widths_are_refused(build, tmp_path):
     """Two files holding the same number of references, counted against
-    references of different lengths. This is as far as the check can go: an
-    output holds no names, so nothing else about the two can be compared."""
+    references of different lengths."""
     attempt = try_subtract(build(cap=6), build(cap=7), tmp_path / "out.h5")
 
     assert attempt.returncode != 0
@@ -568,8 +507,6 @@ def test_something_that_is_not_hdf5_is_refused(build, tmp_path):
 
 @pytest.mark.parametrize("missing", COMBINED)
 def test_an_input_missing_any_dataset_is_refused(build, tmp_path, missing):
-    """Every dataset is checked for, the run total included, so no part of the
-    result can be left unwritten without a report."""
     attempt = try_subtract(without(build(), missing), build(), tmp_path / "out.h5")
 
     assert attempt.returncode != 0
@@ -618,8 +555,6 @@ def test_overwrite_replaces_an_existing_output(build, subtract):
 @pytest.mark.parametrize("wrong", ["shape", "missing dataset", "not hdf5"])
 def test_a_run_that_refuses_its_inputs_leaves_the_output_intact(build, subtract,
                                                                 tmp_path, wrong):
-    """Every defect an input can have is found before the output is created, so
-    a result already at that path survives a run that cannot proceed."""
     output = subtract(build(), build())
     before = output.read_bytes()
 
@@ -663,12 +598,8 @@ def test_both_inputs_are_required(build, tmp_path):
 
 
 def test_it_reads_what_cmuts_writes(data, tmp_path):
-    """Two real cmuts runs through a subtraction, which is what the built
-    inputs cannot cover: that the two programs fit together.
-
-    Nothing is asserted about any value, only that the run succeeds and that
-    what it leaves is shaped like what it was given.
-    """
+    """Asserts nothing about any value, only that the run succeeds and leaves
+    a file shaped like its inputs."""
     treated = tmp_path / "treated.h5"
     untreated = tmp_path / "untreated.h5"
 

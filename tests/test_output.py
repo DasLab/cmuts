@@ -35,8 +35,6 @@ def test_overwrite_replaces_an_existing_output(data, tmp_path):
 
 
 def test_a_run_that_would_fail_destroys_nothing(data, datasets, tmp_path):
-    """The mistake the reference check exists to catch used to truncate the
-    output before the check ever ran."""
     output = tmp_path / "out.h5"
     run_cmuts(data, output)
     before = output.read_bytes()
@@ -48,8 +46,7 @@ def test_a_run_that_would_fail_destroys_nothing(data, datasets, tmp_path):
 
 
 def test_an_empty_file_is_replaced_without_overwrite(data, tmp_path):
-    """An empty file is what mktemp and shell redirection leave behind, and
-    holds nothing to lose."""
+    """An empty file is what mktemp and shell redirection leave behind."""
     output = tmp_path / "reserved.h5"
     output.touch()
 

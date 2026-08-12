@@ -70,7 +70,6 @@ def test_histogram_matches_samtools(datasets, tmp_path, shape):
 
 @pytest.mark.parametrize("shape", ["plain", "clipped"])
 def test_histogram_matches_samtools_under_a_filter(datasets, tmp_path, shape):
-    """A filter removing reads must remove them from the histogram too."""
     data = datasets(shape)
     output = tmp_path / f"{shape}-filtered.h5"
     run_cmuts(data, output, min_mapq=30)
@@ -79,8 +78,8 @@ def test_histogram_matches_samtools_under_a_filter(datasets, tmp_path, shape):
 
 
 def test_each_row_sums_to_the_reads_counted_for_its_reference(datasets, tmp_path):
-    """Every length of this shape is in range, so no read is left out of a bin
-    and the rows come to the reads total exactly."""
+    """A shape whose lengths are all in range, so no read is left out of a
+    bin."""
     data = datasets("ragged")
     output = tmp_path / "sums.h5"
     run_cmuts(data, output, min_mapq=0)
@@ -96,9 +95,8 @@ def test_each_row_sums_to_the_reads_counted_for_its_reference(datasets, tmp_path
 
 
 def test_a_read_longer_than_the_range_is_counted_by_the_total_alone(datasets, tmp_path):
-    """Soft-clipped bases are stored while aligning nowhere, so a read can be
-    longer than twice the longest reference. No bin holds it, and the reads
-    total exceeds the row's own sum by exactly those reads."""
+    """A shape whose soft clips leave reads longer than twice the longest
+    reference, which is past the last bin."""
     data = datasets("overflowing")
     output = tmp_path / "overflowing.h5"
     run_cmuts(data, output, min_mapq=0)

@@ -27,7 +27,6 @@ def test_alignments_are_well_formed(datasets, shape):
 
 @pytest.mark.parametrize("shape", sorted(SHAPES))
 def test_coordinate_sorted_without_sorting(datasets, shape):
-    """Reads are emitted in order, so indexing succeeds on the file as written."""
     subprocess.run(["samtools", "index", str(datasets(shape).bam)],
                    check=True, capture_output=True)
 

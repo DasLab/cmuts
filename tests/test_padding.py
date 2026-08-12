@@ -87,8 +87,6 @@ def test_positions_past_a_reference_are_nan(ragged):
 
 
 def test_positions_within_a_reference_are_never_nan(ragged):
-    """Padding is the only thing NaN marks in a count, so a NaN inside a
-    reference some read reached is a hole in the counts."""
     data, output = ragged
     lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
     reached = references_with_reads(data.bam)
@@ -109,9 +107,8 @@ def test_positions_within_a_reference_are_never_nan(ragged):
 
 
 def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path):
-    """Zero over the reference's own bases and NaN past them. This shape is
-    ragged and sparsely covered, so an uncovered reference carries padding of
-    its own to tell the two apart."""
+    """A ragged, sparsely covered shape, so an uncovered reference carries
+    padding of its own alongside the bases it counted nothing at."""
     data = datasets("patchy")
     output = tmp_path / "patchy.h5"
     run_cmuts(data, output)
@@ -168,8 +165,6 @@ def test_an_uncovered_reference_of_full_length_holds_no_nan(datasets, tmp_path):
 
 
 def test_a_reference_whose_reads_were_all_rejected_is_zero(datasets, tmp_path):
-    """cmuts writes zero rather than NaN for a reference the alignments named,
-    whether or not anything survived the filter."""
     data = datasets("ragged")
     output = tmp_path / "rejected.h5"
     summary = run_cmuts(data, output, min_mapq=REJECTS_EVERYTHING)
@@ -201,11 +196,9 @@ def test_a_reference_whose_reads_were_all_rejected_is_zero(datasets, tmp_path):
 
 
 def test_raising_the_minimum_depth_only_adds_nan_to_a_rate(datasets, tmp_path):
-    """A rate is NaN for two reasons where a count is NaN for one: a column
-    outside its reference, and a column inside it holding too little evidence.
-    Coverage is NaN for the first alone, and raising --min-depth can only add
-    the second.
-    """
+    """A rate is NaN both outside a reference and inside it where the evidence
+    falls short. Coverage is NaN for the first case alone, which is what
+    separates them here."""
     data = datasets("patchy")
     seen = {}
 

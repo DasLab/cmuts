@@ -69,8 +69,8 @@ def substituted(data, tmp_path, only=None):
 
 
 def test_a_matching_checksum_is_accepted(data, tmp_path):
-    """cmuts checks the checksums before counting and not while counting, so
-    the result matches a run whose header declares none."""
+    """Compared against a run whose header declares no checksums, which must
+    produce the same output."""
     checked = run_cmuts(with_checksums(data, tmp_path), tmp_path / "checked.h5")
     plain = run_cmuts(data, tmp_path / "plain.h5")
 
@@ -88,15 +88,12 @@ def test_a_substituted_reference_is_refused(data, tmp_path):
 
 
 def test_a_reference_without_a_checksum_is_not_checked(data, tmp_path):
-    """cmuts cannot check a reference whose header declares no M5, so a
-    substituted FASTA of the right shape still runs."""
     assert try_cmuts(substituted(data, tmp_path), tmp_path / "out.h5").returncode == 0
 
 
 def test_the_checksum_checked_is_the_one_for_that_reference(data, tmp_path):
     """Every reference declares a checksum and exactly one sequence is
-    replaced, so a comparison a line out of step accepts a substituted
-    reference or refuses an untouched one."""
+    replaced, at three positions in the header."""
     declared = with_checksums(data, tmp_path)
     names = list(sequences(data.fasta))
 
@@ -109,8 +106,7 @@ def test_the_checksum_checked_is_the_one_for_that_reference(data, tmp_path):
 
 
 def test_a_checksum_on_one_reference_alone_is_still_checked(data, tmp_path):
-    """Most @SQ lines declare no M5, so the one that does must still be found
-    among them."""
+    """Only the last @SQ line declares an M5."""
     last = list(sequences(data.fasta))[-1]
     declared = with_checksums(data, tmp_path, only={last})
 
@@ -144,8 +140,8 @@ def test_a_soft_masked_reference_hashes_as_an_upper_case_one(data, tmp_path):
 
 
 def test_a_checksum_is_read_only_to_the_end_of_its_field(data, tmp_path):
-    """M5 need not be the last tag on its line: the value ends where its field
-    does, not where the line does."""
+    """The checksum is followed by another tag, M5 not having to be last on
+    its line."""
     trailing = with_checksums(data, tmp_path,
                               checksum=lambda seq: md5(seq) + "\tUR:file:/nowhere")
 
@@ -153,9 +149,7 @@ def test_a_checksum_is_read_only_to_the_end_of_its_field(data, tmp_path):
 
 
 def test_a_checksum_that_is_not_an_md5_is_refused(data, tmp_path):
-    """A value that cannot be a digest is refused rather than skipped, which
-    would report a check that was never made."""
-    truncated = with_checksums(data, tmp_path, checksum=lambda seq: md5(seq)[:8])
+    truncated =with_checksums(data, tmp_path, checksum=lambda seq: md5(seq)[:8])
     attempt = try_cmuts(truncated, tmp_path / "out.h5")
 
     assert attempt.returncode != 0

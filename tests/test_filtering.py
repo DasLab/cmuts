@@ -80,8 +80,8 @@ def test_rejecting_everything_leaves_a_valid_file(datasets, tmp_path, shape):
 
 
 def test_secondary_alignments_are_refused(datasets, tmp_path):
-    """A secondary alignment is another placement of a read already counted at
-    its primary, so accepting one counts a single molecule twice."""
+    """Every third read is marked secondary, which cmuts must reject and
+    samtools must agree on."""
     data, marked = with_secondary(datasets("plain"), tmp_path, every=3)
     assert marked > 0, "the case being tested has to appear in the data"
 
@@ -97,7 +97,6 @@ def test_secondary_alignments_are_refused(datasets, tmp_path):
 @pytest.mark.parametrize("filters", FILTERS, ids=describe)
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_every_format_gives_the_same_answer(datasets, tmp_path, fmt, filters):
-    """A filter reads the fields of a record, not the encoding it arrived in."""
     plain = datasets("plain")
     data = converted(plain, tmp_path, fmt)
     summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))

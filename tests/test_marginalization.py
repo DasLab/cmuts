@@ -71,9 +71,8 @@ def written_rows(output, placements: int) -> dict:
     """Every dataset a row can be read from, by name, checked for one row per
     placement.
 
-    The row count is checked here because no test below would catch it: the
-    rows are compared to one another, so a dataset short of a row agrees over
-    the ones it has.
+    The row count is checked here because a comparison of rows to one another
+    passes over however many rows there are.
     """
     with h5py.File(output, "r") as handle:
         # A run total has no rows to compare, being one number for the file.
@@ -120,13 +119,9 @@ def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
 
 @pytest.mark.parametrize("case", CONTROLS, ids=describe)
 def test_a_band_narrower_than_the_gap_leaves_the_placements_apart(tmp_path, case):
-    """The converse of the test above: too narrow a band leaves the result at
-    the placement the aligner chose, and the rows stand apart.
-
-    Asserted over the reactivity and not the coverage: an inserted base covers
-    nothing at any placement, so the coverage can agree across placements even
-    when nothing has been marginalized.
-    """
+    """Asserted over the reactivity and not the coverage: an inserted base
+    covers nothing at any placement, so the coverage can agree across
+    placements even when nothing has been marginalized."""
     kind, gap, run = case
     reference, read, cigars = homopolymer(kind, gap, run)
     data = placements(tmp_path, "ambiguous", reference, read, cigars)
