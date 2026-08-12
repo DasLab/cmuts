@@ -81,7 +81,7 @@ static uint64_t size_of(const char *path)
 /* ------------------------------------------------------------------------ */
 
 /* Restricts decoding to REQUIRED_FIELDS. Only CRAM stores fields separately enough to
- * skip any, and only CRAM accepts the option; failing to set it costs speed alone, so
+ * skip any, and only CRAM accepts the option; failing to set it costs only speed, so
  * it is not a reason to reject the file. */
 static void limit_decoding(cm_bam_reader *reader)
 {

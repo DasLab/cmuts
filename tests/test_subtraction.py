@@ -354,8 +354,8 @@ def test_a_value_either_input_lacks_is_missing_from_the_output(build, subtract, 
     left = np.full((N_REFS, CAP), known, dtype=np.float32)
     right = np.full((N_REFS, CAP), known, dtype=np.float32)
 
-    left[1, :] = missing                    # missing in the treated run alone
-    right[2, :] = missing                   # missing in the background alone
+    left[1, :] = missing                    # missing in the treated run only
+    right[2, :] = missing                   # missing in the background only
     left[3, :] = right[3, :] = missing      # missing in both
 
     output = subtract(build({name: left}), build({name: right}))

@@ -13,7 +13,7 @@ from support import (
 
 @pytest.mark.parametrize("shape", sorted(SHAPES))
 def test_md_and_nm_match_samtools(datasets, tmp_path, shape):
-    """samtools recomputes both from the alignment and the reference alone, so
+    """samtools recomputes both from nothing but the alignment and the reference, so
     agreement checks the generator against something other than itself."""
     data = datasets(shape)
 

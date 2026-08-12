@@ -3,7 +3,7 @@
 cmuts-sub takes two outputs and writes a third. Its result depends only on the
 values in those files and not on how they were produced, so nothing here runs
 cmuts to obtain them: the inputs are written directly, with values chosen to
-exercise each rule. Tests built this way cover the subtraction alone, and remain
+exercise each rule. Tests built this way cover only the subtraction, and remain
 valid if the reactivity calculation changes.
 
 The layout is the one thing the two programs share. It is written out here

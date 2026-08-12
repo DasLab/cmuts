@@ -38,7 +38,7 @@ void refctx_acquire(refctx *ctx, int n);
 bool refctx_release(refctx *ctx, int n);
 
 /* ctx->acc += src, serialized against the other workers. The lock is held for the merge
- * alone; processing happens outside it. */
+ * and not for the processing, which happens outside it. */
 void refctx_merge(refctx *ctx, const accum *src);
 
 /* Adds to one scalar field, for counts arising outside the processing step and so having

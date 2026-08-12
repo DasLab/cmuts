@@ -74,7 +74,7 @@ int out_dims(out_field_id id, int32_t n_refs, size_t cap, size_t *dims)
     return rank;
 }
 
-/* Gives the rank alone, discarding the dimensions an empty run produces. */
+/* Gives the rank, discarding the dimensions an empty run produces. */
 int out_rank(out_field_id id)
 {
     size_t dims[OUT_RANK_MAX];

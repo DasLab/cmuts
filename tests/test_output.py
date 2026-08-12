@@ -28,10 +28,10 @@ def test_overwrite_replaces_an_existing_output(data, tmp_path):
     first = run_cmuts(data, output)
 
     second = run_cmuts(data, output, overwrite=True, min_mapq=60)
-    alone = run_cmuts(data, tmp_path / "alone.h5", min_mapq=60)
+    run_cmuts(data, tmp_path / "separate.h5", min_mapq=60)
 
     assert second != first, "the two runs under test count the same"
-    assert outputs_agree(output, tmp_path / "alone.h5")
+    assert outputs_agree(output, tmp_path / "separate.h5")
 
 
 def test_a_run_that_would_fail_destroys_nothing(data, datasets, tmp_path):

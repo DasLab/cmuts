@@ -17,7 +17,7 @@
  * two base deletion, and wider scored no better on the two libraries tested.
  *
  * A row covers what the CIGAR path crosses before the band widens it, so no band is too
- * narrow to hold a read's own gaps. A band of 0 is the CIGAR path alone.
+ * narrow to hold a read's own gaps. A band of 0 is the CIGAR path.
  *
  * There is no upper bound. Cost per read is linear in the band, and an unreasonable one
  * ends the run by exhausting memory. */

@@ -1,4 +1,4 @@
-/* bamstream.c -- a merge across the files, keyed on the reference alone.
+/* bamstream.c -- a merge across the files, keyed on the reference.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */

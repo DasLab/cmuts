@@ -92,7 +92,7 @@ def test_each_row_sums_to_the_reads_counted_for_its_reference(datasets, tmp_path
         assert np.array_equal(np.nansum(written[reached], axis=1), reads[reached])
 
 
-def test_a_read_longer_than_the_range_is_counted_by_the_total_alone(datasets, tmp_path):
+def test_a_read_longer_than_the_range_is_counted_only_by_the_total(datasets, tmp_path):
     data = datasets("overflowing")
     output = tmp_path / "overflowing.h5"
     run_cmuts(data, output, min_mapq=0)

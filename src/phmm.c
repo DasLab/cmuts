@@ -11,7 +11,7 @@
  * path crosses on that row, plus a half-width either side. Every probability
  * here is conditioned on the alignment staying inside the band, so local
  * ambiguity is marginalized away but a grossly misplaced read is not corrected.
- * A band of 0 marginalizes over the CIGAR path alone.
+ * A band of 0 marginalizes over the CIGAR path only.
  *
  * Both passes divide each row by the forward row's total, so a posterior is the
  * product of the two with no separate normalizer and no logarithms.

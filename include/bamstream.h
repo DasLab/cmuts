@@ -44,7 +44,7 @@ int cm_bam_stream_next(cm_bam_stream *stream, cm_bam_record *out);
 const bam1_t *cm_bam_stream_raw(const cm_bam_stream *stream);
 
 /* How far the stream has read, and how far it has to go, in compressed bytes of the
- * alignments alone, summed over the files. Span is 0 where the size of any one of them is
+ * alignments only, summed over the files. Span is 0 where the size of any one of them is
  * unknown. */
 uint64_t cm_bam_stream_position(const cm_bam_stream *stream);
 uint64_t cm_bam_stream_span(const cm_bam_stream *stream);

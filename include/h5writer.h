@@ -14,7 +14,7 @@
 /* Writes one dataset per field of the output format: (n_refs, width) for a row field,
  * (n_refs,) for one value per reference, and a scalar for a total belonging to the run.
  *
- * A row is identified by its position alone: row i belongs to the reference the header
+ * A row is identified by position and not by name: row i belongs to the reference the header
  * declares i-th, which is the i-th record of the FASTA, the two being required to agree.
  * The names are not written, the FASTA already holding them in that order.
  *

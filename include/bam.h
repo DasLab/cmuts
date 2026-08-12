@@ -64,7 +64,7 @@ void cm_bam_close(cm_bam_reader *reader);
 const char *cm_bam_error(const cm_bam_reader *reader);
 
 /* How far the reader has read, and how far it has to go, in compressed bytes of the
- * alignments alone. The header is excluded, being read in one go before any record and
+ * alignments only. The header is excluded, being read in one go before any record and
  * able to account for most of a file.
  *
  * Compressed bytes are a proxy and not an accounting: how many a read costs varies with

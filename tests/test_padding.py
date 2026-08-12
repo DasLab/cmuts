@@ -37,7 +37,7 @@ def rectangular(output):
 def counts(output):
     """The rows holding counts. This excludes the rates, which also carry NaN
     at any position failing --min-depth, so NaN in them does not mean padding
-    alone."""
+    on its own."""
     return {k: v for k, v in rectangular(output).items() if k not in RATES}
 
 
@@ -193,7 +193,7 @@ def test_a_reference_whose_reads_were_all_rejected_is_zero(datasets, tmp_path):
 
 def test_raising_the_minimum_depth_only_adds_nan_to_a_rate(datasets, tmp_path):
     """Separates the two reasons a rate is NaN by the coverage, which is NaN
-    outside a reference alone."""
+    outside a reference only."""
     data = datasets("patchy")
     seen = {}
 

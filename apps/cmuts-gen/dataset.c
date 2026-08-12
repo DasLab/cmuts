@@ -3,7 +3,7 @@
  * A reference's reads are all placed before any of them is built, so the records can be
  * emitted in coordinate order however many there are and nothing has to be sorted afterwards.
  *
- * A reference's content derives from the seed and its index alone, so any one of them is
+ * A reference's content derives from the seed and its index only, so any one of them is
  * reproducible without generating those before it.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
@@ -69,7 +69,7 @@ static const format_encoding ENCODINGS[] = {
 /* What each reference draws from.
  *
  * One stream per reference and per purpose, so that a reference depends on the seed and its
- * index alone: not on how many reads the ones before it needed, and not on how many values
+ * index only: not on how many reads the ones before it needed, and not on how many values
  * another purpose drew first. Sharing a stream between two purposes would make adding a draw
  * to one silently change what the other produced. */
 typedef enum {

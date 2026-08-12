@@ -31,8 +31,8 @@ def unreachable(path):
 # survives a filter.
 FORMATS = ["bam", "sam", "cram"]
 
-# Combinations chosen so that each criterion is exercised alone, at a boundary,
-# and alongside the others.
+# Combinations chosen so that each criterion is exercised on its own, at a
+# boundary, and alongside the others.
 FILTERS = [
     {},
     {"min_mapq": 1},

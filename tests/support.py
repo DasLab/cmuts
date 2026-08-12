@@ -303,7 +303,7 @@ def samtools_length_histogram(
 def rows_by_name(fasta) -> dict:
     """Which row of an output each reference is written to.
 
-    Rows are identified by position alone: the FASTA and the header must
+    Rows are identified by position and not by name: the FASTA and the header must
     declare the references in the same order, so a reference's row is where it
     sits in the FASTA. Taken from the FASTA rather than from the output, that
     being the mapping a caller has to hand and so the one under test.

@@ -1,9 +1,10 @@
 """The FASTA must hold the sequences the alignments were made against.
 
 A name and a length describe a reference without identifying it: another
-sequence of the same name and length passes every check on shape alone, and
-its reads are then scored against the wrong bases. An @SQ M5 checksum is taken
-over the bases themselves, for the references whose aligner wrote one.
+sequence of the same name and length passes every check that looks only at
+shape, and its reads are then scored against the wrong bases. An @SQ M5
+checksum is taken over the bases themselves, for the references whose aligner
+wrote one.
 """
 
 import hashlib
@@ -100,7 +101,7 @@ def test_the_checksum_checked_is_the_one_for_that_reference(data, tmp_path):
         assert f'"{name}"' in attempt.stderr
 
 
-def test_a_checksum_on_one_reference_alone_is_still_checked(data, tmp_path):
+def test_a_checksum_on_a_single_reference_is_still_checked(data, tmp_path):
     last = list(sequences(data.fasta))[-1]
     declared = with_checksums(data, tmp_path, only={last})
 

@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 /* A reproducible generator. Everything the tool decides is drawn from one of these, so a run is
- * a function of its seed alone. */
+ * a function of its seed only. */
 typedef struct {
     uint64_t state;
 } rng;
