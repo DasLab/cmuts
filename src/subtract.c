@@ -3,9 +3,6 @@
  * Every input is read a row at a time and the result written the same way, so memory is
  * bounded by the longest reference and not by the size of the files.
  *
- * A whole reference is read from every input before any of its fields is combined, which is
- * what allows a rule to draw on fields other than the one it writes.
- *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
 
@@ -104,10 +101,7 @@ static int fail_output(const subtraction *s, char *error, size_t error_len)
 /* Arithmetic                                                                */
 /* ------------------------------------------------------------------------ */
 
-/* Every rule is carried out in the type its field is stored as, so that a value passing
- * from one file to another passes through nothing wider.
- *
- * NaN in any input carries through every rule, which is what leaves an unmeasured position
+/* NaN in any input carries through every rule, which is what leaves an unmeasured position
  * and the columns past a reference marked as they were. */
 
 static void add_f32(const float *const *in, size_t n_in, float *out, size_t n)
@@ -131,8 +125,7 @@ static void subtract_f32(const float *treated, const float *untreated, float *ou
     }
 }
 
-/* NaN compares false and so is left alone: an unmeasured position must not come out a rate
- * of zero. */
+/* Raises every negative value to zero, leaving NaN as it is. */
 static void clip_f32(float *out, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
@@ -156,9 +149,6 @@ static void propagate_f32(const float *treated, const float *untreated, float *o
     }
 }
 
-/* A control of zero is a failed measurement rather than a reactivity of any size, so the
- * position is left unmeasured. Nothing smaller need be guarded against: a rate is either
- * zero or at least one mutation over the evidence for it. */
 static void ratio_f32(const float *treated, const float *untreated,
                       const float *denatured, float *out, size_t n)
 {
@@ -169,11 +159,11 @@ static void ratio_f32(const float *treated, const float *untreated,
     }
 }
 
-/* The three runs are taken as independent.
+/* The error of the ratio, the three runs taken as independent.
  *
- * Not the relative-error form the quotient rule is usually written in: that divides by the
- * difference, which is zero wherever a position is unreactive, and squaring the control
- * into a denominator underflows a float long before the control itself does. */
+ * Not the relative-error form: that divides by the difference, which is zero wherever a
+ * position is unreactive, and squaring the control into a denominator underflows a float
+ * long before the control does. */
 static void ratio_error_f32(const float *const *rate, const float *const *error,
                             float *out, size_t n)
 {
@@ -208,8 +198,6 @@ static void gather_f32(const subtraction *s, out_field_id id, const float **v)
     }
 }
 
-/* A ratio takes the sign of its numerator, the control being positive wherever a value is
- * reported at all, so clipping after the division is clipping the difference. */
 static int combine_f32(const subtraction *s, sub_rule how, const void *const *in,
                        float *out, size_t n)
 {
@@ -324,9 +312,9 @@ static int write_field(subtraction *s, out_field_id id, int32_t tid, char *error
         return -1;
     }
 
-    /* Written whole rather than to the reference's own length, an output holding no
-     * reference lengths. The columns past a reference are NaN in every input and stay NaN
-     * through the arithmetic, which is the mark the writer would otherwise apply. */
+    /* Written whole rather than to the reference's own length: the columns past a
+     * reference are NaN in every input and stay NaN through the arithmetic, which is the
+     * mark the writer would otherwise apply. */
     if (h5writer_row(s->out, id, tid, s->result) < 0) {
         return fail_output(s, error, error_len);
     }
@@ -365,9 +353,8 @@ static int subtract_references(subtraction *s, char *error, size_t error_len)
     return 0;
 }
 
-/* Read while the inputs are being opened rather than when the result is written, so that a
- * file missing one is refused before the output is created. That is before the row sets
- * exist, so a field with no row may only follow a rule reading the values passed to it. */
+/* Combined before the row sets exist, so a field with no row may only follow a rule reading
+ * the values passed to it. */
 static int read_totals(subtraction *s, char *error, size_t error_len)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
@@ -488,8 +475,6 @@ static int open_inputs(subtraction *s, char *error, size_t error_len)
     return read_totals(s, error, error_len);
 }
 
-/* calloc returns storage aligned for any type, which is what lets a buffer be read as the
- * type its field is stored as. */
 static int build_buffers(subtraction *s, char *error, size_t error_len)
 {
     for (size_t i = 0; i < s->n_inputs; i++) {
