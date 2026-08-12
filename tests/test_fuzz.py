@@ -1,8 +1,7 @@
 """Randomly shaped data, checked the same way as the fixed shapes.
 
-This is where a case neither the fixtures nor the matrix thought to cover turns
-up. On a failure hypothesis reports the parameters that produced it and shrinks
-them towards the smallest that still fails, so the case arrives ready to
+On a failure hypothesis reports the parameters that produced it and shrinks
+them towards the smallest that still fails, so a case arrives ready to
 investigate rather than as a large file to bisect by hand.
 """
 

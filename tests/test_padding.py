@@ -5,12 +5,9 @@ so every row runs to the width the longest reference needs. NaN is what tells
 the difference: a column past what its own reference needs, and a reference no
 alignment ever named.
 
-A zero is a measurement and says something else entirely -- that the position
-was reached and nothing was counted there. The two must not be confused, since
-a rate taken over a zero denominator is a division nothing defines, while a
-rate taken over a NaN is a NaN and says so. Anything summing these arrays has
-to know which it is looking at, so what each one means is fixed here rather
-than left to whatever the writer happened to do.
+A zero means something else: the position was reached and nothing was counted
+there. Anything summing these arrays depends on the distinction, so what each
+value means is fixed here rather than left to the writer.
 """
 
 import h5py
@@ -21,8 +18,7 @@ from support import (
     RATES, datasets_of, references_with_reads, rows_by_name, run_cmuts, sequences,
 )
 
-# Higher than any mapping quality a read can carry, so every read is turned
-# away and the references themselves are all that is left.
+# Higher than any mapping quality a read can carry, so every read is rejected.
 REJECTS_EVERYTHING = 61
 
 
@@ -39,9 +35,9 @@ def rectangular(output):
 
 
 def counts(output):
-    """The rows holding counts. The rates are NaN wherever the evidence did not
-    pass --min-depth, so NaN in them means that as well as padding, and what is
-    said below about padding alone is said of the counts."""
+    """The rows holding counts. The rates are excluded: they are also NaN
+    wherever the evidence did not pass --min-depth, so NaN in them does not
+    mean padding alone."""
     return {k: v for k, v in rectangular(output).items() if k not in RATES}
 
 
@@ -91,8 +87,8 @@ def test_positions_past_a_reference_are_nan(ragged):
 
 
 def test_positions_within_a_reference_are_never_nan(ragged):
-    """The complement of the above: padding is the only thing NaN marks on a
-    reference some read reached, so a NaN inside one is a hole in the counts."""
+    """Padding is the only thing NaN marks in a count, so a NaN inside a
+    reference some read reached is a hole in the counts."""
     data, output = ragged
     lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
     reached = references_with_reads(data.bam)
@@ -113,13 +109,9 @@ def test_positions_within_a_reference_are_never_nan(ragged):
 
 
 def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path):
-    """Ragged and sparsely covered, so a reference no alignment named has
-    padding of its own to be told apart from what it counted.
-
-    Nothing counted is what a zero says; a column outside the reference is what
-    NaN says. A reference no read named is the first over all of its bases and
-    the second past them, which is what one whose reads were all rejected also
-    holds."""
+    """Zero over the reference's own bases and NaN past them. The shape is
+    ragged and sparsely covered, so an uncovered reference carries padding of
+    its own to be told apart from what it counted."""
     data = datasets("patchy")
     output = tmp_path / "patchy.h5"
     run_cmuts(data, output)
@@ -155,8 +147,8 @@ def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path
 
 
 def test_an_uncovered_reference_of_full_length_holds_no_nan(datasets, tmp_path):
-    """One length throughout, which is the ordinary shape of a library, so no
-    reference has padding and an uncovered row is what the fill alone says."""
+    """Every reference of this shape is the same length, so no row has padding
+    and an uncovered row is zero throughout."""
     data = datasets("flat")
     output = tmp_path / "flat.h5"
     run_cmuts(data, output)
@@ -176,9 +168,8 @@ def test_an_uncovered_reference_of_full_length_holds_no_nan(datasets, tmp_path):
 
 
 def test_a_reference_whose_reads_were_all_rejected_is_zero(datasets, tmp_path):
-    """Nothing counted is not the same as nothing to count. A reference the
-    alignments named keeps a zero, however little survived the filter, because
-    the reads really were there to be rejected."""
+    """A reference the alignments named holds zero rather than NaN, whether or
+    not anything survived the filter."""
     data = datasets("ragged")
     output = tmp_path / "rejected.h5"
     summary = run_cmuts(data, output, min_mapq=REJECTS_EVERYTHING)
@@ -209,12 +200,11 @@ def test_a_reference_whose_reads_were_all_rejected_is_zero(datasets, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_a_rate_is_nan_where_the_evidence_falls_short(datasets, tmp_path):
-    """The rates carry NaN for two reasons where the counts carry it for one: a
-    column outside its reference, and one inside it the evidence did not reach.
-
-    Coverage tells the two apart, being NaN for the first alone, and raising
-    --min-depth can only ever add the second.
+def test_raising_the_minimum_depth_only_adds_nan_to_a_rate(datasets, tmp_path):
+    """A rate is NaN for two reasons where a count is NaN for one: a column
+    outside its reference, and a column inside it holding too little evidence.
+    Coverage is NaN for the first alone, and raising --min-depth can only add
+    the second.
     """
     data = datasets("patchy")
     seen = {}
@@ -238,18 +228,18 @@ def test_a_rate_is_nan_where_the_evidence_falls_short(datasets, tmp_path):
         finite = reactivity[~np.isnan(reactivity)]
         assert finite.size, f"depth {depth}: no position carries a rate at all"
         assert ((finite >= 0) & (finite <= 1)).all(), \
-            f"depth {depth}: a rate is outside nought to one"
+            f"depth {depth}: a rate lies outside zero to one"
 
         seen[depth] = np.isnan(reactivity)
 
-    assert (seen[1] >= seen[0]).all(), "asking for more evidence recovered a rate"
-    assert (seen[5] >= seen[1]).all(), "asking for more evidence recovered a rate"
-    assert seen[5].sum() > seen[0].sum(), "the depths under test ask the same thing"
+    assert (seen[1] >= seen[0]).all(), "a higher depth recovered a rate"
+    assert (seen[5] >= seen[1]).all(), "a higher depth recovered a rate"
+    assert seen[5].sum() > seen[0].sum(), "the depths under test discard the same rates"
 
 
 def test_an_error_at_a_full_read_of_depth_is_at_most_a_half(datasets, tmp_path):
-    """A standard error of a proportion over n cannot exceed a half, and does so
-    only where n is below one, which is what --min-depth exists to exclude."""
+    """The standard error of a proportion over n exceeds a half only where n is
+    below one, which --min-depth of 1 excludes."""
     data = datasets("patchy")
     output = tmp_path / "bounded.h5"
     run_cmuts(data, output, min_depth=1)

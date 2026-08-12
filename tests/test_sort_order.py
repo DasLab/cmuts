@@ -1,7 +1,7 @@
 """cmuts requires a coordinate-sorted file and must say so.
 
-The whole design rests on it: a reference is finished the moment the reader
-moves past it, which is only true when reads arrive grouped by reference.
+A reference is finished the moment the reader moves past it, which holds only
+when reads arrive grouped by reference.
 """
 
 import subprocess
@@ -39,7 +39,8 @@ def test_a_header_without_an_hd_line_is_refused(data, tmp_path):
 
 
 def test_a_sort_order_that_merely_starts_the_same_is_refused(data, tmp_path):
-    """The value runs to the end of its field, so "coordinated" is not it."""
+    """The value runs to the end of its field, so "coordinated" does not
+    match."""
     altered = reheadered(data, tmp_path,
                          lambda text: text.replace("SO:coordinate", "SO:coordinated"))
 
@@ -61,8 +62,8 @@ def test_other_tags_on_the_hd_line_do_not_hide_the_sort_order(data, tmp_path):
 
 
 def test_an_hd_line_without_a_sort_order_is_refused(data, tmp_path):
-    """A header may say nothing about order, which is not the same as saying
-    it is sorted."""
+    """A header declaring no order is not a header declaring coordinate
+    order."""
     altered = reheadered(data, tmp_path,
                          lambda text: text.replace("\tSO:coordinate", ""))
     attempt = try_cmuts(altered, tmp_path / "out.h5")
@@ -72,9 +73,8 @@ def test_an_hd_line_without_a_sort_order_is_refused(data, tmp_path):
 
 
 def test_a_sort_order_on_a_line_that_is_not_hd_is_refused(data, tmp_path):
-    """Only @HD carries a sort order. With no @HD at all, whatever ends up
-    first says nothing however it is spelt, which is what the check for the
-    line being @HD is there for."""
+    """Only @HD carries a sort order, so an SO on the first line of a header
+    without one must not be read as a sort order."""
     def rewrite(text):
         lines = [line for line in text.splitlines() if not line.startswith("@HD")]
         lines[0] = lines[0].replace("@SQ\t", "@SQ\tSO:coordinate\t", 1)

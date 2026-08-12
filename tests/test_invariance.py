@@ -14,8 +14,7 @@ SHAPES = ["plain", "sparse", "single", "patchy"]
 
 @pytest.fixture(scope="module")
 def unvaried(datasets, tmp_path_factory):
-    """The result every variation here is compared against, run once for a
-    shape however many variations ask about it."""
+    """The result each variation is compared against, run once per shape."""
     directory = tmp_path_factory.mktemp("unvaried")
     made = {}
 
@@ -44,8 +43,6 @@ def test_worker_count_does_not_change_the_result(datasets, tmp_path, shape):
 @pytest.mark.parametrize("threads", [0, 1, 8])
 def test_decode_threads_do_not_change_the_result(datasets, unvaried, tmp_path,
                                                  shape, threads):
-    """htslib inflates on however many threads it is given. What it hands back
-    cannot depend on how many did it."""
     run_cmuts(datasets(shape), tmp_path / "threaded.h5",
               workers=4, decode_threads=threads)
 
@@ -56,8 +53,8 @@ def test_decode_threads_do_not_change_the_result(datasets, unvaried, tmp_path,
 @pytest.mark.parametrize("batch", [1, 7, 4096])
 def test_batch_size_does_not_change_the_result(datasets, unvaried, tmp_path,
                                                shape, batch):
-    """Reads and the carriers holding them move in batches; at a batch of one
-    the batched and single-item paths must coincide exactly."""
+    """A batch of one exercises the single-item path rather than the batched
+    one."""
     run_cmuts(datasets(shape), tmp_path / "sized.h5", workers=4, batch=batch)
 
     assert outputs_agree(unvaried(shape), tmp_path / "sized.h5")
@@ -76,9 +73,8 @@ def test_a_queue_of_one_does_not_change_the_result(datasets, unvaried, tmp_path,
 @pytest.mark.parametrize("shape", SHAPES)
 def test_one_reference_in_flight_does_not_change_the_result(datasets, unvaried,
                                                             tmp_path, shape):
-    """The tightest the context pool can be drawn: a reference must be finished
-    and recycled before the next can be opened, so the loader blocks on the
-    workers draining every one of them, and on the consumer writing it."""
+    """A reference must be finished and recycled before the next is opened, so
+    the loader blocks on the workers and on the consumer for every one."""
     run_cmuts(datasets(shape), tmp_path / "single-file.h5", workers=4, live_refs=1)
 
     assert outputs_agree(unvaried(shape), tmp_path / "single-file.h5")

@@ -28,8 +28,8 @@ def values(path, field):
 
 @pytest.mark.parametrize("parts", [2, 3, 8])
 def test_a_split_file_counts_the_same_as_the_whole(data, tmp_path, parts):
-    """The strongest statement of what merging means: dealing the reads between
-    files and reading them back must land on the original, to the value."""
+    """Reads dealt between several files must count to the same values as the
+    file they came from."""
     whole = run_cmuts(data, tmp_path / "whole.h5")
     split = run_cmuts(dealt_out(data, tmp_path, parts), tmp_path / "split.h5")
 
@@ -38,8 +38,8 @@ def test_a_split_file_counts_the_same_as_the_whole(data, tmp_path, parts):
 
 
 def test_more_files_than_references_still_counts_the_same(datasets, tmp_path):
-    """Most files then hold nothing for most references, so the merge spends its
-    time stepping over sources that have moved on."""
+    """Most files hold nothing for most references, so the merge steps over
+    sources that have moved on."""
     data = datasets("sparse")
 
     run_cmuts(data, tmp_path / "whole.h5")
@@ -63,8 +63,8 @@ def test_the_order_the_files_are_named_in_does_not_matter(data, tmp_path):
 
 
 def test_the_same_file_twice_counts_everything_twice(data, tmp_path):
-    """Concatenation, not deduplication: a file named twice is two files that
-    happen to hold the same reads."""
+    """Files are concatenated rather than deduplicated, so naming one twice
+    counts its reads twice."""
     once = run_cmuts(data, tmp_path / "once.h5")
     twice = run_cmuts(replace(data, bams=data.bams * 2), tmp_path / "twice.h5")
 
@@ -97,7 +97,8 @@ def test_a_file_naming_its_references_differently_is_refused(data, tmp_path):
 
 
 def test_a_file_that_is_not_coordinate_sorted_is_refused_by_name(data, tmp_path):
-    """Which of them is at fault is not apparent from the run alone."""
+    """The error names the offending file, which several inputs make necessary
+    to act on it."""
     unsorted = reheadered(data, tmp_path,
                           lambda text: text.replace("SO:coordinate", "SO:unknown"))
 

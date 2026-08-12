@@ -1,10 +1,9 @@
-"""An ambiguity the reference cannot resolve is not resolved by the aligner.
+"""Marginalizing over the band, where the aligner's choice of CIGAR is arbitrary.
 
 A gap inside a homopolymer can be written after any base of the run, and every
-CIGAR that writes it describes the same alignment. Marginalizing over the band
-must therefore reach the same arrays whichever one the aligner reported. It does
-once the band is as wide as the gap, whatever the length of the run the gap sits
-in: the width the reference asks for follows the gap alone.
+CIGAR that writes it describes the same alignment. The arrays must therefore
+come out the same whichever one the aligner reported, which holds once the band
+is as wide as the gap, whatever the length of the run it sits in.
 """
 
 import h5py
@@ -17,19 +16,17 @@ KINDS = ("D", "I")
 GAPS = (1, 2, 3)
 RUNS = (10, 30)
 
-# Flanks pin both ends of the read. Sliding it by a base would set two of them
-# against the run, which costs more than the gap that slide removes, so the
-# alignment is left with nowhere to go but the run. They differ from each other
-# so that neither end of the read can meet the wrong one.
+# Flanks pin both ends of the read: sliding it by a base costs two mismatches
+# against the run, more than the slide saves. They differ from each other so
+# that neither end of the read can match the wrong one.
 LEFT = "GC"
 RIGHT = "TG"
 
-# How far two rows may stand apart and still be the same answer. A row's band is
-# drawn around its own CIGAR, so the row carrying the gap is wider than the rest
-# and each placement admits slightly different paths at the edges of its band.
-# What that leaves is a real difference in the marginal and not rounding: it
-# measures around 6e-5, three orders above the resolution the counts are stored
-# at, and it shrinks as the band widens.
+# How far two rows may stand apart and still be the same answer. A band is drawn
+# around each row's own CIGAR, so placements admit slightly different paths at
+# the edges. The difference is real rather than rounding: around 6e-5, three
+# orders above the resolution the counts are stored at, shrinking as the band
+# widens.
 TOLERANCE = 1e-3
 
 # How far apart a band too narrow for its gap must leave them. Well inside the
@@ -37,12 +34,8 @@ TOLERANCE = 1e-3
 DIVIDED = 0.1
 
 # Insertions carry no weight by default, which would leave every insertion case
-# reading an array of zeros and agreeing with itself. What is under test is
-# where an event is counted, not what a run chooses to count, so both kinds are
-# given a weight here.
-# One read to a reference, so the evidence never reaches a whole observation
-# and every rate would be left NaN; the depth filter is not what these tests
-# are about.
+# comparing arrays of zeros. One read to a reference leaves the evidence below a
+# whole observation, which would leave every rate NaN.
 WEIGHTED = dict(insertion_weight=1, min_depth=0)
 
 CASES = [(kind, gap, run) for kind in KINDS for gap in GAPS for run in RUNS]
@@ -75,12 +68,12 @@ def homopolymer(kind: str, gap: int, run: int):
 
 
 def written_rows(output, placements: int) -> dict:
-    """Every dataset a row can be read from, by name.
+    """Every dataset a row can be read from, by name, checked for one row per
+    placement.
 
-    One row per placement, in every dataset. Nothing below would say otherwise:
-    the rows are asserted equal to one another, so a dataset short of a row
-    would be compared over fewer and agree, and the spread of one would be
-    taken over fewer and be narrower.
+    The row count is checked here because no test below would catch it: the
+    rows are compared to one another, so a dataset short of a row agrees over
+    the ones it has.
     """
     with h5py.File(output, "r") as handle:
         # A run total has no rows to compare, being one number for the file.
@@ -99,8 +92,8 @@ def spread(rows) -> float:
 
 
 def scored(kind: str, gap: int, read: str) -> int:
-    """Bases of the read that meet a reference position. An inserted base
-    answers to none, and so covers none."""
+    """Bases of the read that meet a reference position, which excludes an
+    inserted base."""
     return len(read) - gap if kind == "I" else len(read)
 
 
@@ -127,12 +120,12 @@ def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
 
 @pytest.mark.parametrize("case", CONTROLS, ids=describe)
 def test_a_band_narrower_than_the_gap_leaves_the_placements_apart(tmp_path, case):
-    """What the band is doing, stated the other way around.
+    """The converse of the test above: too narrow a band leaves the result at
+    whatever the aligner chose, and the rows stand apart.
 
-    Without it the answer is whatever the aligner chose, and the rows stand as
-    far apart as the event is large. The mutations say so and the coverage does
-    not: an inserted base covers nothing wherever it is placed, so that array
-    can agree across placements even where nothing has been marginalized.
+    Asserted over the reactivity rather than the coverage, an inserted base
+    covering nothing wherever it is placed, so coverage can agree across
+    placements with nothing marginalized at all.
     """
     kind, gap, run = case
     reference, read, cigars = homopolymer(kind, gap, run)

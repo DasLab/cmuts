@@ -1,7 +1,7 @@
 """What happens to whatever is already at the output path.
 
-A run costs far more than the command that starts it, so replacing a previous
-result is something to ask for rather than something to discover afterwards.
+Replacing a previous result requires --overwrite, a run costing far more than
+the command that starts it.
 """
 
 import pytest
@@ -9,7 +9,7 @@ import pytest
 from support import outputs_agree, run_cmuts, try_cmuts
 
 
-def test_refuses_to_replace_an_existing_file(data, tmp_path):
+def test_an_existing_output_is_not_replaced_without_overwrite(data, tmp_path):
     output = tmp_path / "out.h5"
     run_cmuts(data, output)
     before = output.read_bytes()
@@ -21,10 +21,9 @@ def test_refuses_to_replace_an_existing_file(data, tmp_path):
     assert output.read_bytes() == before, "the first result is untouched"
 
 
-def test_overwrite_replaces_it(data, tmp_path):
-    """Not that the second run succeeds, but that what is left at the path is
-    its result and not the first's. The two are made to differ, or agreeing
-    with either would say nothing."""
+def test_overwrite_replaces_an_existing_output(data, tmp_path):
+    """The two runs are given different criteria, so that agreeing with one
+    identifies which result was left at the path."""
     output = tmp_path / "out.h5"
     first = run_cmuts(data, output)
 
@@ -49,8 +48,8 @@ def test_a_run_that_would_fail_destroys_nothing(data, datasets, tmp_path):
 
 
 def test_an_empty_file_is_replaced_without_overwrite(data, tmp_path):
-    """mktemp and shell redirection both leave one behind, and there is nothing
-    in it to lose."""
+    """An empty file is what mktemp and shell redirection leave behind, and
+    holds nothing to lose."""
     output = tmp_path / "reserved.h5"
     output.touch()
 
@@ -58,7 +57,6 @@ def test_an_empty_file_is_replaced_without_overwrite(data, tmp_path):
 
 
 def test_a_file_that_is_not_an_output_is_left_intact(data, tmp_path):
-    """The path need not hold an output, or anything readable at all."""
     notes = tmp_path / "notes.txt"
     notes.write_text("months of irreplaceable notes\n")
 

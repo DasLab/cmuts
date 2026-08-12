@@ -14,8 +14,7 @@ from support import (
 @pytest.mark.parametrize("shape", sorted(SHAPES))
 def test_md_and_nm_match_samtools(datasets, tmp_path, shape):
     """samtools recomputes both from the alignment and the reference alone, so
-    agreement means the generator encoded them correctly rather than that it
-    agrees with itself."""
+    agreement checks the generator against something other than itself."""
     data = datasets(shape)
 
     assert md_and_nm_tags(data.bam) == recomputed_md_and_nm_tags(data, tmp_path)
@@ -72,8 +71,8 @@ def test_a_different_seed_gives_different_data(tmp_path):
 
 def test_stored_length_diverges_from_aligned_span(datasets):
     """Soft clips and insertions leave a read longer than the reference it
-    covers, and deletions shorter. Both must occur, or the length filters would
-    be tested only where the two measures coincide."""
+    covers, and deletions shorter. Both must occur, or the length filters are
+    tested only where the two measures coincide."""
     longer = shorter = 0
 
     for line in records(datasets("plain").bam, "-F", "4"):

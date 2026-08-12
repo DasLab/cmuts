@@ -3,9 +3,8 @@
 One bin per stored length from one to twice the longest reference, the same
 bins in every row: a length is not a position, so a column means one length
 whatever reference the row belongs to. A read longer than the range is counted
-in no bin, so a row sums to the reads it holds and the reads total says how
-many fell outside. What is counted is what survived the filter, so the oracle
-is given the criteria cmuts was given and measures the sequence column itself.
+in no bin, leaving a row summing to fewer than the reads total. Only what
+survived the filter is counted, so samtools is given the same criteria.
 """
 
 import h5py
@@ -19,10 +18,8 @@ from support import (
 
 
 def expected_row(histogram, width):
-    """The row samtools implies: every length it reports in its own bin, and
-    nothing at all for a length the row has no bin for.
-
-    Bin i holds length i + 1, the histogram beginning at 1 rather than 0."""
+    """The row samtools implies. Bin i holds length i + 1, the histogram
+    beginning at 1 rather than 0, and a length with no bin is dropped."""
     row = np.zeros(width)
 
     for length, count in histogram.items():
@@ -33,8 +30,8 @@ def expected_row(histogram, width):
 
 
 def compare(output, data, min_mapq):
-    """Every reference's row against the histogram samtools implies, under the
-    same criterion cmuts was given. The criterion is passed to both rather than
+    """Checks every reference's row against samtools, returning how many reads
+    fell outside the range of bins. The criterion is passed to both rather than
     left to a default, the two not sharing one."""
     expected = samtools_length_histogram(data, min_mapq=min_mapq)
     lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
@@ -73,8 +70,7 @@ def test_histogram_matches_samtools(datasets, tmp_path, shape):
 
 @pytest.mark.parametrize("shape", ["plain", "clipped"])
 def test_histogram_matches_samtools_under_a_filter(datasets, tmp_path, shape):
-    """The histogram counts what the tally saw, so a filter that removes reads
-    has to remove them from here too."""
+    """A filter removing reads must remove them from the histogram too."""
     data = datasets(shape)
     output = tmp_path / f"{shape}-filtered.h5"
     run_cmuts(data, output, min_mapq=30)
@@ -82,9 +78,9 @@ def test_histogram_matches_samtools_under_a_filter(datasets, tmp_path, shape):
     compare(output, data, min_mapq=30)
 
 
-def test_the_histogram_sums_to_the_reads_it_holds(datasets, tmp_path):
-    """Every read of a shape whose lengths are all in range is binned, so the
-    rows come to the reads total exactly."""
+def test_each_row_sums_to_the_reads_counted_for_its_reference(datasets, tmp_path):
+    """Every length of this shape is in range, so no read is left out of a bin
+    and the rows come to the reads total exactly."""
     data = datasets("ragged")
     output = tmp_path / "sums.h5"
     run_cmuts(data, output, min_mapq=0)
@@ -100,9 +96,9 @@ def test_the_histogram_sums_to_the_reads_it_holds(datasets, tmp_path):
 
 
 def test_a_read_longer_than_the_range_is_counted_by_the_total_alone(datasets, tmp_path):
-    """A read can be longer than twice the longest reference, soft-clipped bases
-    being stored while aligning nowhere. No bin holds it, and what says it was
-    there is the reads total standing above the row's own sum."""
+    """Soft-clipped bases are stored while aligning nowhere, so a read can be
+    longer than twice the longest reference. No bin holds it, and the reads
+    total exceeds the row's own sum by exactly those reads."""
     data = datasets("overflowing")
     output = tmp_path / "overflowing.h5"
     run_cmuts(data, output, min_mapq=0)

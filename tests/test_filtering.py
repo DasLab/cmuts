@@ -19,7 +19,7 @@ from support import (
 
 @contextlib.contextmanager
 def unreachable(path):
-    """Hides a file for the duration, so nothing can quietly fall back to it."""
+    """Renames a file aside for the duration, so nothing can fall back to it."""
     aside = path.with_suffix(path.suffix + ".aside")
     os.rename(path, aside)
     try:
@@ -62,7 +62,7 @@ def describe(filters):
 
 @pytest.mark.parametrize("filters", FILTERS, ids=describe)
 @pytest.mark.parametrize("shape", sorted(SHAPES))
-def test_matches_samtools(datasets, tmp_path, shape, filters):
+def test_read_counts_match_samtools(datasets, tmp_path, shape, filters):
     data = datasets(shape)
     summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))
 
@@ -81,7 +81,7 @@ def test_rejecting_everything_leaves_a_valid_file(datasets, tmp_path, shape):
 
 def test_secondary_alignments_are_refused(datasets, tmp_path):
     """A secondary alignment is another placement of a read already counted at
-    its primary, so accepting one would count a single molecule twice."""
+    its primary, so accepting one counts a single molecule twice."""
     data, marked = with_secondary(datasets("plain"), tmp_path, every=3)
     assert marked > 0, "the case being tested has to appear in the data"
 
@@ -97,7 +97,7 @@ def test_secondary_alignments_are_refused(datasets, tmp_path):
 @pytest.mark.parametrize("filters", FILTERS, ids=describe)
 @pytest.mark.parametrize("fmt", FORMATS)
 def test_every_format_gives_the_same_answer(datasets, tmp_path, fmt, filters):
-    """Filtering is over what a record says, not how it was stored."""
+    """A filter reads the fields of a record, not the encoding it arrived in."""
     plain = datasets("plain")
     data = converted(plain, tmp_path, fmt)
     summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))
@@ -109,10 +109,10 @@ def test_every_format_gives_the_same_answer(datasets, tmp_path, fmt, filters):
 
 
 def test_cram_decodes_against_the_reference_it_was_given(datasets, tmp_path):
-    """A CRAM names its reference in its own header, by a path recorded when it
-    was written and a checksum that may be looked up remotely. Neither need be
-    the reference asked for. Here the recorded path is made unreachable, so
-    only --fasta can answer."""
+    """A CRAM header records the path its reference was written from, and a
+    checksum that may be looked up remotely. Neither need be the reference
+    asked for, so the recorded path is made unreachable and only --fasta is
+    left to decode against."""
     data = converted(datasets("plain"), tmp_path, "cram")
 
     moved = tmp_path / "elsewhere.fasta"
