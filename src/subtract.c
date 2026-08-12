@@ -3,9 +3,8 @@
  * Every input is read a row at a time and the result written the same way, so memory is
  * bounded by the longest reference and not by the size of the files.
  *
- * A reference is read from every input before any of its fields is combined, so that a rule
- * may draw on more than the field it writes. The error of a ratio needs the values the ratio
- * was taken of, which no rule reading one field at a time could reach.
+ * A whole reference is read from every input before any of its fields is combined, which is
+ * what allows a rule to draw on fields other than the one it writes.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -20,8 +19,6 @@
 #include "h5writer.h"
 #include "output.h"
 
-/* The files combined, in the order the rules name them. A run without a denatured control
- * uses the first two and leaves the third unopened. */
 typedef enum {
     SUB_TREATED,
     SUB_UNTREATED,
@@ -29,29 +26,18 @@ typedef enum {
     SUB_N_INPUTS,
 } sub_input;
 
-/* Whether a denatured control was given, which decides what the reactivity is: a
- * difference of rates on its own, or that difference over what the reagent does where
- * structure is absent. */
 typedef enum {
     SUB_UNCONTROLLED,
     SUB_CONTROLLED,
     SUB_N_MODES,
 } sub_mode;
 
-/* How each field's values from several files come to one value.
- *
- * Kept here rather than in the field table: what an output holds is one thing, and what a
- * combination of several makes of it is another. Coverage and the read counts are totals,
- * so they add, the control's included where there is one. Reactivity is a rate, so the
- * background's is subtracted from the treated one. The error of either result is its
- * inputs' errors propagated through the arithmetic that produced it, the runs being
- * independent. */
 typedef enum {
-    SUB_SUM,          /* every input's value, added */
-    SUB_DIFFERENCE,   /* the treated file's less the untreated one's */
-    SUB_QUADRATURE,   /* the error of that difference */
-    SUB_RATIO,        /* that difference over the denatured control's rate */
-    SUB_RATIO_ERROR,  /* the error of that ratio */
+    SUB_SUM,
+    SUB_DIFFERENCE,
+    SUB_QUADRATURE,
+    SUB_RATIO,
+    SUB_RATIO_ERROR,
 } sub_rule;
 
 static const sub_rule RULES[OUT_N_FIELDS][SUB_N_MODES] = {
@@ -64,8 +50,8 @@ static const sub_rule RULES[OUT_N_FIELDS][SUB_N_MODES] = {
     [OUT_UNMAPPED]   = { SUB_SUM,        SUB_SUM         },
 };
 
-/* One reference's rows for one file: a buffer per field indexed by reference, each in the
- * type that field is stored as. */
+/* One reference's rows for one file, each in the type its field is stored as. A field with
+ * no row has no buffer here. */
 typedef struct {
     void *field[OUT_N_FIELDS];
 } row_set;
@@ -74,21 +60,21 @@ typedef struct {
     const subtract_config *cfg;
 
     h5reader   *input[SUB_N_INPUTS];
-    const char *path[SUB_N_INPUTS];  /* what to name each in a failure */
+    const char *path[SUB_N_INPUTS];
     size_t      n_inputs;
 
-    /* Settled with n_inputs and never apart from it: the rules a controlled mode selects
-     * are the ones reaching for the third input, and nothing else bounds that reach. */
+    /* Set with n_inputs and never apart from it: a controlled rule reads the third input,
+     * and nothing else bounds that reach. */
     sub_mode mode;
 
     h5writer *out;
 
-    row_set rows[SUB_N_INPUTS];  /* one reference, read from each input */
-    void   *result;              /* the field being written */
+    row_set rows[SUB_N_INPUTS];
+    void   *result;
 
     int32_t n_refs;
     size_t  ref_cap;
-    size_t  totals[OUT_N_FIELDS];  /* the fields with no row, combined on opening */
+    size_t  totals[OUT_N_FIELDS];  /* only the fields with no row are filled */
 } subtraction;
 
 /* ------------------------------------------------------------------------ */
@@ -118,17 +104,11 @@ static int fail_output(const subtraction *s, char *error, size_t error_len)
 /* Arithmetic                                                                */
 /* ------------------------------------------------------------------------ */
 
-/* Each rule is carried out in the type the field is stored as, so a value read from one
- * file and written to another is never widened on the way. A rate combined as a double
- * and narrowed back gives the same float for a sum or a difference as combining the
- * floats does, the one rounding standing in for the other; the error is the exception,
- * and its last bit is not worth a second type to carry.
+/* Every rule is carried out in the type its field is stored as, so that a value passing
+ * from one file to another passes through nothing wider.
  *
- * The rule is chosen once for a row rather than at every value, which keeps the choice
- * out of the loop.
- *
- * NaN in any input carries through every rule, marking the position unmeasured: a result
- * combining several rates is known only where every one of them is. */
+ * NaN in any input carries through every rule, which is what leaves an unmeasured position
+ * and the columns past a reference marked as they were. */
 
 static void add_f32(const float *const *in, size_t n_in, float *out, size_t n)
 {
@@ -151,9 +131,8 @@ static void subtract_f32(const float *treated, const float *untreated, float *ou
     }
 }
 
-/* Raises every negative value to zero, leaving NaN alone: a comparison against an
- * unmeasured value is false, so a position neither input measured stays unmeasured rather
- * than becoming a rate of zero. */
+/* NaN compares false and so is left alone: an unmeasured position must not come out a rate
+ * of zero. */
 static void clip_f32(float *out, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
@@ -177,13 +156,9 @@ static void propagate_f32(const float *treated, const float *untreated, float *o
     }
 }
 
-/* The difference over what the same reagent produced where structure was absent, which is
- * the reactivity corrected for how readily each position is modified at all.
- *
- * A control of zero saw no mutations where it should see the most. That is a failure of
- * the control rather than a reactivity of any size, so the position is left unmeasured;
- * and there is no small-control regime to guard besides, a rate being either zero or at
- * least one mutation over the evidence for it. */
+/* A control of zero is a failed measurement rather than a reactivity of any size, so the
+ * position is left unmeasured. Nothing smaller need be guarded against: a rate is either
+ * zero or at least one mutation over the evidence for it. */
 static void ratio_f32(const float *treated, const float *untreated,
                       const float *denatured, float *out, size_t n)
 {
@@ -194,13 +169,11 @@ static void ratio_f32(const float *treated, const float *untreated,
     }
 }
 
-/* The error of that ratio, all three runs being independent.
+/* The three runs are taken as independent.
  *
- * Written as the errors of the numerator and of the control gathered under one root and
- * divided by the control once, rather than as the relative errors the quotient rule is
- * usually stated in. The relative form divides by the difference, which is zero wherever a
- * position is unreactive; and a form dividing by the fourth power of the control underflows
- * a float long before the control itself does. */
+ * Not the relative-error form the quotient rule is usually written in: that divides by the
+ * difference, which is zero wherever a position is unreactive, and squaring the control
+ * into a denominator underflows a float long before the control itself does. */
 static void ratio_error_f32(const float *const *rate, const float *const *error,
                             float *out, size_t n)
 {
@@ -228,8 +201,6 @@ static void add_u64(const uint64_t *const *in, size_t n_in, uint64_t *out, size_
     }
 }
 
-/* Gathers one field's values from every input, for a rule reading a field other than the
- * one it writes. */
 static void gather_f32(const subtraction *s, out_field_id id, const float **v)
 {
     for (size_t i = 0; i < s->n_inputs; i++) {
@@ -237,12 +208,8 @@ static void gather_f32(const subtraction *s, out_field_id id, const float **v)
     }
 }
 
-/* Only a reactivity is clipped. A sum of counts and an error however propagated are both
- * nonnegative wherever their inputs are, so there is nothing for a clip to raise.
- *
- * A ratio takes the sign of its numerator, the control being positive wherever a value is
- * reported at all, so clipping the ratio and clipping the difference it was taken of come
- * to the same thing. */
+/* A ratio takes the sign of its numerator, the control being positive wherever a value is
+ * reported at all, so clipping after the division is clipping the difference. */
 static int combine_f32(const subtraction *s, sub_rule how, const void *const *in,
                        float *out, size_t n)
 {
@@ -281,9 +248,6 @@ static int combine_f32(const subtraction *s, sub_rule how, const void *const *in
     return -1;
 }
 
-/* A count is only ever added. No difference, quadrature or ratio of two counts is a count,
- * so a counted field declaring any rule but the sum has no arithmetic here and is
- * refused. */
 static int combine_u64(const subtraction *s, sub_rule how, const void *const *in,
                        uint64_t *out, size_t n)
 {
@@ -301,8 +265,8 @@ static int combine_u64(const subtraction *s, sub_rule how, const void *const *in
     return 0;
 }
 
-/* in holds the values of the field being combined, one row or one total from each input.
- * A rule reading any field but its own takes it from the subtraction itself. */
+/* in holds the field's own values, one from each input; a rule reading any other field
+ * takes it from the subtraction. */
 static int combine_values(const subtraction *s, out_field_id id,
                           const void *const *in, void *out, size_t n)
 {
@@ -321,7 +285,6 @@ static int combine_values(const subtraction *s, out_field_id id,
 /* Rows                                                                      */
 /* ------------------------------------------------------------------------ */
 
-/* Reads one reference from every input, leaving each file's rows in its own set. */
 static int read_reference(subtraction *s, int32_t tid, char *error, size_t error_len)
 {
     for (size_t i = 0; i < s->n_inputs; i++) {
@@ -361,10 +324,9 @@ static int write_field(subtraction *s, out_field_id id, int32_t tid, char *error
         return -1;
     }
 
-    /* Written whole rather than to the reference's own length, an output recording no
-     * reference lengths. The columns past a reference are NaN in every input and stay
-     * NaN through the arithmetic, which is the mark the writer would otherwise apply
-     * itself. */
+    /* Written whole rather than to the reference's own length, an output holding no
+     * reference lengths. The columns past a reference are NaN in every input and stay NaN
+     * through the arithmetic, which is the mark the writer would otherwise apply. */
     if (h5writer_row(s->out, id, tid, s->result) < 0) {
         return fail_output(s, error, error_len);
     }
@@ -403,13 +365,9 @@ static int subtract_references(subtraction *s, char *error, size_t error_len)
     return 0;
 }
 
-/* Combines the fields belonging to the run rather than to any reference, under the same
- * rules their per-reference neighbors follow.
- *
- * Read while the inputs are being opened rather than when the result is written, so that a
+/* Read while the inputs are being opened rather than when the result is written, so that a
  * file missing one is refused before the output is created. That is before the row sets
- * exist, so a field with no row may only follow a rule reading the values passed to it:
- * one reaching for another field would find nothing allocated to read. */
+ * exist, so a field with no row may only follow a rule reading the values passed to it. */
 static int read_totals(subtraction *s, char *error, size_t error_len)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
@@ -463,9 +421,6 @@ static int write_totals(subtraction *s, char *error, size_t error_len)
 /* Assembly                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* Checks that every input describes the same references as the treated file, and records
- * their shape. An output names no references -- a row is identified by its position -- so
- * only the shape can be compared: the same number of rows at the same capacity. */
 static int check_agreement(subtraction *s, char *error, size_t error_len)
 {
     for (size_t i = 1; i < s->n_inputs; i++) {
@@ -493,8 +448,6 @@ static int check_agreement(subtraction *s, char *error, size_t error_len)
     return 0;
 }
 
-/* Names the files to be combined, in the order the rules expect them, and settles what the
- * reactivity will be from whether a control is among them. */
 static void take_inputs(subtraction *s)
 {
     s->path[SUB_TREATED]   = s->cfg->treated_path;
@@ -535,9 +488,8 @@ static int open_inputs(subtraction *s, char *error, size_t error_len)
     return read_totals(s, error, error_len);
 }
 
-/* A row of every field for every input, each sized to the field it holds, and one buffer
- * wide enough for whichever field is being written. calloc returns storage aligned for any
- * type, which is what lets a buffer be read as the type its field is stored as. */
+/* calloc returns storage aligned for any type, which is what lets a buffer be read as the
+ * type its field is stored as. */
 static int build_buffers(subtraction *s, char *error, size_t error_len)
 {
     for (size_t i = 0; i < s->n_inputs; i++) {

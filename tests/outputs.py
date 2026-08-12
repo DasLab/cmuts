@@ -58,10 +58,9 @@ BY_NAME = {field.name: field for field in FIELDS}
 # ---------------------------------------------------------------------------
 
 
-# Every rule takes the values of the field it forms, one array per input, and
-# the reactivities of those same inputs. Most ignore the second: only the error
-# of a ratio is a function of a field other than its own, and giving them all
-# one signature is what lets the table below name them side by side.
+# Every rule takes the values of the field it forms and the reactivities of the
+# same inputs, one array apiece. Most ignore the second: only the error of a
+# ratio reads a field other than its own.
 
 
 def _add(values, rates):

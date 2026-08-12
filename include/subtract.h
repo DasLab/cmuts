@@ -11,9 +11,8 @@
 typedef struct {
     const char *treated_path;
     const char *untreated_path;
-    /* A sample denatured before it was treated, measuring what the reagent does where
-     * structure is absent. NULL where the run has none, which leaves the reactivity a
-     * difference of rates rather than a ratio over that measurement. */
+    /* NULL where the run has no control, leaving the reactivity a difference of rates
+     * rather than a ratio over one. */
     const char *denatured_path;
     const char *output_path;
     bool        overwrite;
