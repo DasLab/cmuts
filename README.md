@@ -28,4 +28,8 @@ cd cmuts
 make install
 ```
 
-This installs `cmuts` to `~/.local/bin`. Optionally set `BINDIR` to change the install location.
+This installs `cmuts` and `cmuts-sub` to `~/.local/bin`. Optionally pass `BINDIR` to `make` to change the install location.
+
+## Development
+
+See `CONTRIBUTING.md` for information on development builds and running tests.
