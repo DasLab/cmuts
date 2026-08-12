@@ -48,7 +48,7 @@ def test_a_run_that_would_fail_destroys_nothing(data, datasets, tmp_path):
     assert output.read_bytes() == before
 
 
-def test_an_empty_file_is_not_worth_protecting(data, tmp_path):
+def test_an_empty_file_is_replaced_without_overwrite(data, tmp_path):
     """mktemp and shell redirection both leave one behind, and there is nothing
     in it to lose."""
     output = tmp_path / "reserved.h5"
@@ -57,7 +57,7 @@ def test_an_empty_file_is_not_worth_protecting(data, tmp_path):
     assert run_cmuts(data, output).kept > 0
 
 
-def test_a_file_that_is_not_ours_is_left_alone(data, tmp_path):
+def test_a_file_that_is_not_an_output_is_left_intact(data, tmp_path):
     """The path need not hold an output, or anything readable at all."""
     notes = tmp_path / "notes.txt"
     notes.write_text("months of irreplaceable notes\n")

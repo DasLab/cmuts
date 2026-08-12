@@ -175,7 +175,7 @@ def test_an_uncovered_reference_of_full_length_holds_no_nan(datasets, tmp_path):
                 assert (row == 0).all(), f"{field}: {name} is not zero"
 
 
-def test_a_reference_whose_reads_were_all_turned_away_is_zero(datasets, tmp_path):
+def test_a_reference_whose_reads_were_all_rejected_is_zero(datasets, tmp_path):
     """Nothing counted is not the same as nothing to count. A reference the
     alignments named keeps a zero, however little survived the filter, because
     the reads really were there to be rejected."""
@@ -247,7 +247,7 @@ def test_a_rate_is_nan_where_the_evidence_falls_short(datasets, tmp_path):
     assert seen[5].sum() > seen[0].sum(), "the depths under test ask the same thing"
 
 
-def test_a_whole_read_of_evidence_bounds_the_error(datasets, tmp_path):
+def test_an_error_at_a_full_read_of_depth_is_at_most_a_half(datasets, tmp_path):
     """A standard error of a proportion over n cannot exceed a half, and does so
     only where n is below one, which is what --min-depth exists to exclude."""
     data = datasets("patchy")

@@ -87,7 +87,7 @@ def test_a_substituted_reference_is_refused(data, tmp_path):
     assert "not the sequence the alignments were made against" in attempt.stderr
 
 
-def test_a_reference_without_a_checksum_is_taken_on_trust(data, tmp_path):
+def test_a_reference_without_a_checksum_is_not_checked(data, tmp_path):
     """What this cannot do, said plainly. With no M5 there is nothing to
     compare against, and a substituted FASTA of the right shape still runs."""
     assert try_cmuts(substituted(data, tmp_path), tmp_path / "out.h5").returncode == 0
@@ -125,7 +125,7 @@ def test_a_checksum_on_one_reference_alone_is_still_checked(data, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_a_checksum_is_not_read_for_its_case(data, tmp_path):
+def test_a_checksum_is_read_whatever_its_case(data, tmp_path):
     """The spec fixes hexadecimal, not which case it is spelt in."""
     shouting = with_checksums(data, tmp_path, checksum=lambda seq: md5(seq).upper())
 
@@ -143,7 +143,7 @@ def test_a_soft_masked_reference_hashes_as_an_upper_case_one(data, tmp_path):
     assert try_cmuts(with_checksums(masked, tmp_path), tmp_path / "out.h5").returncode == 0
 
 
-def test_a_tag_after_the_checksum_does_not_run_into_it(data, tmp_path):
+def test_a_checksum_is_read_only_to_the_end_of_its_field(data, tmp_path):
     """M5 need not be the last tag on its line: the value ends where its field
     does, not where the line does."""
     trailing = with_checksums(data, tmp_path,

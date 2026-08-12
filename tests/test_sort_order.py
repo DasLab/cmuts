@@ -49,7 +49,7 @@ def test_a_sort_order_that_merely_starts_the_same_is_refused(data, tmp_path):
     assert "not coordinate sorted" in attempt.stderr
 
 
-def test_other_tags_on_the_hd_line_do_not_confuse_it(data, tmp_path):
+def test_other_tags_on_the_hd_line_do_not_hide_the_sort_order(data, tmp_path):
     """SO may sit anywhere among the tags, and other tags may contain its name."""
     altered = reheadered(
         data, tmp_path,
@@ -71,7 +71,7 @@ def test_an_hd_line_without_a_sort_order_is_refused(data, tmp_path):
     assert "not coordinate sorted" in attempt.stderr
 
 
-def test_a_sort_order_on_a_line_that_is_not_hd_is_not_believed(data, tmp_path):
+def test_a_sort_order_on_a_line_that_is_not_hd_is_refused(data, tmp_path):
     """Only @HD carries a sort order. With no @HD at all, whatever ends up
     first says nothing however it is spelt, which is what the check for the
     line being @HD is there for."""
