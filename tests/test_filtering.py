@@ -106,10 +106,8 @@ def test_every_format_gives_the_same_answer(datasets, tmp_path, fmt, filters):
 
 
 def test_cram_decodes_against_the_reference_it_was_given(datasets, tmp_path):
-    """A CRAM header records the path its reference was written from, and a
-    checksum htslib may look up remotely. Neither is necessarily the reference
-    passed to --fasta, so this test renames the recorded path aside and leaves
-    cmuts nothing but --fasta to decode against."""
+    """Renames the reference recorded in the CRAM header aside, leaving cmuts
+    no source for the bases but --fasta."""
     data = converted(datasets("plain"), tmp_path, "cram")
 
     moved = tmp_path / "elsewhere.fasta"

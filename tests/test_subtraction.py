@@ -155,7 +155,6 @@ def test_clipping_holds_the_difference_at_zero(build, subtract):
 
 
 def test_clipping_leaves_a_difference_above_zero_alone(build, tmp_path):
-    """Compared against the same pair of inputs run without the flag."""
     treated, untreated = build(everything(seed=13)), build(everything(seed=14))
 
     plain = run_subtract(treated, untreated, tmp_path / "plain.h5")

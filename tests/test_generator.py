@@ -69,9 +69,6 @@ def test_a_different_seed_gives_different_data(tmp_path):
 
 
 def test_stored_length_diverges_from_aligned_span(datasets):
-    """Soft clips and insertions leave a read longer than the reference it
-    covers, and deletions shorter. Both must occur, or the length filters are
-    tested only where the two measures coincide."""
     longer = shorter = 0
 
     for line in records(datasets("plain").bam, "-F", "4"):

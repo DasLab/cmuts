@@ -69,8 +69,6 @@ def substituted(data, tmp_path, only=None):
 
 
 def test_a_matching_checksum_is_accepted(data, tmp_path):
-    """Compares against a run whose header declares no checksums, which must
-    produce the same output."""
     checked = run_cmuts(with_checksums(data, tmp_path), tmp_path / "checked.h5")
     plain = run_cmuts(data, tmp_path / "plain.h5")
 
@@ -91,8 +89,6 @@ def test_a_reference_without_a_checksum_is_not_checked(data, tmp_path):
 
 
 def test_the_checksum_checked_is_the_one_for_that_reference(data, tmp_path):
-    """Replaces one sequence of many, at three positions in the header, with
-    every reference declaring a checksum."""
     declared = with_checksums(data, tmp_path)
     names = list(sequences(data.fasta))
 
@@ -120,16 +116,14 @@ def test_a_checksum_on_one_reference_alone_is_still_checked(data, tmp_path):
 
 
 def test_a_checksum_is_read_whatever_its_case(data, tmp_path):
-    """Declares the digest in upper case, the spec fixing hexadecimal and not
-    its case."""
+    """The SAM spec fixes M5 as hexadecimal without fixing its case."""
     shouting = with_checksums(data, tmp_path, checksum=lambda seq: md5(seq).upper())
 
     assert try_cmuts(shouting, tmp_path / "out.h5").returncode == 0
 
 
 def test_a_soft_masked_reference_hashes_as_an_upper_case_one(data, tmp_path):
-    """Lower-cases the whole FASTA. The digest is defined over the sequence
-    uppercased, and lower case marks repeats rather than different bases."""
+    """The SAM spec defines M5 over the sequence uppercased."""
     masked = replace(data, fasta=written(
         {name: seq.lower() for name, seq in sequences(data.fasta).items()},
         tmp_path / "masked.fasta"))

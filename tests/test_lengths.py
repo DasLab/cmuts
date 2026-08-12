@@ -2,9 +2,9 @@
 
 One bin per stored length from one to twice the longest reference, the same
 bins in every row: a length is not a position, so a column means one length in
-every row alike. A read longer than the range is counted
-in no bin, leaving a row summing to fewer than the reads total. Only what
-survived the filter is counted, so samtools is given the same criteria.
+every row alike. A read longer than the last bin is counted in none, leaving a
+row summing to fewer than the reads total. Only what survived the filter is
+counted, so samtools is given the same criteria.
 """
 
 import h5py
@@ -78,8 +78,6 @@ def test_histogram_matches_samtools_under_a_filter(datasets, tmp_path, shape):
 
 
 def test_each_row_sums_to_the_reads_counted_for_its_reference(datasets, tmp_path):
-    """Uses a shape whose lengths are all in range, so no read is left out of
-    a bin."""
     data = datasets("ragged")
     output = tmp_path / "sums.h5"
     run_cmuts(data, output, min_mapq=0)
@@ -95,7 +93,6 @@ def test_each_row_sums_to_the_reads_counted_for_its_reference(datasets, tmp_path
 
 
 def test_a_read_longer_than_the_range_is_counted_by_the_total_alone(datasets, tmp_path):
-    """Uses a shape whose soft clips leave reads past the last bin."""
     data = datasets("overflowing")
     output = tmp_path / "overflowing.h5"
     run_cmuts(data, output, min_mapq=0)

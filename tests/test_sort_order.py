@@ -68,8 +68,7 @@ def test_an_hd_line_without_a_sort_order_is_refused(data, tmp_path):
 
 
 def test_a_sort_order_on_a_line_that_is_not_hd_is_refused(data, tmp_path):
-    """Only @HD carries a sort order. The @HD line is removed and SO put on
-    the @SQ line that then comes first."""
+    """The SAM spec carries the sort order on @HD alone."""
     def rewrite(text):
         lines = [line for line in text.splitlines() if not line.startswith("@HD")]
         lines[0] = lines[0].replace("@SQ\t", "@SQ\tSO:coordinate\t", 1)

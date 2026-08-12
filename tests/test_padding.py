@@ -107,8 +107,6 @@ def test_positions_within_a_reference_are_never_nan(ragged):
 
 
 def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path):
-    """Uses a ragged, sparsely covered shape, so an uncovered reference carries
-    padding as well as bases it counted nothing at."""
     data = datasets("patchy")
     output = tmp_path / "patchy.h5"
     run_cmuts(data, output)
@@ -144,8 +142,6 @@ def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path
 
 
 def test_an_uncovered_reference_of_full_length_holds_no_nan(datasets, tmp_path):
-    """Uses a shape of one length throughout, so no row has padding and an
-    uncovered row is zero to its full width."""
     data = datasets("flat")
     output = tmp_path / "flat.h5"
     run_cmuts(data, output)
