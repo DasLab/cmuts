@@ -24,6 +24,15 @@ static const cli_option OPTIONS[] = {
                 "may have cost a great deal more to produce than the one being "
                 "started." },
 
+    { .group = "Subtraction", .name = "clip", .type = OPT_FLAG,
+      .offset = offsetof(sub_args, subtract.clip),
+      .help = "raise a negative reactivity to zero",
+      .detail = "A rate below its background comes out negative, which no "
+                "structure corresponds to. Clipping reports those positions as "
+                "unmodified instead, at the cost of the output no longer "
+                "recording how far below the background the sample read. A "
+                "position neither run measured stays unmeasured either way." },
+
     { .group = "Information", .name = "help", .key = 'h', .type = OPT_FLAG,
       .help = "show this help and exit", .action = CLI_SHOW_HELP },
     { .group = "Information", .name = "version", .key = 'V', .type = OPT_FLAG,

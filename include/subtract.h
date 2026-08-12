@@ -13,6 +13,7 @@ typedef struct {
     const char *untreated_path;
     const char *output_path;
     bool        overwrite;
+    bool        clip;  /* whether a negative difference is raised to zero */
 } subtract_config;
 
 /* Combines the two inputs field by field into a third file of the same layout, following the

@@ -86,6 +86,18 @@ static void subtract_f32(const float *treated, const float *untreated, float *ou
     }
 }
 
+/* Raises every negative value to zero, leaving NaN alone: a comparison against an
+ * unmeasured value is false, so a position neither input measured stays unmeasured rather
+ * than becoming a rate of zero. */
+static void clip_f32(float *out, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        if (out[i] < 0.0F) {
+            out[i] = 0.0F;
+        }
+    }
+}
+
 /* Each square is rounded before the two are added, which a single expression would let the
  * compiler fuse into a multiply-add. Fusing keeps one square at a wider precision than the
  * other, and the quadrature then depends on which input was named first. */
@@ -108,13 +120,24 @@ static void add_u64(const uint64_t *treated, const uint64_t *untreated, uint64_t
     }
 }
 
-static int combine_f32(out_combine how, const float *treated, const float *untreated,
-                       float *out, size_t n)
+/* Only a difference is clipped. A sum of counts and a quadrature of errors are both
+ * nonnegative wherever their inputs are, so there is nothing for a clip to raise. */
+static int combine_f32(out_combine how, bool clip, const float *treated,
+                       const float *untreated, float *out, size_t n)
 {
     switch (how) {
-        case OUT_ADD:       add_f32(treated, untreated, out, n);       return 0;
-        case OUT_SUBTRACT:  subtract_f32(treated, untreated, out, n);  return 0;
-        case OUT_PROPAGATE: propagate_f32(treated, untreated, out, n); return 0;
+        case OUT_ADD:
+            add_f32(treated, untreated, out, n);
+            return 0;
+        case OUT_SUBTRACT:
+            subtract_f32(treated, untreated, out, n);
+            if (clip) {
+                clip_f32(out, n);
+            }
+            return 0;
+        case OUT_PROPAGATE:
+            propagate_f32(treated, untreated, out, n);
+            return 0;
     }
 
     return -1;
@@ -134,13 +157,13 @@ static int combine_u64(out_combine how, const uint64_t *treated,
     return 0;
 }
 
-static int combine_row(out_field_id id, const void *treated, const void *untreated,
-                       void *out, size_t n)
+static int combine_row(out_field_id id, bool clip, const void *treated,
+                       const void *untreated, void *out, size_t n)
 {
     out_combine how = OUT_FIELDS[id].combine;
 
     switch (OUT_FIELDS[id].stored) {
-        case OUT_F32:      return combine_f32(how, treated, untreated, out, n);
+        case OUT_F32:      return combine_f32(how, clip, treated, untreated, out, n);
         case OUT_U64:      return combine_u64(how, treated, untreated, out, n);
         case OUT_N_STORED: break;
     }
@@ -165,7 +188,7 @@ static int subtract_field(subtraction *s, out_field_id id, int32_t tid,
         return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
     }
 
-    if (combine_row(id, s->left, s->right, s->result, width) < 0) {
+    if (combine_row(id, s->cfg->clip, s->left, s->right, s->result, width) < 0) {
         snprintf(error, error_len, "%s: no rule combines a field of this type",
                  OUT_FIELDS[id].name);
         return -1;
@@ -232,8 +255,8 @@ static int read_totals(subtraction *s, char *error, size_t error_len)
             return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
         }
 
-        if (combine_row(id, &(uint64_t){ treated }, &(uint64_t){ untreated },
-                        &combined, 1) < 0) {
+        if (combine_row(id, s->cfg->clip, &(uint64_t){ treated },
+                        &(uint64_t){ untreated }, &combined, 1) < 0) {
             snprintf(error, error_len, "%s: no rule combines a field of this type",
                      OUT_FIELDS[id].name);
             return -1;

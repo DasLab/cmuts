@@ -155,15 +155,73 @@ def test_each_field_follows_its_rule(build, subtract, name):
 
 
 def test_a_background_above_the_signal_leaves_a_negative_reactivity(build, subtract):
-    """Nothing holds the difference at zero. A rate below its background is a
-    measurement like any other, and clamping it would discard what the two
-    inputs record."""
+    """Nothing holds the difference at zero unless asked to. A rate below its
+    background is a measurement like any other, and clamping it by default would
+    discard what the two inputs record."""
     treated = build({"reactivity": 0.25})
     untreated = build({"reactivity": 0.75})
 
     difference = field_of(subtract(treated, untreated), "reactivity")
 
     assert np.all(difference == np.float32(-0.5))
+
+
+def test_clipping_holds_the_difference_at_zero(build, subtract):
+    """--clip reports a rate below its background as unmodified rather than as
+    negative."""
+    treated = build({"reactivity": 0.25})
+    untreated = build({"reactivity": 0.75})
+
+    assert np.all(field_of(subtract(treated, untreated, clip=True), "reactivity") == 0)
+
+
+def test_clipping_leaves_a_difference_above_zero_alone(build, tmp_path):
+    """Only what fell below zero is raised. Against the same pair of inputs run
+    without the flag, so what the clip changes is stated as a difference from
+    what the arithmetic gives on its own."""
+    treated, untreated = build(everything(seed=13)), build(everything(seed=14))
+
+    plain = run_subtract(treated, untreated, tmp_path / "plain.h5")
+    clipped = run_subtract(treated, untreated, tmp_path / "clipped.h5", clip=True)
+
+    unclipped = field_of(plain, "reactivity")
+
+    assert (unclipped < 0).any(), "nothing was negative, so nothing was tested"
+    assert np.array_equal(field_of(clipped, "reactivity"), np.maximum(unclipped, 0))
+
+
+def test_clipping_does_not_raise_a_missing_value_to_zero(build, subtract):
+    """A position either run left unmeasured is NaN clipped or not. Zero would
+    claim the sample was read there and found unmodified, which is exactly what
+    the clip makes a genuine measurement say."""
+    known, missing = np.float32(0.25), np.float32(np.nan)
+
+    left = np.full((N_REFS, CAP), known, dtype=np.float32)
+    right = np.full((N_REFS, CAP), known, dtype=np.float32)
+
+    left[1, :] = missing
+    right[2, :] = missing
+    left[3, :] = right[3, :] = missing
+
+    output = subtract(build({"reactivity": left}), build({"reactivity": right}),
+                      clip=True)
+    result = field_of(output, "reactivity")
+
+    assert np.array_equal(np.isnan(result), np.isnan(left) | np.isnan(right))
+
+
+def test_clipping_reaches_no_field_but_the_reactivity(build, tmp_path):
+    """The clip belongs to the one rule that can produce a negative value. A sum
+    of counts and a quadrature of errors are nonnegative wherever their inputs
+    are, and neither is touched."""
+    treated = build(everything(seed=15), unmapped=11)
+    untreated = build(everything(seed=16), unmapped=4)
+
+    plain = run_subtract(treated, untreated, tmp_path / "plain.h5")
+    clipped = run_subtract(treated, untreated, tmp_path / "clipped.h5", clip=True)
+
+    for name in set(COMBINED) - {"reactivity"}:
+        assert np.array_equal(field_of(clipped, name), field_of(plain, name)), name
 
 
 def test_an_error_is_never_reduced_by_subtracting(build, subtract):
