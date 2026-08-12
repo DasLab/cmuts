@@ -1,7 +1,11 @@
-/* subtract.c -- combining two outputs into one, field by field.
+/* subtract.c -- combining several outputs into one, field by field.
  *
- * Both inputs are read a row at a time and the result written the same way, so
- * memory is bounded by the longest reference and not by the size of the files.
+ * Every input is read a row at a time and the result written the same way, so memory is
+ * bounded by the longest reference and not by the size of the files.
+ *
+ * A reference is read from every input before any of its fields is combined, so that a rule
+ * may draw on more than the field it writes. The error of a ratio needs the values the ratio
+ * was taken of, which no rule reading one field at a time could reach.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -16,17 +20,30 @@
 #include "h5writer.h"
 #include "output.h"
 
+/* The files combined, in the order the rules name them. */
+typedef enum {
+    SUB_TREATED,
+    SUB_UNTREATED,
+    SUB_N_INPUTS,
+} sub_input;
+
+/* One reference's rows for one file: a buffer per field indexed by reference, each in the
+ * type that field is stored as. */
+typedef struct {
+    void *field[OUT_N_FIELDS];
+} row_set;
+
 typedef struct {
     const subtract_config *cfg;
 
-    h5reader *treated;
-    h5reader *untreated;
+    h5reader   *input[SUB_N_INPUTS];
+    const char *path[SUB_N_INPUTS];  /* what to name each in a failure */
+    size_t      n_inputs;
+
     h5writer *out;
 
-    /* One row apiece, in whatever type the field being combined is stored as. */
-    void *left;        /* one row of the treated file */
-    void *right;       /* the same row of the untreated file */
-    void *result;      /* the two combined */
+    row_set rows[SUB_N_INPUTS];  /* one reference, read from each input */
+    void   *result;              /* the field being written */
 
     int32_t n_refs;
     size_t  ref_cap;
@@ -37,12 +54,13 @@ typedef struct {
 /* Failures                                                                  */
 /* ------------------------------------------------------------------------ */
 
-static int fail_input(char *error, size_t error_len, const char *path,
-                      const h5reader *r)
+static int fail_input(const subtraction *s, sub_input which, char *error,
+                      size_t error_len)
 {
-    const char *why = h5reader_error(r);
+    const char *why = h5reader_error(s->input[which]);
 
-    snprintf(error, error_len, "%s: %s", path, why ? why : "unable to read it");
+    snprintf(error, error_len, "%s: %s", s->path[which],
+             why ? why : "unable to read it");
     return -1;
 }
 
@@ -68,13 +86,19 @@ static int fail_output(const subtraction *s, char *error, size_t error_len)
  * The rule is chosen once for a row rather than at every value, which keeps the choice
  * out of the loop.
  *
- * NaN in either input carries through all three rules, marking the position unmeasured: a
+ * NaN in any input carries through every rule, marking the position unmeasured: a
  * difference of rates is known only where both rates are. */
 
-static void add_f32(const float *treated, const float *untreated, float *out, size_t n)
+static void add_f32(const float *const *in, size_t n_in, float *out, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
-        out[i] = treated[i] + untreated[i];
+        float total = in[0][i];
+
+        for (size_t k = 1; k < n_in; k++) {
+            total += in[k][i];
+        }
+
+        out[i] = total;
     }
 }
 
@@ -112,31 +136,42 @@ static void propagate_f32(const float *treated, const float *untreated, float *o
     }
 }
 
-static void add_u64(const uint64_t *treated, const uint64_t *untreated, uint64_t *out,
-                    size_t n)
+static void add_u64(const uint64_t *const *in, size_t n_in, uint64_t *out, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
-        out[i] = treated[i] + untreated[i];
+        uint64_t total = in[0][i];
+
+        for (size_t k = 1; k < n_in; k++) {
+            total += in[k][i];
+        }
+
+        out[i] = total;
     }
 }
 
 /* Only a difference is clipped. A sum of counts and a quadrature of errors are both
  * nonnegative wherever their inputs are, so there is nothing for a clip to raise. */
-static int combine_f32(out_combine how, bool clip, const float *treated,
-                       const float *untreated, float *out, size_t n)
+static int combine_f32(out_combine how, bool clip, const void *const *in, size_t n_in,
+                       float *out, size_t n)
 {
+    const float *v[SUB_N_INPUTS];
+
+    for (size_t k = 0; k < n_in; k++) {
+        v[k] = in[k];
+    }
+
     switch (how) {
         case OUT_ADD:
-            add_f32(treated, untreated, out, n);
+            add_f32(v, n_in, out, n);
             return 0;
         case OUT_SUBTRACT:
-            subtract_f32(treated, untreated, out, n);
+            subtract_f32(v[SUB_TREATED], v[SUB_UNTREATED], out, n);
             if (clip) {
                 clip_f32(out, n);
             }
             return 0;
         case OUT_PROPAGATE:
-            propagate_f32(treated, untreated, out, n);
+            propagate_f32(v[SUB_TREATED], v[SUB_UNTREATED], out, n);
             return 0;
     }
 
@@ -146,25 +181,31 @@ static int combine_f32(out_combine how, bool clip, const float *treated,
 /* A count is only ever added. The difference of two counts is not a count, and neither is
  * the quadrature of two, so a counted field declaring either rule has no arithmetic here
  * and is refused. */
-static int combine_u64(out_combine how, const uint64_t *treated,
-                       const uint64_t *untreated, uint64_t *out, size_t n)
+static int combine_u64(out_combine how, const void *const *in, size_t n_in,
+                       uint64_t *out, size_t n)
 {
+    const uint64_t *v[SUB_N_INPUTS];
+
     if (how != OUT_ADD) {
         return -1;
     }
 
-    add_u64(treated, untreated, out, n);
+    for (size_t k = 0; k < n_in; k++) {
+        v[k] = in[k];
+    }
+
+    add_u64(v, n_in, out, n);
     return 0;
 }
 
-static int combine_row(out_field_id id, bool clip, const void *treated,
-                       const void *untreated, void *out, size_t n)
+static int combine_values(out_field_id id, bool clip, const void *const *in,
+                          size_t n_in, void *out, size_t n)
 {
     out_combine how = OUT_FIELDS[id].combine;
 
     switch (OUT_FIELDS[id].stored) {
-        case OUT_F32:      return combine_f32(how, clip, treated, untreated, out, n);
-        case OUT_U64:      return combine_u64(how, treated, untreated, out, n);
+        case OUT_F32:      return combine_f32(how, clip, in, n_in, out, n);
+        case OUT_U64:      return combine_u64(how, in, n_in, out, n);
         case OUT_N_STORED: break;
     }
 
@@ -175,27 +216,48 @@ static int combine_row(out_field_id id, bool clip, const void *treated,
 /* Rows                                                                      */
 /* ------------------------------------------------------------------------ */
 
-static int subtract_field(subtraction *s, out_field_id id, int32_t tid,
-                          char *error, size_t error_len)
+/* Reads one reference from every input, leaving each file's rows in its own set. */
+static int read_reference(subtraction *s, int32_t tid, char *error, size_t error_len)
+{
+    for (size_t i = 0; i < s->n_inputs; i++) {
+        for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+            if (!OUT_FIELDS[id].per_ref) {
+                continue;
+            }
+
+            if (h5reader_field(s->input[i], id, tid, s->rows[i].field[id]) < 0) {
+                return fail_input(s, (sub_input)i, error, error_len);
+            }
+        }
+    }
+
+    return 0;
+}
+
+static int combine_field(const subtraction *s, out_field_id id, size_t width)
+{
+    const void *in[SUB_N_INPUTS];
+
+    for (size_t i = 0; i < s->n_inputs; i++) {
+        in[i] = s->rows[i].field[id];
+    }
+
+    return combine_values(id, s->cfg->clip, in, s->n_inputs, s->result, width);
+}
+
+static int write_field(subtraction *s, out_field_id id, int32_t tid, char *error,
+                       size_t error_len)
 {
     size_t width = out_values(id, s->ref_cap, s->ref_cap);
 
-    if (h5reader_field(s->treated, id, tid, s->left) < 0) {
-        return fail_input(error, error_len, s->cfg->treated_path, s->treated);
-    }
-
-    if (h5reader_field(s->untreated, id, tid, s->right) < 0) {
-        return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
-    }
-
-    if (combine_row(id, s->cfg->clip, s->left, s->right, s->result, width) < 0) {
+    if (combine_field(s, id, width) < 0) {
         snprintf(error, error_len, "%s: no rule combines a field of this type",
                  OUT_FIELDS[id].name);
         return -1;
     }
 
     /* Written whole rather than to the reference's own length, an output recording no
-     * reference lengths. The columns past a reference are NaN in both inputs and stay
+     * reference lengths. The columns past a reference are NaN in every input and stay
      * NaN through the arithmetic, which is the mark the writer would otherwise apply
      * itself. */
     if (h5writer_row(s->out, id, tid, s->result) < 0) {
@@ -208,12 +270,16 @@ static int subtract_field(subtraction *s, out_field_id id, int32_t tid,
 static int subtract_reference(subtraction *s, int32_t tid, char *error,
                               size_t error_len)
 {
+    if (read_reference(s, tid, error, error_len) < 0) {
+        return -1;
+    }
+
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
         if (!OUT_FIELDS[id].per_ref) {
             continue;
         }
 
-        if (subtract_field(s, id, tid, error, error_len) < 0) {
+        if (write_field(s, id, tid, error, error_len) < 0) {
             return -1;
         }
     }
@@ -240,23 +306,26 @@ static int subtract_references(subtraction *s, char *error, size_t error_len)
 static int read_totals(subtraction *s, char *error, size_t error_len)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        size_t   treated, untreated;
-        uint64_t combined;
+        uint64_t    held[SUB_N_INPUTS];
+        const void *in[SUB_N_INPUTS];
+        uint64_t    combined;
 
         if (OUT_FIELDS[id].per_ref) {
             continue;
         }
 
-        if (h5reader_total(s->treated, id, &treated) < 0) {
-            return fail_input(error, error_len, s->cfg->treated_path, s->treated);
+        for (size_t i = 0; i < s->n_inputs; i++) {
+            size_t total;
+
+            if (h5reader_total(s->input[i], id, &total) < 0) {
+                return fail_input(s, (sub_input)i, error, error_len);
+            }
+
+            held[i] = total;
+            in[i]   = &held[i];
         }
 
-        if (h5reader_total(s->untreated, id, &untreated) < 0) {
-            return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
-        }
-
-        if (combine_row(id, s->cfg->clip, &(uint64_t){ treated },
-                        &(uint64_t){ untreated }, &combined, 1) < 0) {
+        if (combine_values(id, s->cfg->clip, in, s->n_inputs, &combined, 1) < 0) {
             snprintf(error, error_len, "%s: no rule combines a field of this type",
                      OUT_FIELDS[id].name);
             return -1;
@@ -287,50 +356,61 @@ static int write_totals(subtraction *s, char *error, size_t error_len)
 /* Assembly                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* Checks that the two files describe the same references, and records their shape.
- * An output names no references -- a row is identified by its position -- so only
- * the shape can be compared: the same number of rows at the same capacity. */
+/* Checks that every input describes the same references as the treated file, and records
+ * their shape. An output names no references -- a row is identified by its position -- so
+ * only the shape can be compared: the same number of rows at the same capacity. */
 static int check_agreement(subtraction *s, char *error, size_t error_len)
 {
-    if (h5reader_refs(s->treated) != h5reader_refs(s->untreated)) {
-        snprintf(error, error_len,
-                 "%s holds %d references and %s holds %d",
-                 s->cfg->treated_path, h5reader_refs(s->treated),
-                 s->cfg->untreated_path, h5reader_refs(s->untreated));
-        return -1;
+    for (size_t i = 1; i < s->n_inputs; i++) {
+        if (h5reader_refs(s->input[i]) != h5reader_refs(s->input[SUB_TREATED])) {
+            snprintf(error, error_len,
+                     "%s holds %d references and %s holds %d",
+                     s->path[SUB_TREATED], h5reader_refs(s->input[SUB_TREATED]),
+                     s->path[i], h5reader_refs(s->input[i]));
+            return -1;
+        }
+
+        if (h5reader_capacity(s->input[i]) != h5reader_capacity(s->input[SUB_TREATED])) {
+            snprintf(error, error_len,
+                     "%s is %zu bases wide and %s is %zu; the two were counted "
+                     "against different references",
+                     s->path[SUB_TREATED], h5reader_capacity(s->input[SUB_TREATED]),
+                     s->path[i], h5reader_capacity(s->input[i]));
+            return -1;
+        }
     }
 
-    if (h5reader_capacity(s->treated) != h5reader_capacity(s->untreated)) {
-        snprintf(error, error_len,
-                 "%s is %zu bases wide and %s is %zu; the two were counted "
-                 "against different references",
-                 s->cfg->treated_path, h5reader_capacity(s->treated),
-                 s->cfg->untreated_path, h5reader_capacity(s->untreated));
-        return -1;
-    }
-
-    s->n_refs  = h5reader_refs(s->treated);
-    s->ref_cap = h5reader_capacity(s->treated);
+    s->n_refs  = h5reader_refs(s->input[SUB_TREATED]);
+    s->ref_cap = h5reader_capacity(s->input[SUB_TREATED]);
 
     return 0;
 }
 
+/* Names the files to be combined, in the order the rules expect them. */
+static void take_inputs(subtraction *s)
+{
+    s->path[SUB_TREATED]   = s->cfg->treated_path;
+    s->path[SUB_UNTREATED] = s->cfg->untreated_path;
+    s->n_inputs            = 2;
+}
+
 static int open_inputs(subtraction *s, char *error, size_t error_len)
 {
-    s->treated   = h5reader_open(s->cfg->treated_path);
-    s->untreated = h5reader_open(s->cfg->untreated_path);
+    take_inputs(s);
 
-    if (!s->treated || !s->untreated) {
-        snprintf(error, error_len, "out of memory");
-        return -1;
+    for (size_t i = 0; i < s->n_inputs; i++) {
+        s->input[i] = h5reader_open(s->path[i]);
+
+        if (!s->input[i]) {
+            snprintf(error, error_len, "out of memory");
+            return -1;
+        }
     }
 
-    if (h5reader_error(s->treated)) {
-        return fail_input(error, error_len, s->cfg->treated_path, s->treated);
-    }
-
-    if (h5reader_error(s->untreated)) {
-        return fail_input(error, error_len, s->cfg->untreated_path, s->untreated);
+    for (size_t i = 0; i < s->n_inputs; i++) {
+        if (h5reader_error(s->input[i])) {
+            return fail_input(s, (sub_input)i, error, error_len);
+        }
     }
 
     if (check_agreement(s, error, error_len) < 0) {
@@ -340,19 +420,30 @@ static int open_inputs(subtraction *s, char *error, size_t error_len)
     return read_totals(s, error, error_len);
 }
 
-/* Three buffers, each a row of the widest field at the widest value, so that each holds a
- * row of any field whatever it is stored as. calloc returns storage aligned for any type,
- * which is what lets one buffer be read as either. */
+/* A row of every field for every input, each sized to the field it holds, and one buffer
+ * wide enough for whichever field is being written. calloc returns storage aligned for any
+ * type, which is what lets a buffer be read as the type its field is stored as. */
 static int build_buffers(subtraction *s, char *error, size_t error_len)
 {
-    size_t width = out_widest(s->ref_cap);
-    size_t bytes = out_widest_bytes();
+    for (size_t i = 0; i < s->n_inputs; i++) {
+        for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+            if (!OUT_FIELDS[id].per_ref) {
+                continue;
+            }
 
-    s->left   = calloc(width, bytes);
-    s->right  = calloc(width, bytes);
-    s->result = calloc(width, bytes);
+            s->rows[i].field[id] = calloc(out_values(id, s->ref_cap, s->ref_cap),
+                                          out_stored_bytes(id));
 
-    if (!s->left || !s->right || !s->result) {
+            if (!s->rows[i].field[id]) {
+                snprintf(error, error_len, "out of memory");
+                return -1;
+            }
+        }
+    }
+
+    s->result = calloc(out_widest(s->ref_cap), out_widest_bytes());
+
+    if (!s->result) {
         snprintf(error, error_len, "out of memory");
         return -1;
     }
@@ -376,12 +467,16 @@ static int open_output(subtraction *s, bool may_replace, char *error,
 static void subtraction_teardown(subtraction *s)
 {
     h5writer_close(s->out);
-    h5reader_close(s->untreated);
-    h5reader_close(s->treated);
+
+    for (size_t i = 0; i < SUB_N_INPUTS; i++) {
+        h5reader_close(s->input[i]);
+
+        for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+            free(s->rows[i].field[id]);
+        }
+    }
 
     free(s->result);
-    free(s->right);
-    free(s->left);
 }
 
 int subtract_run(const subtract_config *cfg, char *error, size_t error_len)
