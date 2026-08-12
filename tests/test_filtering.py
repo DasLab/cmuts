@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from conftest import SHAPES
+from conftest import DATASETS
 from support import (
     assert_counts_agree,
     converted,
@@ -62,9 +62,9 @@ def describe(filters):
 
 
 @pytest.mark.parametrize("filters", FILTERS, ids=describe)
-@pytest.mark.parametrize("shape", sorted(SHAPES))
-def test_read_counts_match_samtools(datasets, tmp_path, shape, filters):
-    data = datasets(shape)
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_read_counts_match_samtools(datasets, tmp_path, name, filters):
+    data = datasets(name)
     summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))
 
     assert_counts_agree(summary, data, criteria(filters))
@@ -83,9 +83,9 @@ def test_an_unavailable_mapping_quality_is_refused(tmp_path):
     assert summary.rejected == data.mapped
 
 
-@pytest.mark.parametrize("shape", ["plain", "lowqual"])
-def test_rejecting_everything_leaves_a_valid_file(datasets, tmp_path, shape):
-    data = datasets(shape)
+@pytest.mark.parametrize("name", ["plain", "lowqual"])
+def test_rejecting_everything_leaves_a_valid_file(datasets, tmp_path, name):
+    data = datasets(name)
     summary = run_cmuts(data, tmp_path / "out.h5", min_length=9000)
 
     assert summary.kept == 0

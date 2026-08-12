@@ -14,7 +14,7 @@ pytest.register_assert_rewrite("support")
 
 from support import CMUTS, CMUTS_GEN, CMUTS_SUB, generate  # noqa: E402
 
-# Each shape is one that is easy to get wrong: many references barely covered,
+# Each dataset is one that is easy to get wrong: many references barely covered,
 # one reference deeply covered, lengths ranging sixtyfold, reads whose stored
 # length far exceeds the span they align to through soft clipping and again
 # through long insertions, a file where every read falls below any useful
@@ -22,7 +22,7 @@ from support import CMUTS, CMUTS_GEN, CMUTS_SUB, generate  # noqa: E402
 # run past twice the length of the reference they are placed on, and one that is
 # both ragged and sparsely covered, so that a reference with padding and no
 # reads at all is among them.
-SHAPES = {
+DATASETS = {
     "plain":   dict(seed=101, references=40, ref_length="150:600", reads_per_ref=25),
     "sparse":  dict(seed=102, references=800, covered=0.3, reads_per_ref="1:6",
                     ref_length="200:300"),
@@ -56,13 +56,13 @@ def pytest_configure(config):
 
 @pytest.fixture(scope="session")
 def datasets(tmp_path_factory):
-    """Looks a shape up by name, building it the first time it is asked for."""
+    """Looks a dataset up by name, building it the first time it is asked for."""
     directory = tmp_path_factory.mktemp("datasets")
     built = {}
 
     def get(name):
         if name not in built:
-            built[name] = generate(directory, name, **SHAPES[name])
+            built[name] = generate(directory, name, **DATASETS[name])
         return built[name]
 
     return get
@@ -70,6 +70,6 @@ def datasets(tmp_path_factory):
 
 @pytest.fixture
 def data(datasets):
-    """The everyday shape, for a test that needs a dataset but not a
-    particular one."""
+    """The everyday dataset, for a test that needs one but not a particular
+    one."""
     return datasets("plain")

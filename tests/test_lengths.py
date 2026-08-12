@@ -11,7 +11,7 @@ import h5py
 import numpy as np
 import pytest
 
-from conftest import SHAPES
+from conftest import DATASETS
 from support import (
     rows_by_name, run_cmuts, samtools_length_histogram, sequences,
 )
@@ -59,19 +59,19 @@ def compare(output, data, min_mapq):
     return outside
 
 
-@pytest.mark.parametrize("shape", sorted(SHAPES))
-def test_histogram_matches_samtools(datasets, tmp_path, shape):
-    data = datasets(shape)
-    output = tmp_path / f"{shape}.h5"
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_histogram_matches_samtools(datasets, tmp_path, name):
+    data = datasets(name)
+    output = tmp_path / f"{name}.h5"
     run_cmuts(data, output, min_mapq=0)
 
     compare(output, data, min_mapq=0)
 
 
-@pytest.mark.parametrize("shape", ["plain", "clipped"])
-def test_histogram_matches_samtools_under_a_filter(datasets, tmp_path, shape):
-    data = datasets(shape)
-    output = tmp_path / f"{shape}-filtered.h5"
+@pytest.mark.parametrize("name", ["plain", "clipped"])
+def test_histogram_matches_samtools_under_a_filter(datasets, tmp_path, name):
+    data = datasets(name)
+    output = tmp_path / f"{name}-filtered.h5"
     run_cmuts(data, output, min_mapq=30)
 
     compare(output, data, min_mapq=30)
@@ -82,7 +82,7 @@ def test_each_row_sums_to_the_reads_counted_for_its_reference(datasets, tmp_path
     output = tmp_path / "sums.h5"
     run_cmuts(data, output, min_mapq=0)
 
-    assert compare(output, data, min_mapq=0) == 0, "this shape overflows the range"
+    assert compare(output, data, min_mapq=0) == 0, "this dataset overflows the range"
 
     with h5py.File(output, "r") as handle:
         reads = handle["reads/counted"][:]
@@ -98,7 +98,7 @@ def test_a_read_longer_than_the_range_is_counted_only_by_the_total(datasets, tmp
     run_cmuts(data, output, min_mapq=0)
 
     outside = compare(output, data, min_mapq=0)
-    assert outside, "the shape under test produced no read past the range"
+    assert outside, "the dataset under test produced no read past the range"
 
     with h5py.File(output, "r") as handle:
         reads = handle["reads/counted"][:]

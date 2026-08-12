@@ -1,4 +1,4 @@
-"""Randomly shaped data, checked the same way as the fixed shapes.
+"""Randomly generated data, checked the same way as the named datasets.
 
 On a failure hypothesis reports the parameters that produced it and shrinks
 them towards the smallest that still fails, so a case arrives ready to
@@ -27,7 +27,7 @@ def fractions(low, high):
 
 
 @st.composite
-def shapes(draw):
+def parameters(draw):
     """Everything the generator can be asked for."""
     return dict(
         seed=draw(st.integers(0, 2**31)),
@@ -67,10 +67,10 @@ def criteria(draw):
     deadline=None,                                  # every example runs subprocesses
     suppress_health_check=[HealthCheck.too_slow],
 )
-@given(shape=shapes(), filters=criteria())
-def test_random_data_matches_samtools(tmp_path_factory, shape, filters):
+@given(parameters=parameters(), filters=criteria())
+def test_random_data_matches_samtools(tmp_path_factory, parameters, filters):
     work = tmp_path_factory.mktemp("fuzz")
-    data = generate(work, "fuzz", **shape)
+    data = generate(work, "fuzz", **parameters)
     summary = run_cmuts(data, work / "out.h5", **filters)
 
     assert_counts_agree(summary, data, filters)

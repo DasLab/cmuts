@@ -315,7 +315,7 @@ def assert_counts_agree(summary, data: Dataset, criteria: dict):
     """Every claim a run makes about how many reads there were: against
     samtools, and against itself.
 
-    Held here so that the matrix of fixed shapes and the fuzz test are checking
+    Held here so that the matrix of named datasets and the fuzz test are checking
     the same thing, rather than two lists that happen to look alike.
     """
     assert summary.kept == samtools_kept(data, **criteria), "surviving reads"

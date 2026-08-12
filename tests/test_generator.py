@@ -5,35 +5,35 @@ import subprocess
 
 import pytest
 
-from conftest import SHAPES
+from conftest import DATASETS
 from support import (
     Dataset, generate, md_and_nm_tags, recomputed_md_and_nm_tags, records,
 )
 
 
-@pytest.mark.parametrize("shape", sorted(SHAPES))
-def test_md_and_nm_match_samtools(datasets, tmp_path, shape):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_md_and_nm_match_samtools(datasets, tmp_path, name):
     """samtools recomputes both from nothing but the alignment and the reference, so
     agreement checks the generator against something other than itself."""
-    data = datasets(shape)
+    data = datasets(name)
 
     assert md_and_nm_tags(data.bam) == recomputed_md_and_nm_tags(data, tmp_path)
 
 
-@pytest.mark.parametrize("shape", sorted(SHAPES))
-def test_alignments_are_well_formed(datasets, shape):
-    subprocess.run(["samtools", "quickcheck", str(datasets(shape).bam)], check=True)
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_alignments_are_well_formed(datasets, name):
+    subprocess.run(["samtools", "quickcheck", str(datasets(name).bam)], check=True)
 
 
-@pytest.mark.parametrize("shape", sorted(SHAPES))
-def test_coordinate_sorted_without_sorting(datasets, shape):
-    subprocess.run(["samtools", "index", str(datasets(shape).bam)],
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_coordinate_sorted_without_sorting(datasets, name):
+    subprocess.run(["samtools", "index", str(datasets(name).bam)],
                    check=True, capture_output=True)
 
 
-@pytest.mark.parametrize("shape", sorted(SHAPES))
-def test_header_lengths_match_the_reference(datasets, shape):
-    data = datasets(shape)
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_header_lengths_match_the_reference(datasets, name):
+    data = datasets(name)
     declared = {}
 
     for line in records(data.bam, "-H"):
