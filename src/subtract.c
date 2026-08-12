@@ -20,34 +20,48 @@
 #include "h5writer.h"
 #include "output.h"
 
-/* The files combined, in the order the rules name them. */
+/* The files combined, in the order the rules name them. A run without a denatured control
+ * uses the first two and leaves the third unopened. */
 typedef enum {
     SUB_TREATED,
     SUB_UNTREATED,
+    SUB_DENATURED,
     SUB_N_INPUTS,
 } sub_input;
+
+/* Whether a denatured control was given, which decides what the reactivity is: a
+ * difference of rates on its own, or that difference over what the reagent does where
+ * structure is absent. */
+typedef enum {
+    SUB_UNCONTROLLED,
+    SUB_CONTROLLED,
+    SUB_N_MODES,
+} sub_mode;
 
 /* How each field's values from several files come to one value.
  *
  * Kept here rather than in the field table: what an output holds is one thing, and what a
  * combination of several makes of it is another. Coverage and the read counts are totals,
- * so they add. Reactivity is a rate, so the background's is subtracted from the treated
- * one. The error of that difference is the two errors in quadrature, the runs being
+ * so they add, the control's included where there is one. Reactivity is a rate, so the
+ * background's is subtracted from the treated one. The error of either result is its
+ * inputs' errors propagated through the arithmetic that produced it, the runs being
  * independent. */
 typedef enum {
-    SUB_SUM,         /* every input's value, added */
-    SUB_DIFFERENCE,  /* the treated file's less the untreated one's */
-    SUB_QUADRATURE,  /* the error of that difference */
+    SUB_SUM,          /* every input's value, added */
+    SUB_DIFFERENCE,   /* the treated file's less the untreated one's */
+    SUB_QUADRATURE,   /* the error of that difference */
+    SUB_RATIO,        /* that difference over the denatured control's rate */
+    SUB_RATIO_ERROR,  /* the error of that ratio */
 } sub_rule;
 
-static const sub_rule RULES[OUT_N_FIELDS] = {
-    [OUT_COVERAGE]   = SUB_SUM,
-    [OUT_REACTIVITY] = SUB_DIFFERENCE,
-    [OUT_ERROR]      = SUB_QUADRATURE,
-    [OUT_LENGTHS]    = SUB_SUM,
-    [OUT_READS]      = SUB_SUM,
-    [OUT_REJECTED]   = SUB_SUM,
-    [OUT_UNMAPPED]   = SUB_SUM,
+static const sub_rule RULES[OUT_N_FIELDS][SUB_N_MODES] = {
+    [OUT_COVERAGE]   = { SUB_SUM,        SUB_SUM         },
+    [OUT_REACTIVITY] = { SUB_DIFFERENCE, SUB_RATIO       },
+    [OUT_ERROR]      = { SUB_QUADRATURE, SUB_RATIO_ERROR },
+    [OUT_LENGTHS]    = { SUB_SUM,        SUB_SUM         },
+    [OUT_READS]      = { SUB_SUM,        SUB_SUM         },
+    [OUT_REJECTED]   = { SUB_SUM,        SUB_SUM         },
+    [OUT_UNMAPPED]   = { SUB_SUM,        SUB_SUM         },
 };
 
 /* One reference's rows for one file: a buffer per field indexed by reference, each in the
@@ -63,6 +77,7 @@ typedef struct {
     const char *path[SUB_N_INPUTS];  /* what to name each in a failure */
     size_t      n_inputs;
 
+    sub_mode  mode;
     h5writer *out;
 
     row_set rows[SUB_N_INPUTS];  /* one reference, read from each input */
@@ -159,6 +174,44 @@ static void propagate_f32(const float *treated, const float *untreated, float *o
     }
 }
 
+/* The difference over what the same reagent produced where structure was absent, which is
+ * the reactivity corrected for how readily each position is modified at all.
+ *
+ * A control of zero saw no mutations where it should see the most. That is a failure of
+ * the control rather than a reactivity of any size, so the position is left unmeasured;
+ * and there is no small-control regime to guard besides, a rate being either zero or at
+ * least one mutation over the evidence for it. */
+static void ratio_f32(const float *treated, const float *untreated,
+                      const float *denatured, float *out, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        out[i] = denatured[i] > 0.0F
+               ? (treated[i] - untreated[i]) / denatured[i]
+               : (float)NAN;
+    }
+}
+
+/* The error of that ratio, all three runs being independent.
+ *
+ * Written as the errors of the numerator and of the control gathered under one root and
+ * divided by the control once, rather than as the relative errors the quotient rule is
+ * usually stated in. The relative form divides by the difference, which is zero wherever a
+ * position is unreactive; and a form dividing by the fourth power of the control underflows
+ * a float long before the control itself does. */
+static void ratio_error_f32(const float *const *rate, const float *const *error,
+                            float *out, size_t n)
+{
+    for (size_t i = 0; i < n; i++) {
+        float d = rate[SUB_DENATURED][i];
+        float r = (rate[SUB_TREATED][i] - rate[SUB_UNTREATED][i]) / d;
+        float t = error[SUB_TREATED][i] * error[SUB_TREATED][i];
+        float u = error[SUB_UNTREATED][i] * error[SUB_UNTREATED][i];
+        float c = r * error[SUB_DENATURED][i];
+
+        out[i] = d > 0.0F ? sqrtf(t + u + c * c) / d : (float)NAN;
+    }
+}
+
 static void add_u64(const uint64_t *const *in, size_t n_in, uint64_t *out, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
@@ -172,29 +225,53 @@ static void add_u64(const uint64_t *const *in, size_t n_in, uint64_t *out, size_
     }
 }
 
-/* Only a difference is clipped. A sum of counts and a quadrature of errors are both
- * nonnegative wherever their inputs are, so there is nothing for a clip to raise. */
-static int combine_f32(sub_rule how, bool clip, const void *const *in, size_t n_in,
+/* Gathers one field's values from every input, for a rule reading a field other than the
+ * one it writes. */
+static void gather_f32(const subtraction *s, out_field_id id, const float **v)
+{
+    for (size_t i = 0; i < s->n_inputs; i++) {
+        v[i] = s->rows[i].field[id];
+    }
+}
+
+/* Only a reactivity is clipped. A sum of counts and an error however propagated are both
+ * nonnegative wherever their inputs are, so there is nothing for a clip to raise.
+ *
+ * A ratio takes the sign of its numerator, the control being positive wherever a value is
+ * reported at all, so clipping the ratio and clipping the difference it was taken of come
+ * to the same thing. */
+static int combine_f32(const subtraction *s, sub_rule how, const void *const *in,
                        float *out, size_t n)
 {
     const float *v[SUB_N_INPUTS];
+    const float *rate[SUB_N_INPUTS];
 
-    for (size_t k = 0; k < n_in; k++) {
+    for (size_t k = 0; k < s->n_inputs; k++) {
         v[k] = in[k];
     }
 
     switch (how) {
         case SUB_SUM:
-            add_f32(v, n_in, out, n);
+            add_f32(v, s->n_inputs, out, n);
             return 0;
         case SUB_DIFFERENCE:
             subtract_f32(v[SUB_TREATED], v[SUB_UNTREATED], out, n);
-            if (clip) {
+            if (s->cfg->clip) {
                 clip_f32(out, n);
             }
             return 0;
         case SUB_QUADRATURE:
             propagate_f32(v[SUB_TREATED], v[SUB_UNTREATED], out, n);
+            return 0;
+        case SUB_RATIO:
+            ratio_f32(v[SUB_TREATED], v[SUB_UNTREATED], v[SUB_DENATURED], out, n);
+            if (s->cfg->clip) {
+                clip_f32(out, n);
+            }
+            return 0;
+        case SUB_RATIO_ERROR:
+            gather_f32(s, OUT_REACTIVITY, rate);
+            ratio_error_f32(rate, v, out, n);
             return 0;
     }
 
@@ -204,7 +281,7 @@ static int combine_f32(sub_rule how, bool clip, const void *const *in, size_t n_
 /* A count is only ever added. The difference of two counts is not a count, and neither is
  * the quadrature of two, so a counted field declaring either rule has no arithmetic here
  * and is refused. */
-static int combine_u64(sub_rule how, const void *const *in, size_t n_in,
+static int combine_u64(const subtraction *s, sub_rule how, const void *const *in,
                        uint64_t *out, size_t n)
 {
     const uint64_t *v[SUB_N_INPUTS];
@@ -213,22 +290,24 @@ static int combine_u64(sub_rule how, const void *const *in, size_t n_in,
         return -1;
     }
 
-    for (size_t k = 0; k < n_in; k++) {
+    for (size_t k = 0; k < s->n_inputs; k++) {
         v[k] = in[k];
     }
 
-    add_u64(v, n_in, out, n);
+    add_u64(v, s->n_inputs, out, n);
     return 0;
 }
 
-static int combine_values(out_field_id id, bool clip, const void *const *in,
-                          size_t n_in, void *out, size_t n)
+/* in holds the values of the field being combined, one row or one total from each input.
+ * A rule reading any field but its own takes it from the subtraction itself. */
+static int combine_values(const subtraction *s, out_field_id id,
+                          const void *const *in, void *out, size_t n)
 {
-    sub_rule how = RULES[id];
+    sub_rule how = RULES[id][s->mode];
 
     switch (OUT_FIELDS[id].stored) {
-        case OUT_F32:      return combine_f32(how, clip, in, n_in, out, n);
-        case OUT_U64:      return combine_u64(how, in, n_in, out, n);
+        case OUT_F32:      return combine_f32(s, how, in, out, n);
+        case OUT_U64:      return combine_u64(s, how, in, out, n);
         case OUT_N_STORED: break;
     }
 
@@ -265,7 +344,7 @@ static int combine_field(const subtraction *s, out_field_id id, size_t width)
         in[i] = s->rows[i].field[id];
     }
 
-    return combine_values(id, s->cfg->clip, in, s->n_inputs, s->result, width);
+    return combine_values(s, id, in, s->result, width);
 }
 
 static int write_field(subtraction *s, out_field_id id, int32_t tid, char *error,
@@ -348,7 +427,7 @@ static int read_totals(subtraction *s, char *error, size_t error_len)
             in[i]   = &held[i];
         }
 
-        if (combine_values(id, s->cfg->clip, in, s->n_inputs, &combined, 1) < 0) {
+        if (combine_values(s, id, in, &combined, 1) < 0) {
             snprintf(error, error_len, "%s: no rule combines a field of this type",
                      OUT_FIELDS[id].name);
             return -1;
@@ -409,12 +488,20 @@ static int check_agreement(subtraction *s, char *error, size_t error_len)
     return 0;
 }
 
-/* Names the files to be combined, in the order the rules expect them. */
+/* Names the files to be combined, in the order the rules expect them, and settles what the
+ * reactivity will be from whether a control is among them. */
 static void take_inputs(subtraction *s)
 {
     s->path[SUB_TREATED]   = s->cfg->treated_path;
     s->path[SUB_UNTREATED] = s->cfg->untreated_path;
     s->n_inputs            = 2;
+    s->mode                = SUB_UNCONTROLLED;
+
+    if (s->cfg->denatured_path) {
+        s->path[SUB_DENATURED] = s->cfg->denatured_path;
+        s->n_inputs            = 3;
+        s->mode                = SUB_CONTROLLED;
+    }
 }
 
 static int open_inputs(subtraction *s, char *error, size_t error_len)

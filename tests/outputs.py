@@ -58,45 +58,81 @@ BY_NAME = {field.name: field for field in FIELDS}
 # ---------------------------------------------------------------------------
 
 
-def _add(treated, untreated):
-    return treated + untreated
+# Every rule takes the values of the field it forms, one array per input, and
+# the reactivities of those same inputs. Most ignore the second: only the error
+# of a ratio is a function of a field other than its own, and giving them all
+# one signature is what lets the table below name them side by side.
 
 
-def _subtract(treated, untreated):
-    return treated - untreated
+def _add(values, rates):
+    total = values[0]
+
+    for value in values[1:]:
+        total = total + value
+
+    return total
 
 
-def _quadrature(treated, untreated):
-    return np.sqrt(treated * treated + untreated * untreated)
+def _subtract(values, rates):
+    return values[0] - values[1]
 
 
-# How each dataset of the output is formed from the two inputs. Stated here as
-# the contract, and not derived from the program's own description of it.
+def _quadrature(values, rates):
+    return np.sqrt(values[0] * values[0] + values[1] * values[1])
+
+
+def _over_control(values, denatured):
+    """A rate over the denatured control's, which is undefined where the control
+    measured nothing to divide by."""
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(denatured > 0, values / denatured, np.float32(np.nan))
+
+
+def _ratio(values, rates):
+    return _over_control(values[0] - values[1], values[2])
+
+
+def _ratio_error(values, rates):
+    ratio = _over_control(rates[0] - rates[1], rates[2])
+    spread = values[0] ** 2 + values[1] ** 2 + (ratio * values[2]) ** 2
+
+    return _over_control(np.sqrt(spread), rates[2])
+
+
+# How each dataset of the output is formed from the inputs, without a denatured
+# control and with one. Stated here as the contract, and not derived from the
+# program's own description of it.
 RULES = {
-    "coverage": _add,
-    "reactivity": _subtract,
-    "error": _quadrature,
-    "reads/lengths": _add,
-    "reads/counted": _add,
-    "reads/rejected": _add,
-    RUN_TOTAL: _add,
+    "coverage": (_add, _add),
+    "reactivity": (_subtract, _ratio),
+    "error": (_quadrature, _ratio_error),
+    "reads/lengths": (_add, _add),
+    "reads/counted": (_add, _add),
+    "reads/rejected": (_add, _add),
+    RUN_TOTAL: (_add, _add),
 }
 
+CONTROLLED = 1
+UNCONTROLLED = 0
 
-def combined(name, treated, untreated):
-    """What the output should hold, given what the two inputs hold.
+
+def combined(name, *inputs):
+    """What the output should hold, given the files that went into it.
+
+    Takes the files rather than one field's values from each, a rule being
+    free to read any field of any input and the error of a ratio doing so.
 
     Each rule is applied in the type the field is stored as, which is what
     cmuts-sub does: rates in float32, counts as whole unsigneds. Comparisons
-    against it are therefore exact.
-
-    Widening to double first would agree for a sum or a difference -- one
-    rounding stands in for the other -- but not for the error, where three
-    operations round rather than one.
+    against a sum or a difference are therefore exact -- widening to double
+    first would agree, one rounding standing in for the other -- but a ratio
+    and its error round often enough that a caller should allow a tolerance.
     """
-    rule = RULES[name]
+    rule = RULES[name][CONTROLLED if len(inputs) > 2 else UNCONTROLLED]
+    values = [np.asarray(field_of(path, name)) for path in inputs]
+    rates = [np.asarray(field_of(path, "reactivity")) for path in inputs]
 
-    return rule(np.asarray(treated), np.asarray(untreated))
+    return rule(values, rates)
 
 
 # ---------------------------------------------------------------------------

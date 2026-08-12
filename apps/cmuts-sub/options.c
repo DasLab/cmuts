@@ -24,6 +24,17 @@ static const cli_option OPTIONS[] = {
                 "may have cost a great deal more to produce than the one being "
                 "started." },
 
+    { .group = "Subtraction", .name = "denatured", .key = 'd', .type = OPT_STRING,
+      .offset = offsetof(sub_args, subtract.denatured_path), .metavar = "HDF5",
+      .help = "normalize against a denatured control",
+      .detail = "A sample denatured before it was treated, in which every position "
+                "is accessible to the reagent. Dividing by what it measures leaves "
+                "a reactivity corrected for how readily each position is modified "
+                "at all, at the cost of the result no longer being a rate: it is a "
+                "ratio of two, and a position the control found unmodified is "
+                "reported as unmeasured rather than as infinitely reactive.",
+      .unset_label = "none" },
+
     { .group = "Subtraction", .name = "clip", .type = OPT_FLAG,
       .offset = offsetof(sub_args, subtract.clip),
       .help = "raise a negative reactivity to zero",

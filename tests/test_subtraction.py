@@ -22,7 +22,6 @@ import pytest
 from outputs import (
     BY_NAME,
     FIELDS,
-    RULES,
     RUN_TOTAL,
     combined,
     datasets_of,
@@ -149,8 +148,7 @@ def test_each_field_follows_its_rule(build, subtract, name):
     output = subtract(treated, untreated)
 
     assert np.array_equal(
-        field_of(output, name),
-        combined(name, field_of(treated, name), field_of(untreated, name)),
+        field_of(output, name), combined(name, treated, untreated),
     ), name
 
 
@@ -250,6 +248,153 @@ def test_counts_stay_whole_and_exact(build, subtract):
     assert np.all(field_of(output, "reads/counted") == large + 1)
     assert field_of(output, RUN_TOTAL) == large + 1
     assert field_of(output, "reads/counted").dtype == np.dtype("u8")
+
+
+# ---------------------------------------------------------------------------
+# The denatured control
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", COMBINED)
+def test_each_field_follows_its_rule_against_a_control(build, subtract, name):
+    """The same statement as without a control, over the rules a control puts in
+    place: the reactivity a ratio, its error propagated through that ratio, and
+    everything counted still added.
+
+    The error is compared to a tolerance rather than exactly. It rounds eight
+    times over a division and a root, so reproducing it bit for bit would test
+    that the same expression had been typed the same way twice rather than that
+    the arithmetic is right; every other rule rounds once and is exact.
+    """
+    treated = build(everything(seed=31), unmapped=17)
+    untreated = build(everything(seed=32), unmapped=3)
+    denatured = build(everything(seed=33), unmapped=5)
+
+    output = subtract(treated, untreated, denatured=denatured)
+
+    result = field_of(output, name)
+    wanted = combined(name, treated, untreated, denatured)
+
+    if name == "error":
+        assert np.allclose(result, wanted, rtol=1e-6, equal_nan=True), name
+    else:
+        assert np.array_equal(result, wanted), name
+
+
+def test_a_control_divides_the_difference(build, subtract):
+    """The rule at its plainest, on values whose ratio is exact in a float."""
+    treated = build({"reactivity": 0.75})
+    untreated = build({"reactivity": 0.25})
+    denatured = build({"reactivity": 0.5})
+
+    output = subtract(treated, untreated, denatured=denatured)
+
+    assert np.all(field_of(output, "reactivity") == np.float32(1.0))
+
+
+def test_a_control_that_measured_nothing_leaves_no_reactivity(build, subtract):
+    """A control of zero saw no mutations where every position is accessible.
+    That is a failure of the control, not a reactivity of any size, so the
+    position is reported as unmeasured rather than as a division by zero."""
+    treated = build({"reactivity": 0.75})
+    untreated = build({"reactivity": 0.25})
+    denatured = build({"reactivity": 0.0})
+
+    output = subtract(treated, untreated, denatured=denatured)
+
+    assert np.isnan(field_of(output, "reactivity")).all()
+    assert np.isnan(field_of(output, "error")).all()
+
+
+def test_a_control_no_reagent_reached_leaves_no_reactivity(build, subtract):
+    """NaN in the control carries through as it does in either other input: a
+    ratio is known only where all three rates are."""
+    known, missing = np.float32(0.5), np.float32(np.nan)
+
+    control = np.full((N_REFS, CAP), known, dtype=np.float32)
+    control[2, :] = missing
+
+    output = subtract(build({"reactivity": 0.75}), build({"reactivity": 0.25}),
+                      denatured=build({"reactivity": control}))
+    result = field_of(output, "reactivity")
+
+    assert np.isnan(result[2]).all()
+    assert not np.isnan(result[0]).any()
+
+
+def test_a_control_of_ones_leaves_the_difference_alone(build, tmp_path):
+    """A control finding every position equally accessible divides by one, which
+    is the difference the same run gives with no control at all."""
+    treated, untreated = build(everything(seed=34)), build(everything(seed=35))
+    ones = build({"reactivity": 1.0})
+
+    plain = run_subtract(treated, untreated, tmp_path / "plain.h5")
+    controlled = run_subtract(treated, untreated, tmp_path / "controlled.h5",
+                              denatured=ones)
+
+    assert np.array_equal(field_of(controlled, "reactivity"),
+                          field_of(plain, "reactivity"))
+
+
+def test_a_control_widens_the_error_it_divides(build, subtract, tmp_path):
+    """A control of one leaves the difference alone but not its error: dividing
+    by a measurement adds that measurement's own uncertainty, so the error can
+    only grow."""
+    treated, untreated = build(everything(seed=36)), build(everything(seed=37))
+    ones = build({"reactivity": 1.0, "error": spread("error", seed=38)})
+
+    plain = run_subtract(treated, untreated, tmp_path / "plain.h5")
+    controlled = run_subtract(treated, untreated, tmp_path / "controlled.h5",
+                              denatured=ones)
+
+    assert np.all(field_of(controlled, "error") >= field_of(plain, "error"))
+
+
+def test_a_control_is_counted_in_the_totals(build, subtract):
+    """Everything counted adds across every input given, the control included:
+    the field means the same whatever produced the file."""
+    treated = build({"reads/counted": 3}, unmapped=11)
+    untreated = build({"reads/counted": 5}, unmapped=13)
+    denatured = build({"reads/counted": 7}, unmapped=17)
+
+    output = subtract(treated, untreated, denatured=denatured)
+
+    assert np.all(field_of(output, "reads/counted") == 15)
+    assert field_of(output, RUN_TOTAL) == 41
+
+
+def test_clipping_holds_a_ratio_at_zero(build, subtract):
+    """A ratio takes the sign of its numerator, the control being positive
+    wherever anything is reported, so the clip reaches it as it reaches a
+    difference."""
+    treated = build({"reactivity": 0.25})
+    untreated = build({"reactivity": 0.75})
+    denatured = build({"reactivity": 0.5})
+
+    output = subtract(treated, untreated, denatured=denatured, clip=True)
+
+    assert np.all(field_of(output, "reactivity") == 0)
+
+
+@pytest.mark.parametrize("wrong", ["references", "wide"])
+def test_a_control_disagreeing_with_the_inputs_is_refused(build, tmp_path, wrong):
+    """Checked against the treated file exactly as the background is."""
+    control = {"references": lambda: build(n_refs=N_REFS + 1),
+               "wide": lambda: build(cap=CAP + 1)}[wrong]()
+
+    attempt = try_subtract(build(), build(), tmp_path / "out.h5",
+                           denatured=control)
+
+    assert attempt.returncode != 0
+    assert wrong in attempt.stderr
+
+
+def test_a_control_missing_a_dataset_is_refused(build, tmp_path):
+    attempt = try_subtract(build(), build(), tmp_path / "out.h5",
+                           denatured=without(build(), "error"))
+
+    assert attempt.returncode != 0
+    assert "error" in attempt.stderr
 
 
 # ---------------------------------------------------------------------------
@@ -384,8 +529,7 @@ def test_the_rules_hold_at_any_shape(build, subtract, n_refs, cap):
 
     for name in ("reactivity", "reads/counted"):
         assert np.array_equal(
-            field_of(output, name),
-            combined(name, field_of(treated, name), field_of(untreated, name)),
+            field_of(output, name), combined(name, treated, untreated),
         ), name
 
 
