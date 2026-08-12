@@ -10,6 +10,7 @@ from conftest import SHAPES
 from support import (
     assert_counts_agree,
     converted,
+    generate,
     outputs_agree,
     run_cmuts,
     samtools_kept,
@@ -67,6 +68,19 @@ def test_read_counts_match_samtools(datasets, tmp_path, shape, filters):
     summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))
 
     assert_counts_agree(summary, data, criteria(filters))
+
+
+def test_an_unavailable_mapping_quality_is_refused(tmp_path):
+    """Asserted against the summary and not against samtools, which admits
+    MAPQ 255 at every threshold."""
+    data = generate(tmp_path, "unavailable", seed=112, references=8,
+                    reads_per_ref=10, mapq=255, unmapped=0)
+
+    summary = run_cmuts(data, tmp_path / "out.h5", **UNFILTERED)
+
+    assert data.mapped > 0
+    assert summary.kept == 0
+    assert summary.rejected == data.mapped
 
 
 @pytest.mark.parametrize("shape", ["plain", "lowqual"])

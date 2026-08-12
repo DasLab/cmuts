@@ -37,7 +37,7 @@ static const cli_option OPTIONS[] = {
     { .group = "Filtering", .name = "min-mapq", .key = 'q', .type = OPT_INT,
       .offset = offsetof(cli_args, pipeline.filter_config.min_mapq), .metavar = "N",
       .help = "discard alignments below this mapping quality",
-      .minimum = 0, .maximum = 255 },
+      .minimum = 0, .maximum = FILTER_MAPQ_UNAVAILABLE - 1 },
     { .group = "Filtering", .name = "min-length", .type = OPT_INT,
       .offset = offsetof(cli_args, pipeline.filter_config.min_length), .metavar = "N",
       .help = "discard reads shorter than this",

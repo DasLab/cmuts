@@ -17,12 +17,13 @@ filter_config filter_defaults(void)
     };
 }
 
-/* MAPQ 255 means "unavailable" in the SAM specification rather than "perfect", but is
- * compared numerically here as samtools does. An aligner emitting 255 throughout would
- * otherwise have all of its output discarded by any threshold at all. */
+/* MAPQ 255 means "unavailable" in the SAM specification, so a read carrying it is discarded
+ * at every threshold: an aligner that reported no confidence in a placement is not reporting
+ * confidence of 255. samtools compares it numerically, admitting it everywhere, so the two
+ * disagree on such a read. */
 static bool mapping_quality_accepted(const filter_config *filter, const cm_bam_record *read)
 {
-    return read->mapq >= filter->min_mapq;
+    return read->mapq != FILTER_MAPQ_UNAVAILABLE && read->mapq >= filter->min_mapq;
 }
 
 static bool strand_accepted(const filter_config *filter, const cm_bam_record *read)
