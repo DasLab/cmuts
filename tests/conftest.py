@@ -12,7 +12,7 @@ import pytest
 # is told to before the module is first imported.
 pytest.register_assert_rewrite("support")
 
-from support import CMUTS, CMUTS_GEN, CMUTS_SUB, generate  # noqa: E402
+from support import PROGRAMS, ROOT, generate, located  # noqa: E402
 
 # Each dataset is one that is easy to get wrong: many references barely covered,
 # one reference deeply covered, lengths ranging sixtyfold, reads whose stored
@@ -46,9 +46,13 @@ DATASETS = {
 
 
 def pytest_configure(config):
-    missing = [path.name for path in (CMUTS, CMUTS_GEN, CMUTS_SUB) if not path.exists()]
+    missing = [name for name in PROGRAMS if located(name) is None]
     if missing:
-        pytest.exit(f"run make first: {', '.join(missing)} not built", returncode=2)
+        pytest.exit(
+            f"run make check, or put a build directory under {ROOT} first on PATH: "
+            f"{', '.join(missing)} not found there",
+            returncode=2,
+        )
 
     if not shutil.which("samtools"):
         pytest.exit("samtools is required; it is what the tests check against", returncode=2)

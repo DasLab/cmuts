@@ -5,6 +5,29 @@ CC       ?= cc
 
 OPT      ?= -O2
 
+# One directory per variant, none of them inside another, so that an object
+# from an ordinary build cannot link into a binary that checks nothing and each
+# survives the others being built.
+BUILD_ROOT := build
+VARIANT    := release
+
+# A sanitizer is chosen by name, which stands for a variant of its own and the
+# flags that fill it: `make SAN=asan` builds one and `make check SAN=asan` runs
+# the tests over it. Thread and address cannot be combined, and neither finds
+# leaks on macOS, which has no LeakSanitizer.
+SANITIZE_asan := address,undefined
+SANITIZE_tsan := thread
+
+ifdef SAN
+ifeq ($(SANITIZE_$(SAN)),)
+$(error unknown sanitizer: $(SAN))
+endif
+VARIANT  := $(SAN)
+OPT      := -O1
+endif
+
+BUILD    := $(BUILD_ROOT)/$(VARIANT)
+
 # Clean as it stands. Left out: -Wconversion and -Wsign-conversion (three
 # sites, two of them htslib's KSEQ_INIT expansion in fasta.c) and
 # -Wswitch-enum (one switch in cli.c relying on its default).
@@ -30,9 +53,13 @@ CPATH_CFLAGS := $(addprefix -isystem ,$(subst :, ,$(CPATH)))
 CFLAGS    := -std=c11 $(OPT) $(WARNINGS) -pthread -Iinclude $(HTS_CFLAGS) $(HDF5_CFLAGS) $(CPATH_CFLAGS) -MMD -MP
 
 # A sanitizer has to reach both the compiler and the linker; what it adds to
-# the link is attached to each program's libraries, below.
-ifdef SANITIZE
-SANFLAGS   := -fsanitize=$(SANITIZE) -fno-omit-frame-pointer -g
+# the link is attached to each program's libraries, below. Halting on the first
+# diagnostic is what makes one visible under the tests, which keep the output of
+# a program that exits cleanly; undefined behavior is otherwise reported and
+# stepped over.
+ifdef SAN
+SANFLAGS   := -fsanitize=$(SANITIZE_$(SAN)) -fno-sanitize-recover=all \
+              -fno-omit-frame-pointer -g
 CFLAGS     += $(SANFLAGS)
 endif
 
@@ -56,7 +83,6 @@ PROGRAMS := cmuts cmuts-gen cmuts-sub
 # on PATH.
 INSTALLED := cmuts cmuts-sub
 
-BUILD    := build
 LIB      := $(BUILD)/lib$(NAME).a
 
 # Sources under src/ are the library and nothing else: no entry point lives
@@ -82,7 +108,7 @@ LIBS_cmuts     := $(HTS_LIBS) $(HDF5_LIBS) -pthread -lm
 LIBS_cmuts-gen := $(HTS_LIBS)
 LIBS_cmuts-sub := $(HDF5_LIBS) -lm
 
-ifdef SANITIZE
+ifdef SAN
 $(foreach p,$(PROGRAMS),$(eval LIBS_$(p) += $(SANFLAGS)))
 endif
 
@@ -122,17 +148,11 @@ uninstall:
 #     uv venv .venv && uv pip install --python .venv/bin/python --group dev
 PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 
+# The build directory goes first on PATH, which is how the tests reach these
+# programs and not an installed copy of them. They refuse anything found
+# outside this repository, so the tests cannot be run without it.
 check: $(BINS)
-	$(PYTHON) -m pytest
-
-# Separate object trees, so that an object from an ordinary build cannot link
-# into a binary that checks nothing. Thread and address cannot be combined, and
-# neither finds leaks on macOS, which has no LeakSanitizer.
-tsan:
-	@$(MAKE) BUILD=$(BUILD)/tsan OPT=-O1 SANITIZE=thread all
-
-asan:
-	@$(MAKE) BUILD=$(BUILD)/asan OPT=-O1 SANITIZE=address,undefined all
+	PATH=$(CURDIR)/$(BUILD):$$PATH $(PYTHON) -m pytest
 
 # clang-tidy reads the compile database, not this file. A clang that is not the
 # system one also needs the SDK spelled out. Every source is described, the
@@ -156,9 +176,10 @@ compile_commands.json: Makefile $(SRC)
 lint: compile_commands.json
 	@$(CLANG_TIDY) -p . --quiet $(SRC)
 
+# Every variant, not the one this invocation names.
 clean:
-	rm -rf $(BUILD) compile_commands.json
+	rm -rf $(BUILD_ROOT) compile_commands.json
 
-.PHONY: all asan check clean install lint tsan uninstall
+.PHONY: all check clean install lint uninstall
 
 -include $(DEP)

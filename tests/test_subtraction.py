@@ -566,7 +566,7 @@ def test_a_run_that_refuses_its_inputs_leaves_the_output_intact(build, subtract,
 
 def test_both_inputs_are_required(build, tmp_path):
     given = subprocess.run(
-        [str(CMUTS_SUB), "-o", str(tmp_path / "out.h5"), str(build())],
+        [CMUTS_SUB, "-o", str(tmp_path / "out.h5"), str(build())],
         capture_output=True, text=True,
     )
 

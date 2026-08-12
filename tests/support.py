@@ -12,6 +12,7 @@ same way however the ambiguity was written down.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
@@ -21,9 +22,31 @@ import h5py
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
-CMUTS = ROOT / "build" / "cmuts"
-CMUTS_GEN = ROOT / "build" / "cmuts-gen"
-CMUTS_SUB = ROOT / "build" / "cmuts-sub"
+
+CMUTS = "cmuts"
+CMUTS_GEN = "cmuts-gen"
+CMUTS_SUB = "cmuts-sub"
+PROGRAMS = (CMUTS, CMUTS_GEN, CMUTS_SUB)
+
+
+def located(name: str) -> Path | None:
+    """Finds a program on PATH, disregarding any copy from outside this
+    repository.
+
+    make check puts the build directory first on PATH, which is what decides
+    between an ordinary build and a sanitized one. A search that got as far as
+    an installed cmuts would test whatever was installed, whenever that was, so
+    anything outside the repository counts as not found.
+    """
+    found = shutil.which(name)
+
+    if found is None:
+        return None
+
+    path = Path(found).resolve()
+
+    return path if ROOT in path.parents else None
+
 
 STRAND_FLAGS = {"both": (), "forward": ("-F", "16"), "reverse": ("-f", "16")}
 
