@@ -26,7 +26,7 @@
 typedef struct {
     int32_t         tid;      /* reference index into the file header */
     hts_pos_t       pos;      /* 0-based leftmost coordinate on that reference */
-    uint16_t        flag;     /* SAM flags, for BAM_FUNMAP and friends */
+    uint16_t        flag;     /* SAM flags, for BAM_FUNMAP and the rest */
     uint8_t         mapq;     /* mapping quality */
     const uint32_t *cigar;    /* raw ops; bam_cigar_op / bam_cigar_oplen decode */
     uint32_t        n_cigar;  /* number of ops in cigar */
@@ -49,8 +49,8 @@ cm_bam_reader *cm_bam_open(const char *path, const char **why);
  *
  * CRAM stores sequence as differences from a reference, which htslib otherwise locates on
  * its own: from the UR path written into the header when the file was made, or from an M5
- * checksum, which may reach a remote server. Neither need be the reference the caller
- * works against, and nothing would report the difference. Harmless for SAM and BAM, which
+ * checksum, which may reach a remote server. Neither is necessarily the reference the
+ * caller works against, and nothing reports the difference. Harmless for SAM and BAM, which
  * carry their own sequence. */
 int cm_bam_set_reference(cm_bam_reader *reader, const char *fasta_path);
 

@@ -246,7 +246,7 @@ static cell_terms terms_at(const context *ctx, const row_terms *row,
     return theirs == row->ours ? row->agree : row->differ;
 }
 
-/* Confidence in the base a row pairs, whatever it was compared against: an
+/* Confidence in the base a row pairs, regardless of what it was compared against: an
  * unnamed base was still read, at the quality its score gives. */
 static double confidence_at(const context *ctx, size_t i)
 {

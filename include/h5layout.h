@@ -1,6 +1,6 @@
 /* h5layout.h -- how the fields of an output are stored in HDF5.
  *
- * The other half of output.h: that says what the fields are, this says what they become on
+ * The other half of output.h: that defines the fields, this defines what they become on
  * disk -- their datatypes, their fill values, the shape of a dataset and of the chunks it
  * is written in, and the dataspaces a row moves through. The writer and the reader share
  * it, so a file written here is described the same way when it is read back.
@@ -47,9 +47,9 @@ int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
 /* A creation property list with object timestamping turned off.
  *
  * HDF5 stamps every object header with the time it was written, so two runs over the same
- * input would produce files differing in bytes that say nothing about the result. Applied
- * to the file as well as the datasets: an fcpl also carries the root group's creation
- * properties, and that group is stamped like any other. */
+ * input would produce files differing in bytes that carry no information about the result.
+ * Applied to the file as well as the datasets: an fcpl also carries the root group's
+ * creation properties, and that group is stamped like any other. */
 hid_t h5layout_untimed_plist(hid_t class_id);
 
 /* A dataset creation property list: chunked, filtered, and filled as the field requires. */

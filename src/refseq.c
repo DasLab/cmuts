@@ -112,8 +112,8 @@ static bool length_matches(refseq_source *src, size_t file, int32_t tid)
     return false;
 }
 
-/* The current record's MD5, computed once however many files ask for it, and not at all
- * where none does. */
+/* The current record's MD5, computed once for any number of files that need it, and not
+ * at all where none does. */
 typedef struct {
     char value[CHECKSUM_LEN + 1];
     bool taken;

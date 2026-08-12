@@ -12,7 +12,7 @@
 /* Which strand's alignments to keep.
  *
  * The test is on the alignment's own reverse bit, which for single-end reads is the strand
- * the read came from. It says nothing about the fragment: for paired data, what strand a
+ * the read came from. It describes the read and not the fragment: for paired data, what
  * fragment belongs to depends on the library protocol and on which mate is being read. */
 typedef enum {
     FILTER_STRAND_BOTH,

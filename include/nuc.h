@@ -1,4 +1,4 @@
-/* nuc.h -- one nucleotide, however it was stored.
+/* nuc.h -- one nucleotide, decoded from any of the ways it is stored.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */

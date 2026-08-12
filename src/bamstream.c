@@ -78,9 +78,9 @@ static int open_source(cm_bam_stream *stream, source *src, const char *path,
     return 0;
 }
 
-/* Points every reader at one shared thread pool, so that the threads follow whichever
- * file is being drained rather than each file holding a set that idles while the
- * others are read. */
+/* Points every reader at one shared thread pool, so that the threads follow the file
+ * being drained rather than each file holding a set that idles while the others are
+ * read. */
 static int share_threads(cm_bam_stream *stream, int threads)
 {
     if (threads < 1) {

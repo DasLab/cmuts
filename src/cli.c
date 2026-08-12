@@ -67,7 +67,7 @@ static bool takes_argument(const cli_option *opt)
     return opt->type != OPT_FLAG;
 }
 
-/* Whether the option writes to the args struct. One that answers and exits has no
+/* Whether the option writes to the args struct. One that prints and exits has no
  * destination, so its offset is never used. */
 static bool stores_a_value(const cli_option *opt)
 {
@@ -753,8 +753,8 @@ static cli_status take_positionals(const cli_spec *spec, int argc, char **argv,
     return CLI_OK;
 }
 
-/* Answers a request the tables can satisfy on their own, returning whether one was
- * made. Answered before any argument is required to be present. */
+/* Handles a request the tables can satisfy without arguments, returning whether one
+ * was made. Called before any argument is required to be present. */
 static bool answer(const cli_spec *spec, cli_action action)
 {
     switch (action) {

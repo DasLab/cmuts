@@ -132,7 +132,7 @@ static int create_field_groups(h5writer *w, const char *name)
 }
 
 /* Creates every group the field names imply, before any dataset is made in one. The names
- * are where the layout says which groups an output holds; nothing else declares them. */
+ * are where the layout fixes which groups an output holds; nothing else declares them. */
 static int create_groups(h5writer *w)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {

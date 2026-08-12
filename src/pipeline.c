@@ -52,7 +52,7 @@ typedef struct {
     size_t         ref_cap;    /* longest reference, sizing every accumulator */
 } pipeline;
 
-/* The pipeline is settled while the run is assembled and only read once it starts,
+/* The pipeline is filled in while the run is assembled and only read once it starts,
  * so every stage below takes it const. What the threads share is kept separate,
  * below, and is the only thing any of them writes. */
 

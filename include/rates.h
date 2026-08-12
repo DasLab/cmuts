@@ -24,8 +24,8 @@ rate_config rate_defaults(void);
 /* The mutations at each of len positions over the evidence for them, and the standard error
  * of that rate, written into out.
  *
- * Both are NaN where the evidence falls short, and at the same positions, so a caller
- * reading one knows what the other holds.
+ * Both are NaN where the evidence falls short, and at the same positions, so one can be
+ * read from the other.
  *
  * out is written as the accumulator is read, so it must not be one of the accumulator's own
  * arrays: a position's evidence is read after the position before it has been written. This

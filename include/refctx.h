@@ -33,7 +33,7 @@ typedef struct refctx {
 
 void refctx_acquire(refctx *ctx, int n);
 
-/* Drops n handles, returning true to whichever caller drops the last one. That caller then
+/* Drops n handles, returning true to the caller that drops the last one. That caller then
  * owns the reference and must pass it on to be written. */
 bool refctx_release(refctx *ctx, int n);
 

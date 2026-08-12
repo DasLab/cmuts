@@ -24,8 +24,7 @@
 #define PHMM_DEFAULT_BAND 2
 
 /* The model's rates. The defaults are provisional: the right order of magnitude for
- * reverse transcription of a chemically modified template, but not measured. They should
- * become command-line options, and eventually estimates from the alignments. */
+ * reverse transcription of a chemically modified template, but not measured. */
 typedef struct {
     double open_deletion;     /* chance an aligned position begins one */
     double open_insertion;
@@ -55,10 +54,7 @@ typedef enum {
  * The insertion weight also scales what the mutations are taken against, deciding how far
  * an insertion bears on the position it precedes at all. Substitutions and deletions
  * default to 1 and insertions to 0, leaving insertions out of both. None of the three is
- * calibrated.
- *
- * Indexed by kind so that a finer breakdown, by reference base for example, is another
- * index rather than another field. */
+ * calibrated. */
 typedef struct {
     double weight[PHMM_N_EVENTS];
 } phmm_weights;

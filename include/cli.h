@@ -2,7 +2,7 @@
  *
  * A program describes its command line once, as a cli_spec, and everything else derives
  * from it: parsing, bounds checking, the usage line, grouped help, and a JSON description
- * for generating documentation and shell completions. Nothing here knows what any
+ * for generating documentation and shell completions. Nothing here interprets what any
  * particular program's options mean.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
@@ -37,7 +37,7 @@ typedef struct {
     int         value;
 } cli_choice;
 
-/* What an option does besides storing a value. The three that answer and exit are declared
+/* What an option does besides storing a value. The three that print and exit are declared
  * rather than recognized by name, so they need no field of their own and any program may
  * have them. */
 typedef enum {

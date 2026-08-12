@@ -35,7 +35,7 @@ void queue_push_all(queue *q, void *const *items, size_t n);
 size_t queue_pop(queue *q, void **items, size_t n);
 
 /* Removes up to n items without blocking. A return of 0 means the queue was empty at the
- * moment of the call, and says nothing about whether more is coming. */
+ * moment of the call, and does not indicate whether more is coming. */
 size_t queue_try_pop(queue *q, void **items, size_t n);
 
 /* Signals the end of input, releasing every consumer once the queue drains. */
