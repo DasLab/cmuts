@@ -118,8 +118,8 @@ UNCONTROLLED = 0
 def combined(name, *inputs):
     """What the output should hold, given the files that went into it.
 
-    Takes the files rather than one field's values from each, a rule being
-    free to read any field of any input and the error of a ratio doing so.
+    Takes the files rather than one field's values from each, since the error
+    of a ratio reads the reactivities as well as the errors.
 
     Each rule is applied in the type the field is stored as, which is what
     cmuts-sub does: rates in float32, counts as whole unsigneds. Comparisons
@@ -174,8 +174,8 @@ def _storage(storage: str, wanted: tuple) -> dict:
     cmuts writes chunked, shuffled and deflated; a plainly written file holds
     the same values and is the other case worth reading.
 
-    A dataset with no rows cannot be chunked, so an empty one is written plainly
-    whichever was asked for.
+    A dataset with no rows cannot be chunked, so this writes an empty one
+    plainly under either setting.
     """
     if storage == "plain" or 0 in wanted:
         return {}

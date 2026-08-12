@@ -70,6 +70,6 @@ def datasets(tmp_path_factory):
 
 @pytest.fixture
 def data(datasets):
-    """The everyday shape, for a test that wants a dataset rather than a
+    """The everyday shape, for a test that needs a dataset but not a
     particular one."""
     return datasets("plain")

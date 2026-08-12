@@ -61,7 +61,7 @@ typedef struct {
     size_t      n_inputs;
 
     /* Set with n_inputs and never apart from it: a controlled rule reads the third input,
-     * and nothing else bounds that reach. */
+     * and nothing else keeps that read in bounds. */
     sub_mode mode;
 
     h5writer *out;
@@ -101,8 +101,8 @@ static int fail_output(const subtraction *s, char *error, size_t error_len)
 /* Arithmetic                                                                */
 /* ------------------------------------------------------------------------ */
 
-/* NaN in any input carries through every rule, which is what leaves an unmeasured position
- * and the columns past a reference marked as they were. */
+/* NaN in any input carries through every rule, so an unmeasured position and the columns
+ * past a reference stay NaN. */
 
 static void add_f32(const float *const *in, size_t n_in, float *out, size_t n)
 {
@@ -159,11 +159,11 @@ static void ratio_f32(const float *treated, const float *untreated,
     }
 }
 
-/* The error of the ratio, the three runs taken as independent.
+/* The error of the ratio, treating the three runs as independent.
  *
- * Not the relative-error form: that divides by the difference, which is zero wherever a
- * position is unreactive, and squaring the control into a denominator underflows a float
- * long before the control does. */
+ * Not the relative-error form: that divides by the difference, which is zero at an
+ * unreactive position, and squaring the control into a denominator underflows a float long
+ * before the control does. */
 static void ratio_error_f32(const float *const *rate, const float *const *error,
                             float *out, size_t n)
 {
@@ -313,8 +313,8 @@ static int write_field(subtraction *s, out_field_id id, int32_t tid, char *error
     }
 
     /* Written whole rather than to the reference's own length: the columns past a
-     * reference are NaN in every input and stay NaN through the arithmetic, which is the
-     * mark the writer would otherwise apply. */
+     * reference are NaN in every input and stay NaN through the arithmetic, so the writer
+     * need not mark them. */
     if (h5writer_row(s->out, id, tid, s->result) < 0) {
         return fail_output(s, error, error_len);
     }
@@ -542,8 +542,8 @@ int subtract_run(const subtract_config *cfg, char *error, size_t error_len)
         return -1;
     }
 
-    /* Every way an input can be wrong is found before the output is created, so a run
-     * that refuses its inputs leaves whatever is at that path alone. */
+    /* Every input is checked before the output is created, so a run that refuses its
+     * inputs leaves the file at that path alone. */
     if (open_inputs(&s, error, error_len) == 0 &&
         build_buffers(&s, error, error_len) == 0 &&
         open_output(&s, may_replace, error, error_len) == 0 &&

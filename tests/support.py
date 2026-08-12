@@ -45,8 +45,8 @@ def _option(name: str) -> str:
 
 @dataclass(frozen=True)
 class Dataset:
-    """Alignments and the reference they came from, with the totals that hold
-    whatever filter is applied afterwards.
+    """Alignments and the reference they came from, with the totals that no
+    later filter can change.
 
     The alignments may be spread over several files, which cmuts reads as one.
     The totals are of them all, so they carry over a split.
@@ -67,11 +67,11 @@ class Dataset:
 
 
 def counted(bams, fasta) -> Dataset:
-    """A dataset whose totals are measured from the files rather than stated
-    about them, so that a caller cannot state one that is not so.
+    """A dataset whose totals are measured from the files, so that a caller
+    cannot declare a total the files do not support.
 
-    For the transforms below the totals carry over by construction and are kept
-    rather than counted again, which on a CRAM is not cheap.
+    The transforms below carry their totals over by construction and keep them
+    instead of counting again, which on a CRAM is not cheap.
     """
     bams = tuple(bams)
 
@@ -265,10 +265,10 @@ def samtools_kept(
 ) -> int:
     """Reads surviving a set of criteria.
 
-    Strand and mapping quality are flags samtools knows; length it does not, so
-    the sequence column is measured directly. A bound of zero is not applied,
-    which is what cmuts does with one left unset. Unmapped and secondary reads
-    are excluded here as cmuts excludes them, whatever the criteria.
+    samtools takes strand and mapping quality as flags but not length, so this
+    measures the sequence column directly. A bound of zero is left unapplied,
+    matching what cmuts does with one unset, and unmapped and secondary reads
+    are excluded here as cmuts excludes them under every criterion.
     """
     flags = ("-F", "0x104", "-q", str(min_mapq), *STRAND_FLAGS[strand])
     lengths = (len(line.split("\t")[9]) for line in records(data.bam, *flags))
@@ -440,9 +440,8 @@ def _datasets_agree(a, b) -> bool:
 def outputs_agree(first, second) -> bool:
     """Whether two outputs hold the same thing.
 
-    Over every dataset they carry, rather than a list of them kept here: a
-    quantity added to the accumulator would otherwise be written by the code and
-    checked by nothing.
+    Compares every dataset the files carry instead of a list kept here, so that
+    adding a field to the output does not leave it unchecked.
     """
     with h5py.File(first, "r") as a, h5py.File(second, "r") as b:
         left, right = datasets_of(a), datasets_of(b)

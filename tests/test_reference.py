@@ -17,7 +17,7 @@ COMPLEMENT = str.maketrans("ACGT", "TGCA")
 
 
 # ---------------------------------------------------------------------------
-# Rewriting a reference, and what the header says about it
+# Rewriting a reference and the checksum its header declares
 # ---------------------------------------------------------------------------
 
 
@@ -69,8 +69,8 @@ def substituted(data, tmp_path, only=None):
 
 
 def test_a_matching_checksum_is_accepted(data, tmp_path):
-    """Verification decides whether a run happens and not what it produces, so
-    the result matches a run with no checksums declared."""
+    """cmuts checks the checksums before counting and not while counting, so
+    the result matches a run whose header declares none."""
     checked = run_cmuts(with_checksums(data, tmp_path), tmp_path / "checked.h5")
     plain = run_cmuts(data, tmp_path / "plain.h5")
 
@@ -88,8 +88,8 @@ def test_a_substituted_reference_is_refused(data, tmp_path):
 
 
 def test_a_reference_without_a_checksum_is_not_checked(data, tmp_path):
-    """With no M5 there is nothing to compare against, so a substituted FASTA
-    of the right shape still runs."""
+    """cmuts cannot check a reference whose header declares no M5, so a
+    substituted FASTA of the right shape still runs."""
     assert try_cmuts(substituted(data, tmp_path), tmp_path / "out.h5").returncode == 0
 
 

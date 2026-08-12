@@ -1,8 +1,8 @@
 """The read-length histogram, against what samtools makes of the same file.
 
 One bin per stored length from one to twice the longest reference, the same
-bins in every row: a length is not a position, so a column means one length
-whatever reference the row belongs to. A read longer than the range is counted
+bins in every row: a length is not a position, so a column means one length in
+every row alike. A read longer than the range is counted
 in no bin, leaving a row summing to fewer than the reads total. Only what
 survived the filter is counted, so samtools is given the same criteria.
 """

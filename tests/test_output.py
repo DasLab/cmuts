@@ -1,4 +1,4 @@
-"""What happens to whatever is already at the output path.
+"""What happens to a file already at the output path.
 
 Replacing a previous result requires --overwrite, a run costing far more than
 the command that starts it.

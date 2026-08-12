@@ -22,22 +22,22 @@ from support import (
 REJECTS_EVERYTHING = 61
 
 
-# Two kinds of row are written, indexed by different things, so which one an
-# array is has to be named rather than read off its shape. Everything not
-# listed here is indexed by reference position, and runs only as far as its own
-# reference; a length is not a position, so those rows are data throughout.
+# Both kinds of row have the same shape, so this names the ones indexed by read
+# length. Every other row is indexed by reference position and runs only as far
+# as its own reference; a length is not a position, so these rows hold data to
+# their full width.
 PER_LENGTH = ("reads/lengths",)
 
 
 def rectangular(output):
-    """The arrays with a row per reference, whatever indexes the row."""
+    """The arrays with a row per reference, indexed by position or by length."""
     return {k: d[:] for k, d in datasets_of(output).items() if d.ndim == 2}
 
 
 def counts(output):
-    """The rows holding counts. The rates are excluded: they are also NaN
-    wherever the evidence did not pass --min-depth, so NaN in them does not
-    mean padding alone."""
+    """The rows holding counts. This excludes the rates, which also carry NaN
+    at any position failing --min-depth, so NaN in them does not mean padding
+    alone."""
     return {k: v for k, v in rectangular(output).items() if k not in RATES}
 
 
@@ -109,9 +109,9 @@ def test_positions_within_a_reference_are_never_nan(ragged):
 
 
 def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path):
-    """Zero over the reference's own bases and NaN past them. The shape is
+    """Zero over the reference's own bases and NaN past them. This shape is
     ragged and sparsely covered, so an uncovered reference carries padding of
-    its own to be told apart from what it counted."""
+    its own to tell the two apart."""
     data = datasets("patchy")
     output = tmp_path / "patchy.h5"
     run_cmuts(data, output)
@@ -138,8 +138,8 @@ def test_a_reference_no_read_named_is_zero_over_its_own_bases(datasets, tmp_path
                 assert np.isnan(row[extent:]).all(), \
                     f"{field}: {name} has padding that is not NaN"
 
-        # A count of reads is zero where no read arrived, there being nothing
-        # a count could mean by NaN that zero does not say.
+        # A count of reads is zero where no read arrived: NaN would say nothing
+        # that zero does not.
         for field, values in per_reference(handle).items():
             for name in missing:
                 assert values[row_of[name]] == 0, \
@@ -168,8 +168,8 @@ def test_an_uncovered_reference_of_full_length_holds_no_nan(datasets, tmp_path):
 
 
 def test_a_reference_whose_reads_were_all_rejected_is_zero(datasets, tmp_path):
-    """A reference the alignments named holds zero rather than NaN, whether or
-    not anything survived the filter."""
+    """cmuts writes zero rather than NaN for a reference the alignments named,
+    whether or not anything survived the filter."""
     data = datasets("ragged")
     output = tmp_path / "rejected.h5"
     summary = run_cmuts(data, output, min_mapq=REJECTS_EVERYTHING)

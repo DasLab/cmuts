@@ -1,8 +1,8 @@
 """Several files counted as one.
 
-Each reference has a single row in the output however many files its reads came
-from, so the files have to be merged on the reference rather than run one after
-another: the second run of a reference would otherwise overwrite the first.
+Each reference has a single row in the output no matter how many files its reads
+came from, so cmuts merges the files on the reference instead of running them
+one after another, which would overwrite the first row with the second.
 """
 
 from dataclasses import replace

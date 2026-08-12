@@ -110,9 +110,9 @@ def test_every_format_gives_the_same_answer(datasets, tmp_path, fmt, filters):
 
 def test_cram_decodes_against_the_reference_it_was_given(datasets, tmp_path):
     """A CRAM header records the path its reference was written from, and a
-    checksum that may be looked up remotely. Neither need be the reference
-    asked for, so the recorded path is made unreachable and only --fasta is
-    left to decode against."""
+    checksum htslib may look up remotely. Neither is necessarily the reference
+    passed to --fasta, so this test renames the recorded path aside and leaves
+    cmuts nothing but --fasta to decode against."""
     data = converted(datasets("plain"), tmp_path, "cram")
 
     moved = tmp_path / "elsewhere.fasta"
@@ -124,6 +124,6 @@ def test_cram_decodes_against_the_reference_it_was_given(datasets, tmp_path):
     with unreachable(data.fasta):
         run_cmuts(hidden, tmp_path / "cram.h5")
 
-    # Read counts would agree whichever reference it decoded against; what it
-    # was compared to shows in the per-base fields alone.
+    # Read counts agree whichever reference cmuts decoded against, so only the
+    # per-base fields show which one it used.
     assert outputs_agree(tmp_path / "cram.h5", tmp_path / "bam.h5")

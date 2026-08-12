@@ -27,22 +27,22 @@ static const cli_option OPTIONS[] = {
     { .group = "Subtraction", .name = "denatured", .key = 'd', .type = OPT_STRING,
       .offset = offsetof(sub_args, subtract.denatured_path), .metavar = "HDF5",
       .help = "normalize against a denatured control",
-      .detail = "A sample denatured before it was treated, in which every position "
-                "is accessible to the reagent. Dividing by what it measures leaves "
-                "a reactivity corrected for how readily each position is modified "
-                "at all, at the cost of the result no longer being a rate: it is a "
-                "ratio of two, and a position the control found unmodified is "
-                "reported as unmeasured rather than as infinitely reactive.",
+      .detail = "A sample denatured before it was treated, in which the reagent "
+                "reaches every position. Dividing by its rates corrects each "
+                "position for how readily the reagent modifies it at all. The "
+                "result is then a ratio of two rates rather than a rate, and a "
+                "position the control measured at zero is reported as unmeasured "
+                "rather than as infinitely reactive.",
       .unset_label = "none" },
 
     { .group = "Subtraction", .name = "clip", .type = OPT_FLAG,
       .offset = offsetof(sub_args, subtract.clip),
       .help = "raise a negative reactivity to zero",
       .detail = "A rate below its background comes out negative, which no "
-                "structure corresponds to. Clipping reports those positions as "
-                "unmodified instead, at the cost of the output no longer "
-                "recording how far below the background the sample read. A "
-                "position neither run measured stays unmeasured either way." },
+                "structure produces. Clipping reports those positions as "
+                "unmodified instead, and discards how far below the background "
+                "the treated sample fell. A position neither run measured stays "
+                "unmeasured either way." },
 
     { .group = "Information", .name = "help", .key = 'h', .type = OPT_FLAG,
       .help = "show this help and exit", .action = CLI_SHOW_HELP },

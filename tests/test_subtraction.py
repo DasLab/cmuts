@@ -106,9 +106,10 @@ def test_the_layout_written_here_is_the_one_cmuts_writes(data, tmp_path):
     """The one place these tests run cmuts.
 
     Every other test builds its inputs from the description in outputs.py, so
-    that description must match what cmuts produces. Only the names, types and
-    widths are compared, never a value, which keeps what cmuts computes outside
-    these tests. A field added to the output fails here alone.
+    that description must match what cmuts produces. This test compares the
+    names, types and widths and never a value, which keeps the reactivity
+    calculation outside the suite. Adding a field to the output fails this test
+    and no other.
     """
     counted = tmp_path / "counted.h5"
     run_cmuts(data, counted)
@@ -134,10 +135,10 @@ def test_the_layout_written_here_is_the_one_cmuts_writes(data, tmp_path):
 
 @pytest.mark.parametrize("name", COMBINED)
 def test_each_field_follows_its_rule(build, subtract, name):
-    """Every dataset of the output against what the two inputs make of it.
+    """Checks every dataset of the output against the rule for it.
 
-    Driven from the table of rules rather than one test per rule, so a field
-    that gains a dataset without gaining a rule fails here.
+    The rules come from a table rather than one test per rule, so adding a
+    field without adding a rule fails this test.
     """
     treated = build(everything(seed=1), unmapped=17)
     untreated = build(everything(seed=50), unmapped=3)
@@ -205,8 +206,8 @@ def test_clipping_does_not_raise_a_missing_value_to_zero(build, subtract):
 
 
 def test_clipping_reaches_no_field_but_the_reactivity(build, tmp_path):
-    """A sum of counts and a quadrature of errors are nonnegative wherever
-    their inputs are, so the clip has nothing to raise in either."""
+    """A sum of counts and a quadrature of errors are never negative, so the
+    clip has nothing to raise in either."""
     treated = build(everything(seed=15), unmapped=11)
     untreated = build(everything(seed=16), unmapped=4)
 
@@ -344,8 +345,8 @@ def test_a_control_can_only_widen_the_error(build, subtract, tmp_path):
 
 
 def test_a_control_is_counted_in_the_totals(build, subtract):
-    """Everything counted adds across every input given, so that the field
-    means the same whatever produced the file."""
+    """Everything counted adds across all three inputs, so that the field means
+    the same in every file."""
     treated = build({"reads/counted": 3}, unmapped=11)
     untreated = build({"reads/counted": 5}, unmapped=13)
     denatured = build({"reads/counted": 7}, unmapped=17)
@@ -357,8 +358,8 @@ def test_a_control_is_counted_in_the_totals(build, subtract):
 
 
 def test_clipping_holds_a_ratio_at_zero(build, subtract):
-    """A ratio takes the sign of its numerator, the control being positive
-    wherever anything is reported at all."""
+    """A ratio takes the sign of its numerator, since the control is positive
+    at every position that reports a value."""
     treated = build({"reactivity": 0.25})
     untreated = build({"reactivity": 0.75})
     denatured = build({"reactivity": 0.5})
@@ -396,9 +397,9 @@ def test_a_control_missing_a_dataset_is_refused(build, tmp_path):
 
 @pytest.mark.parametrize("name", FLOATING)
 def test_a_value_either_input_lacks_is_missing_from_the_output(build, subtract, name):
-    """NaN marks a position nothing was measured at, and the output holds it
-    wherever either input does: a difference of rates is known only where both
-    rates are known.
+    """NaN marks a position nothing was measured at, and the output holds one
+    at every position either input does: a difference of rates is known only
+    where both rates are known.
 
     Each row carries one of the four cases, so a single run covers them all.
     """
@@ -453,7 +454,7 @@ def test_the_output_is_shaped_and_typed_like_its_inputs(build, subtract):
 
 
 def test_a_file_against_itself_leaves_a_reactivity_of_zero(build, subtract):
-    """Zero wherever a rate was known, and NaN wherever it was not."""
+    """Zero at every position holding a rate, and NaN at the rest."""
     values = everything(seed=3)
     values["reactivity"][2, 3] = np.nan
 

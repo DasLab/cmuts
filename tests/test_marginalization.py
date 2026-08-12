@@ -2,8 +2,8 @@
 
 A gap inside a homopolymer can be written after any base of the run, and every
 CIGAR that writes it describes the same alignment. The arrays must therefore
-come out the same whichever one the aligner reported, which holds once the band
-is as wide as the gap, whatever the length of the run it sits in.
+come out the same for every one of them, which holds once the band is as wide
+as the gap, at any length of run.
 """
 
 import h5py
@@ -121,11 +121,11 @@ def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
 @pytest.mark.parametrize("case", CONTROLS, ids=describe)
 def test_a_band_narrower_than_the_gap_leaves_the_placements_apart(tmp_path, case):
     """The converse of the test above: too narrow a band leaves the result at
-    whatever the aligner chose, and the rows stand apart.
+    the placement the aligner chose, and the rows stand apart.
 
-    Asserted over the reactivity rather than the coverage, an inserted base
-    covering nothing wherever it is placed, so coverage can agree across
-    placements with nothing marginalized at all.
+    Asserted over the reactivity and not the coverage: an inserted base covers
+    nothing at any placement, so the coverage can agree across placements even
+    when nothing has been marginalized.
     """
     kind, gap, run = case
     reference, read, cigars = homopolymer(kind, gap, run)
