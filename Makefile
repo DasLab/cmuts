@@ -155,12 +155,12 @@ check: $(BINS)
 	PATH=$(CURDIR)/$(BUILD):$$PATH $(PYTHON) -m pytest
 
 # The pages describing a program are written from the program, so this builds
-# it first: a table can only describe what was built here, never a version of
-# it that is no longer around.
-DOCUMENTED := docs/basics.md
-
-docs: $(BUILD)/cmuts-hmm
-	$(PYTHON) scripts/document.py $(BUILD)/cmuts-hmm $(DOCUMENTED)
+# them first: a table can only describe what was built here, never a version of
+# it that is no longer around. A program's arguments go on the page named after
+# it, and each page takes whichever tables its markers ask for.
+docs: $(BINS)
+	$(PYTHON) scripts/document.py $(BUILD)/cmuts-hmm docs/basics.md docs/cmuts-hmm.md
+	$(PYTHON) scripts/document.py $(BUILD)/cmuts-sub docs/cmuts-sub.md
 
 # A clang that is not the system one needs the SDK spelled out.
 CLANG_TIDY ?= $(firstword $(wildcard /opt/homebrew/opt/llvm/bin/clang-tidy) clang-tidy)
