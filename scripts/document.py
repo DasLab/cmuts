@@ -20,6 +20,10 @@ from pathlib import Path
 # aligns to.
 EXTENTS = {"per base": "l", "per length": "2l", "scalar": None}
 
+# The value a dataset holds where the run wrote nothing, spelled as the pages
+# spell it. What it means differs by field, and the output page covers it.
+ABSENT = {"nan": "NaN", "zero": "zero"}
+
 
 def table(headings: list, rows: list) -> str:
     """A markdown table. A cell holding a pipe would end its column early, so
@@ -65,36 +69,42 @@ def layout(program: str) -> str:
     """The datasets an output holds, one to a row.
 
     The last column is the dataset's HDF5 fill value, which h5py reports as
-    dataset.fillvalue. What that value means differs by field, and the output
-    page covers it.
+    dataset.fillvalue.
     """
-    absent = {"nan": "NaN", "zero": "zero"}
-
     return table(
         ["Dataset", "Shape", "Type", "Fill"],
-        [[f"`{field['name']}`", f"`{shape(field)}`", field["type"],
-          absent.get(field["absent"], field["absent"])]
+        [[f"`{cell}`" for cell in (field["name"], shape(field), field["type"],
+                                   ABSENT.get(field["absent"], field["absent"]))]
          for field in described(program, "--dump-layout")["fields"]],
     )
 
 
 def fields(program: str) -> str:
-    """The same datasets at length, each with its description.
+    """The same datasets at length, each under a heading of its own.
 
-    A field with no description is listed without one rather than skipped, so
-    that the block covers every dataset before the prose is written.
+    The heading gives every dataset a permalink and an entry in the table of
+    contents, and leaves the description as much room as it needs. A field
+    with no description gets a heading anyway, so that the block covers every
+    dataset before the prose is written.
+
+    Each one is wrapped in a div the stylesheet draws a rule beside. The blank
+    lines around the tags are what keep the markdown between them markdown,
+    both here and on GitHub, which has no such stylesheet and shows the fields
+    plainly.
     """
     written = []
 
     for field in described(program, "--dump-layout")["fields"]:
-        absent = "NaN" if field["absent"] == "nan" else field["absent"]
-        written.append(f"`{field['name']}` — `{shape(field)}`, {field['type']}, "
-                       f"fill {absent}.")
+        absent = ABSENT.get(field["absent"], field["absent"])
+        written += ['<div class="field" markdown>', "",
+                    f"### `{field['name']}`", "",
+                    f"**Shape** `{shape(field)}` · **Type** `{field['type']}` · "
+                    f"**Fill** `{absent}`", ""]
 
         if field["detail"]:
-            written.append(field["detail"])
+            written += [field["detail"], ""]
 
-        written.append("")
+        written += ["</div>", ""]
 
     return "\n".join(written).rstrip()
 

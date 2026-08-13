@@ -4,11 +4,16 @@ Running cmuts requires one or more coordinate-sorted alignment files (SAM, BAM, 
 
 ## Standard Usage
 
-The basic way to use cmuts on a standard MaP-seq dataset involves passing the treated and untreated samples through the HMM in order to get per-experiment reactivities, and then performing background subtraction.
+The basic way to use cmuts on a standard MaP-seq dataset involves passing the treated and untreated samples through the HMM in order to get per-experiment reactivities,
 
 ```sh
 cmuts-hmm -f references.fasta -o treated.h5 treated.bam
 cmuts-hmm -f references.fasta -o untreated.h5 untreated.bam
+```
+
+and then performing background subtraction.
+
+```sh
 cmuts-sub -o combined.h5 treated.h5 untreated.h5
 ```
 
@@ -17,13 +22,13 @@ All HDF5 files have the same format, where `n` is the number of references and `
 <!-- BEGIN GENERATED cmuts-hmm LAYOUT -->
 | Dataset | Shape | Type | Fill |
 | --- | --- | --- | --- |
-| `coverage` | `(n, l)` | float32 | zero |
-| `reactivity` | `(n, l)` | float32 | NaN |
-| `error` | `(n, l)` | float32 | NaN |
-| `reads/lengths` | `(n, 2l)` | uint64 | zero |
-| `reads/counted` | `(n,)` | uint64 | zero |
-| `reads/rejected` | `(n,)` | uint64 | zero |
-| `reads/unmapped` | `()` | uint64 | zero |
+| `coverage` | `(n, l)` | `float32` | `zero` |
+| `reactivity` | `(n, l)` | `float32` | `NaN` |
+| `error` | `(n, l)` | `float32` | `NaN` |
+| `reads/lengths` | `(n, 2l)` | `uint64` | `zero` |
+| `reads/counted` | `(n,)` | `uint64` | `zero` |
+| `reads/rejected` | `(n,)` | `uint64` | `zero` |
+| `reads/unmapped` | `()` | `uint64` | `zero` |
 <!-- END GENERATED cmuts-hmm LAYOUT -->
 
 See the [output](output.md) page for more detail on what each dataset contains.
