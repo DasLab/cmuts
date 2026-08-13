@@ -137,11 +137,8 @@ install: $(BINS)
 uninstall:
 	rm -f $(addprefix $(DESTDIR)$(BINDIR)/,$(PROGRAMS))
 
-# Prefers a virtual environment holding the test dependencies, which the
-# programs themselves do not need:
-#
-#     uv venv .venv && uv pip install --python .venv/bin/python --group dev
-PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+# Defaults to a virtual environment in the current dir
+PYTHON ?= .venv/bin/python
 
 # The build directory goes first on PATH, which is how the tests reach these
 # programs and not an installed copy of them. They refuse anything found

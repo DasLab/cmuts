@@ -9,7 +9,11 @@ uv venv .venv
 uv pip install --python .venv/bin/python --group dev
 ```
 
-`make` uses `.venv/bin/python` where it exists and `python3` otherwise; set `PYTHON` to point somewhere else.
+Additionally, rendering the documentation requires the `docs` group:
+
+```sh
+uv pip install --python .venv/bin/python --group docs
+```
 
 ## Tests
 
@@ -17,7 +21,9 @@ uv pip install --python .venv/bin/python --group dev
 make check
 ```
 
-This builds the programs and runs pytest over `tests/` against the binaries in the build directory. The tests will reject a binary outside the repository, so directly invoking them requires prepending it to `PATH`:
+This builds the programs and runs pytest over `tests/` against the binaries in the build directory. Pass `PYTHON` to `make` to use a binary other than `.venv/bin/python`.
+
+The tests will reject a binary outside the repository, so directly invoking them requires prepending it to `PATH`:
 
 ```sh
 PATH=$PWD/build/release:$PATH .venv/bin/python -m pytest tests/test_filtering.py -x
@@ -38,6 +44,21 @@ This writes `compile_commands.json` and runs clang-tidy over every source under 
 ```sh
 make SAN=asan         # address and undefined behavior
 make check SAN=tsan   # thread
+```
+
+## Documentation
+
+Documentation on program arguments and the output HDF5 structure is automatically generated from the binaries.
+
+```sh
+make docs   # rewrite the generated blocks under docs/
+make site   # additionally render the site into site/
+```
+
+To preview the site locally:
+
+```sh
+.venv/bin/mkdocs serve
 ```
 
 # Contributing
