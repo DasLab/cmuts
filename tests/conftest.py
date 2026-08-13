@@ -110,7 +110,7 @@ def pytest_terminal_summary(terminalreporter):
 
 
 def pytest_sessionfinish(session, exitstatus):
-    # A run that already failed says so, and one that stopped early is no
+    # A run that already failed reports it, and one that stopped early is no
     # evidence either way: its tests did not all run.
     if exitstatus == 0 and _vacuous_everywhere():
         session.exitstatus = 1

@@ -6,7 +6,7 @@ from datasets import DATASETS
 from support import outputs_agree, run_cmuts
 
 # Nothing here reads a value, only whether two runs wrote the same ones, so a
-# dataset holding no rate at all still says whether the division of work
+# dataset holding no rate at all still shows whether the division of work
 # changed what was counted.
 
 

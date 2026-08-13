@@ -118,7 +118,7 @@ hid_t h5layout_row_space(size_t cap)
 
 /* Selects n values of one reference's row, in the file and in memory together. A
  * scalar field has one value per reference, so the column plays no part in selecting
- * it: the arrays are filled in full and the rank decides how much is read. */
+ * it: the arrays are filled in full and the rank bounds how much is read. */
 int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
                          int32_t tid, size_t from, size_t n)
 {

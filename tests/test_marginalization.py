@@ -109,8 +109,8 @@ def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
     run_cmuts(data, tmp_path / "banded.h5", band=gap, **WEIGHTED)
     written = written_rows(tmp_path / "banded.h5", len(cigars))
 
-    # Rows of zeros would agree with one another, so the comparison says nothing
-    # unless every placement counted the read it was given.
+    # Rows of zeros would agree with one another, so the comparison is only
+    # meaningful once every placement has counted the read it was given.
     covered = np.nansum(written["coverage"], axis=1)
     assert np.allclose(covered, scored(kind, gap, read),
                        rtol=COVERED_TOLERANCE, atol=0)

@@ -236,7 +236,7 @@ def reheadered(data: Dataset, directory, transform) -> Dataset:
 # ---------------------------------------------------------------------------
 
 # Clear of every bound the filter applies by default, so a hand-built read is
-# dropped only where a test asks for it.
+# dropped only where a test sets a bound that excludes it.
 MAPQ = 60
 
 # One score for every base, high enough that a misread is not what explains a

@@ -481,7 +481,7 @@ static int loader_main(const pipeline *p, const failure_flag *f,
 
     /* Released before the references the reader never reached are opened. Holding
      * it while asking the pool for another deadlocks where the pool holds a single
-     * context, which is what --live-refs 1 asks for. */
+     * context, which is what --live-refs 1 sets. */
     loader_leave_reference(&l);
 
     /* The references the reader stopped short of received nothing, as did those it

@@ -11,7 +11,7 @@
 #include "phmm.h"
 #include "phred.h"
 
-/* What a caller asks for, in types plain enough for a command line to write into. */
+/* The settings a caller supplies, in types a command line can write into directly. */
 typedef struct {
     int          band;     /* reference positions the marginal may look either side of the
                               CIGAR; 0 pins it to the path as written */
@@ -32,7 +32,7 @@ typedef struct {
 
 void tally_tables_build(tally_tables *tables, const tally_config *config);
 
-/* Working buffers one worker reuses across every read it sees.
+/* Working buffers one worker reuses across every read it processes.
  *
  * Private to a worker rather than shared, the marginal writing over the whole of it for
  * each read, and reused rather than allocated per read. Every read is counted through one,

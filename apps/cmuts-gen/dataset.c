@@ -50,7 +50,7 @@ static int output_path(char *out, size_t size, const char *prefix, const char *e
     return written < 0 || (size_t)written >= size ? -1 : 0;
 }
 
-/* The format decides both the extension and the mode htslib opens with, so the two are declared
+/* The format fixes both the extension and the mode htslib opens with, so the two are declared
  * together and neither is restated where a file is opened. */
 typedef struct {
     const char *extension;
