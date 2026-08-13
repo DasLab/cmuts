@@ -56,7 +56,18 @@ _CHECKED = defaultdict(list)
 
 
 def _amount(cases) -> int:
-    """Returns the size of a container, or the number itself."""
+    """Returns how many cases there are: the size of a container, or the number
+    itself.
+
+    A mask is neither, and is refused. It is as long where it selects nothing
+    as where it selects everything, so counting one would call a test covered
+    wherever it ran. Counting what a mask selects instead would be wrong the
+    other way, since a case is not required to be a nonzero value: a rate of
+    zero is what test_weights.py asserts over.
+    """
+    if getattr(cases, "dtype", None) == bool:
+        raise TypeError("checked takes the cases or how many, not a mask over them")
+
     try:
         return len(cases)
     except TypeError:
@@ -70,10 +81,6 @@ def checked(request):
     Takes the place of asserting that the case appears in the data:
     `for name in checked(missing)` runs over the references no read reached,
     and zero of them marks the test vacuous on this dataset.
-
-    Takes the cases themselves or how many there are. A mask is neither: it is
-    as long where nothing is selected as where everything is, so select with it
-    first.
     """
     name = request.node.originalname or request.node.name
 

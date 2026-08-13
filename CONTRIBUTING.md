@@ -1,4 +1,4 @@
-# Contributing
+# Environment and Builds
 
 ## Setting up
 
@@ -39,3 +39,13 @@ This writes `compile_commands.json` and runs clang-tidy over every source under 
 make SAN=asan         # address and undefined behavior
 make check SAN=tsan   # thread
 ```
+
+# Contributing
+
+## Writing Tests
+
+Tests which run a program over an alignment are parametrized over the alignments specified in `tests/datasets.py`. When adding a new test, ensure it follows this parametrization and that it tests a contract which holds regardless of the input alignment.
+
+Tests which build their own inputs are the exception, and the generator produces neither kind: `test_subtraction.py` writes the output files it reads, and `test_marginalization.py` writes alignments with specific CIGARs.
+
+To ensure tests are not vacuous, the `checked` fixture is used to signal that the test is falsifiable on the current dataset. A test in which no dataset passes a truthy object to `checked` fails the run, signalling the need for a new dataset in `tests/datasets.py`.
