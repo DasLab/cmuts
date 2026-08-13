@@ -9,7 +9,7 @@ from support import outputs_agree, run_cmuts
 # read on one and so puts every worker on one accumulator, and patchy is the
 # only one carrying references no read reaches and shorter than the widest,
 # which the loader opens and closes as it passes them.
-DATASETS = ["plain", "sparse", "single", "patchy"]
+DIVIDING_THE_WORK = ["plain", "sparse", "single", "patchy"]
 
 
 @pytest.fixture(scope="module")
@@ -29,7 +29,7 @@ def unvaried(datasets, tmp_path_factory):
     return get
 
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", DIVIDING_THE_WORK)
 def test_worker_count_does_not_change_the_result(datasets, tmp_path, name):
     data = datasets(name)
 
@@ -39,7 +39,7 @@ def test_worker_count_does_not_change_the_result(datasets, tmp_path, name):
     assert outputs_agree(tmp_path / "one.h5", tmp_path / "many.h5")
 
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", DIVIDING_THE_WORK)
 @pytest.mark.parametrize("threads", [0, 1, 8])
 def test_decode_threads_do_not_change_the_result(datasets, unvaried, tmp_path,
                                                  name, threads):
@@ -49,7 +49,7 @@ def test_decode_threads_do_not_change_the_result(datasets, unvaried, tmp_path,
     assert outputs_agree(unvaried(name), tmp_path / "threaded.h5")
 
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", DIVIDING_THE_WORK)
 @pytest.mark.parametrize("batch", [1, 7, 4096])
 def test_batch_size_does_not_change_the_result(datasets, unvaried, tmp_path,
                                                name, batch):
@@ -58,7 +58,7 @@ def test_batch_size_does_not_change_the_result(datasets, unvaried, tmp_path,
     assert outputs_agree(unvaried(name), tmp_path / "sized.h5")
 
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", DIVIDING_THE_WORK)
 def test_a_queue_of_one_does_not_change_the_result(datasets, unvaried, tmp_path,
                                                    name):
     run_cmuts(datasets(name), tmp_path / "starved.h5",
@@ -67,7 +67,7 @@ def test_a_queue_of_one_does_not_change_the_result(datasets, unvaried, tmp_path,
     assert outputs_agree(unvaried(name), tmp_path / "starved.h5")
 
 
-@pytest.mark.parametrize("name", DATASETS)
+@pytest.mark.parametrize("name", DIVIDING_THE_WORK)
 def test_one_reference_in_flight_does_not_change_the_result(datasets, unvaried,
                                                             tmp_path, name):
     run_cmuts(datasets(name), tmp_path / "single-file.h5", workers=4, live_refs=1)
