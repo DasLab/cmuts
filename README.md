@@ -4,9 +4,9 @@ Fast, multithreaded pair-HMM counting of MaP-seq mutations.
 
 ## Dependencies
 
-- A C11 compiler and `make`
-- [htslib](https://github.com/samtools/htslib)
-- [HDF5](https://www.hdfgroup.org/solutions/hdf5/)
+- A C11 compiler (GCC 6 or newer, or Clang 9 or newer) and `make`
+- [htslib](https://github.com/samtools/htslib) 1.12 or newer
+- [HDF5](https://www.hdfgroup.org/solutions/hdf5/) 1.10 or newer
 
 On macOS with Homebrew:
 
