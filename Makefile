@@ -154,15 +154,16 @@ check: $(BINS)
 # it that is no longer around. A program's arguments go on the page named after
 # it, and each page takes whichever tables its markers ask for.
 #
-# The datasets an output holds are described by the program that writes them.
-LAYOUT_FROM := cmuts-hmm
-LAYOUT_PAGE := docs/basics.md
+# The pages describing the output are written from the program that writes it.
+# Each takes whichever of the two renderings its markers ask for.
+FORMAT_FROM  := cmuts-hmm
+FORMAT_PAGES := docs/basics.md docs/output.md
 
 docs: $(BINS)
 	@for program in $(PROGRAMS); do \
 	    $(PYTHON) scripts/document.py $(BUILD)/$$program docs/$$program.md; \
 	done
-	@$(PYTHON) scripts/document.py $(BUILD)/$(LAYOUT_FROM) $(LAYOUT_PAGE)
+	@$(PYTHON) scripts/document.py $(BUILD)/$(FORMAT_FROM) $(FORMAT_PAGES)
 
 # A clang that is not the system one needs the SDK spelled out.
 CLANG_TIDY ?= $(firstword $(wildcard /opt/homebrew/opt/llvm/bin/clang-tidy) clang-tidy)

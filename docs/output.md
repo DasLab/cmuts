@@ -20,6 +20,22 @@ profile = dict(zip(names("references.fasta"), reactivity))
 
 ## What each dataset holds
 
+<!-- BEGIN GENERATED FIELDS -->
+`coverage` — `(n, l)`, float32, fill zero.
+
+`reactivity` — `(n, l)`, float32, fill NaN.
+
+`error` — `(n, l)`, float32, fill NaN.
+
+`reads/lengths` — `(n, 2l)`, uint64, fill zero.
+
+`reads/counted` — `(n,)`, uint64, fill zero.
+
+`reads/rejected` — `(n,)`, uint64, fill zero.
+
+`reads/unmapped` — `()`, uint64, fill zero.
+<!-- END GENERATED FIELDS -->
+
 `coverage`, `reactivity` and `error` hold one value per reference position. `reactivity` is the modifications counted at a position over the evidence for them, so it lies between zero and one, and `error` is its standard error. The signal-to-noise at a position is `reactivity / error`.
 
 `reads/lengths` is a histogram of the stored length of every counted read, one row per reference. It is indexed by length rather than by position: column *i* holds the reads of length *i + 1*, and every row is the same width, so a column means the same length in every row. A read longer than the last bin is counted in no bin, which leaves a row summing to fewer reads than `reads/counted`.
