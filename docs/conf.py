@@ -4,6 +4,11 @@
 
 project = "cmuts"
 html_title = "cmuts"
+author = "Hamish M. Blair"
+
+# The first year is the one in LICENSE, which covers the documentation as well.
+# %Y is the year the site is built, so the footer does not go stale.
+copyright = "2024-%Y, Hamish M. Blair"
 
 extensions = [
     "myst_parser",
