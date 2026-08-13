@@ -5,10 +5,11 @@ Programs describe their inputs and outputs via `--dump-layout` and
 `--dump-options`. This script formats and inserts these data into the
 documentation into sections marked by HTML markers.
 
-    scripts/document.py build/release/cmuts-hmm docs/basics.md docs/cmuts-hmm.md
+    scripts/document.py build/release docs
 """
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -99,28 +100,6 @@ def fields(program: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# What the subtraction does to each of them
-# ---------------------------------------------------------------------------
-
-
-def rules(program: str) -> str:
-    """What each dataset is combined by, with a denatured control and without.
-
-    Where both modes use the same rule the second column reads "the same",
-    rather than repeating the phrase for five of the seven fields.
-    """
-    rows = []
-
-    for field in described(program, "--dump-rules")["fields"]:
-        alone, controlled = field["uncontrolled"], field["controlled"]
-        with_one = "the same" if controlled == alone else controlled["detail"]
-
-        rows.append([f"`{field['name']}`", alone["detail"], with_one])
-
-    return table(["Dataset", "Without a control", "With one"], rows)
-
-
-# ---------------------------------------------------------------------------
 # The arguments a program takes
 # ---------------------------------------------------------------------------
 
@@ -184,16 +163,18 @@ def options(program: str) -> str:
 # Writing them into the pages
 # ---------------------------------------------------------------------------
 
-WRITERS = {"LAYOUT": layout, "FIELDS": fields, "RULES": rules, "OPTIONS": options}
+WRITERS = {"LAYOUT": layout, "FIELDS": fields, "OPTIONS": options}
+
+# A block names the program that answers it and the table wanted from it, so a
+# page is found by looking in it rather than by being listed somewhere.
+BLOCK = re.compile(r"<!-- BEGIN GENERATED (?P<program>[\w.-]+) (?P<kind>[A-Z]+) -->")
 
 
-def spliced(text: str, kind: str, generated: str) -> str:
+def spliced(text: str, program: str, kind: str, generated: str) -> str:
     """The page with what lies between one pair of markers replaced."""
-    begin, end = f"<!-- BEGIN GENERATED {kind} -->", f"<!-- END GENERATED {kind} -->"
+    begin = f"<!-- BEGIN GENERATED {program} {kind} -->"
+    end = f"<!-- END GENERATED {program} {kind} -->"
     start, stop = text.find(begin), text.find(end)
-
-    if start < 0:
-        return text
 
     if stop < 0:
         raise SystemExit(f"{begin} with no {end} after it")
@@ -201,23 +182,28 @@ def spliced(text: str, kind: str, generated: str) -> str:
     return text[:start] + begin + "\n" + generated + "\n" + text[stop:]
 
 
-def main(program: str, pages: list) -> None:
-    for name in pages:
-        page = Path(name)
+def main(build: str, docs: str) -> None:
+    for page in sorted(Path(docs).glob("*.md")):
         text = page.read_text()
-        written = [kind for kind in WRITERS if f"<!-- BEGIN GENERATED {kind} -->" in text]
+        blocks = BLOCK.findall(text)
 
-        if not written:
-            raise SystemExit(f"{page}: no generated block to write into")
+        for program, kind in blocks:
+            binary = Path(build) / program
 
-        for kind in written:
-            text = spliced(text, kind, WRITERS[kind](program))
+            if kind not in WRITERS:
+                raise SystemExit(f"{page}: no table named {kind}")
 
-        page.write_text(text)
+            if not binary.exists():
+                raise SystemExit(f"{page}: {binary} is not built")
+
+            text = spliced(text, program, kind, WRITERS[kind](str(binary)))
+
+        if blocks:
+            page.write_text(text)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
+    if len(sys.argv) != 3:
         raise SystemExit(__doc__)
 
-    main(sys.argv[1], sys.argv[2:])
+    main(sys.argv[1], sys.argv[2])

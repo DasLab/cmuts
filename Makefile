@@ -149,23 +149,11 @@ PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 check: $(BINS)
 	PATH=$(CURDIR)/$(BUILD):$$PATH $(PYTHON) -m pytest
 
-# The pages describing a program are written from the program, so this builds
-# them first: a table can only describe what was built here, never a version of
-# it that is no longer around. A program's arguments go on the page named after
-# it, and each page takes whichever tables its markers ask for.
-#
-# Pages describing the output rather than one program's arguments. Each is
-# written from the program deciding what it describes: the datasets from the
-# program writing them, and the rules from the one combining them.
-FORMAT_PAGES := docs/basics.md docs/output.md
-RULES_PAGE   := docs/counting.md
-
+# Every page under docs/ naming a program in one of its markers is written
+# from that program, so this builds them all first: a table can only describe
+# what was built here, never a version of it that is no longer around.
 docs: $(BINS)
-	@for program in $(PROGRAMS); do \
-	    $(PYTHON) scripts/document.py $(BUILD)/$$program docs/$$program.md; \
-	done
-	@$(PYTHON) scripts/document.py $(BUILD)/cmuts-hmm $(FORMAT_PAGES)
-	@$(PYTHON) scripts/document.py $(BUILD)/cmuts-sub $(RULES_PAGE)
+	@$(PYTHON) scripts/document.py $(BUILD) docs
 
 # A clang that is not the system one needs the SDK spelled out.
 CLANG_TIDY ?= $(firstword $(wildcard /opt/homebrew/opt/llvm/bin/clang-tidy) clang-tidy)
@@ -186,7 +174,7 @@ compile_commands.json: Makefile $(SRC)
 lint: compile_commands.json
 	@$(CLANG_TIDY) -p . --quiet $(SRC)
 
-# Every variant, not the one this invocation names.
+# Clear every variant, not just the one this invocation names.
 clean:
 	rm -rf $(BUILD_ROOT) compile_commands.json
 
