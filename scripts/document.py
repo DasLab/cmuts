@@ -70,6 +70,27 @@ def layout(program: str) -> str:
     return "\n".join(rows)
 
 
+def fields(program: str) -> str:
+    """The same datasets at length, each with what its numbers are.
+
+    A field carrying no sentence is written without one rather than skipped, so
+    that a dataset never goes unlisted for want of prose.
+    """
+    written = []
+
+    for field in described(program, "--dump-layout")["fields"]:
+        absent = "NaN" if field["absent"] == "nan" else field["absent"]
+        written.append(f"`{field['name']}` — `{shape(field)}`, {field['type']}, "
+                       f"fill {absent}.")
+
+        if field["detail"]:
+            written.append(field["detail"])
+
+        written.append("")
+
+    return "\n".join(written).rstrip()
+
+
 # ---------------------------------------------------------------------------
 # The arguments a program takes
 # ---------------------------------------------------------------------------
@@ -138,7 +159,7 @@ def options(program: str) -> str:
 # Writing them into the pages
 # ---------------------------------------------------------------------------
 
-WRITERS = {"LAYOUT": layout, "OPTIONS": options}
+WRITERS = {"LAYOUT": layout, "FIELDS": fields, "OPTIONS": options}
 
 
 def spliced(text: str, kind: str, generated: str) -> str:

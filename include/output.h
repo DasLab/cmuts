@@ -66,6 +66,7 @@ typedef struct {
     bool        per_ref;  /* whether there is one such row per reference */
     out_stored  stored;   /* the type its values are narrowed to */
     out_absent  absent;   /* what a value it was never given means */
+    const char *detail;   /* what the numbers are, in one sentence */
 } out_field;
 
 extern const out_field OUT_FIELDS[OUT_N_FIELDS];

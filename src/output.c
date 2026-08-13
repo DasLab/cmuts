@@ -8,13 +8,27 @@
 #include "version.h"
 
 const out_field OUT_FIELDS[OUT_N_FIELDS] = {
-    [OUT_COVERAGE]   = { "coverage",       shape_per_base,   true,  OUT_F32, OUT_ZERO },
-    [OUT_REACTIVITY] = { "reactivity",     shape_per_base,   true,  OUT_F32, OUT_NAN  },
-    [OUT_ERROR]      = { "error",          shape_per_base,   true,  OUT_F32, OUT_NAN  },
-    [OUT_LENGTHS]    = { "reads/lengths",  shape_per_length, true,  OUT_U64, OUT_ZERO },
-    [OUT_READS]      = { "reads/counted",  shape_none,       true,  OUT_U64, OUT_ZERO },
-    [OUT_REJECTED]   = { "reads/rejected", shape_none,       true,  OUT_U64, OUT_ZERO },
-    [OUT_UNMAPPED]   = { "reads/unmapped", shape_none,       false, OUT_U64, OUT_ZERO },
+    [OUT_COVERAGE]   = { .name = "coverage",       .row = shape_per_base,
+                         .per_ref = true,  .stored = OUT_F32, .absent = OUT_ZERO,
+                         .detail = NULL },
+    [OUT_REACTIVITY] = { .name = "reactivity",     .row = shape_per_base,
+                         .per_ref = true,  .stored = OUT_F32, .absent = OUT_NAN,
+                         .detail = NULL },
+    [OUT_ERROR]      = { .name = "error",          .row = shape_per_base,
+                         .per_ref = true,  .stored = OUT_F32, .absent = OUT_NAN,
+                         .detail = NULL },
+    [OUT_LENGTHS]    = { .name = "reads/lengths",  .row = shape_per_length,
+                         .per_ref = true,  .stored = OUT_U64, .absent = OUT_ZERO,
+                         .detail = NULL },
+    [OUT_READS]      = { .name = "reads/counted",  .row = shape_none,
+                         .per_ref = true,  .stored = OUT_U64, .absent = OUT_ZERO,
+                         .detail = NULL },
+    [OUT_REJECTED]   = { .name = "reads/rejected", .row = shape_none,
+                         .per_ref = true,  .stored = OUT_U64, .absent = OUT_ZERO,
+                         .detail = NULL },
+    [OUT_UNMAPPED]   = { .name = "reads/unmapped", .row = shape_none,
+                         .per_ref = false, .stored = OUT_U64, .absent = OUT_ZERO,
+                         .detail = NULL },
 };
 
 size_t out_values(out_field_id id, size_t len, size_t cap)
@@ -112,6 +126,29 @@ static const char *absent_name(out_absent absent)
     return "unknown";
 }
 
+/* A sentence as JSON, or null where a field carries none. Prose is quoted, so what would
+ * end the string early is escaped. */
+static void print_detail(FILE *out, const char *detail)
+{
+    if (!detail) {
+        fputs("null", out);
+        return;
+    }
+
+    fputc('"', out);
+
+    for (const char *at = detail; *at; at++) {
+        switch (*at) {
+            case '"':  fputs("\\\"", out); break;
+            case '\\': fputs("\\\\", out); break;
+            case '\n': fputs("\\n", out);  break;
+            default:   fputc(*at, out);    break;
+        }
+    }
+
+    fputc('"', out);
+}
+
 void out_dump_layout(FILE *out)
 {
     fprintf(out, "{\n  \"version\": \"%s\",\n  \"fields\": [\n", CMUTS_VERSION);
@@ -126,12 +163,15 @@ void out_dump_layout(FILE *out)
                 "      \"per_reference\": %s,\n"
                 "      \"rank\": %d,\n"
                 "      \"type\": \"%s\",\n"
-                "      \"absent\": \"%s\"\n"
-                "    }%s\n",
+                "      \"absent\": \"%s\",\n"
+                "      \"detail\": ",
                 field->name, shape_name(field->row),
                 field->per_ref ? "true" : "false", out_rank(id),
-                stored_name(field->stored), absent_name(field->absent),
-                id + 1 < OUT_N_FIELDS ? "," : "");
+                stored_name(field->stored), absent_name(field->absent));
+
+        print_detail(out, field->detail);
+
+        fprintf(out, "\n    }%s\n", id + 1 < OUT_N_FIELDS ? "," : "");
     }
 
     fprintf(out, "  ]\n}\n");
