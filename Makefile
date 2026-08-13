@@ -78,6 +78,12 @@ NAME     := cmuts
 # the library it refers to; adding one means adding a directory and a word here.
 PROGRAMS := cmuts-hmm cmuts-gen cmuts-sub
 
+# Programs that are scripts rather than sources. One directory each, holding a
+# .in that the version is substituted into, so that no copy of the version is
+# kept anywhere but the header.
+SCRIPTS  := cmuts-align
+VERSION  := $(shell sed -n 's/.*CMUTS_VERSION "\(.*\)".*/\1/p' include/version.h)
+
 LIB      := $(BUILD)/lib$(NAME).a
 
 # Sources under src/ are the library and nothing else: no entry point lives
@@ -90,7 +96,7 @@ app_objects = $(patsubst apps/$(1)/%.c,$(BUILD)/apps/$(1)/%.o,$(call app_sources
 
 APP_SRC  := $(foreach p,$(PROGRAMS),$(call app_sources,$(p)))
 APP_OBJ  := $(foreach p,$(PROGRAMS),$(call app_objects,$(p)))
-BINS     := $(addprefix $(BUILD)/,$(PROGRAMS))
+BINS     := $(addprefix $(BUILD)/,$(PROGRAMS) $(SCRIPTS))
 SRC      := $(LIB_SRC) $(APP_SRC)
 DEP      := $(LIB_OBJ:.o=.d) $(APP_OBJ:.o=.d)
 
@@ -117,6 +123,15 @@ endef
 
 $(foreach p,$(PROGRAMS),$(eval $(call program_rule,$(p))))
 
+define script_rule
+$(BUILD)/$(1): apps/$(1)/$(1).in include/version.h
+	@mkdir -p $$(@D)
+	sed 's/@VERSION@/$$(VERSION)/' $$< > $$@
+	@chmod +x $$@
+endef
+
+$(foreach s,$(SCRIPTS),$(eval $(call script_rule,$(s))))
+
 $(LIB): $(LIB_OBJ)
 	$(AR) rcs $@ $^
 
@@ -135,7 +150,7 @@ install: $(BINS)
 	$(INSTALL) -m 755 $^ $(DESTDIR)$(BINDIR)
 
 uninstall:
-	rm -f $(addprefix $(DESTDIR)$(BINDIR)/,$(PROGRAMS))
+	rm -f $(addprefix $(DESTDIR)$(BINDIR)/,$(PROGRAMS) $(SCRIPTS))
 
 # Defaults to a virtual environment in the current dir
 PYTHON ?= .venv/bin/python

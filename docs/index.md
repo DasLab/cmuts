@@ -28,6 +28,25 @@ apt install libhts-dev libhdf5-dev
 Or load the appropriate modules for your cluster (examples [here](clusters.md)).
 ::::
 
+To use the bundled alignment helper, you also need
+
+- [minimap2](https://github.com/lh3/minimap2)
+- [samtools](https://github.com/samtools/samtools)
+
+::::{tab} macOS
+
+```sh
+brew install minimap2 samtools
+```
+::::
+
+::::{tab} Debian & Ubuntu
+
+```sh
+apt install minimap2 samtools
+```
+::::
+
 ## Installation
 
 ```sh
@@ -54,6 +73,7 @@ output
 :hidden:
 :caption: Programs
 
+cmuts-align
 cmuts-hmm
 cmuts-sub
 cmuts-gen

@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+#
+# cmuts-align -- alignment helper for the cmuts pipeline.
+#
+# Author: Hamish M. Blair <hmblair@stanford.edu>
+
+set -euo pipefail
+
+PROGRAM="cmuts-align"
+VERSION="@VERSION@"  # substituted from include/version.h
+SUMMARY="align reads to a reference and sort the resulting alignments."
+
+# BAM stores a read name's length in one byte, so the name and its terminating
+# NUL must fit in 255.
+NAME_LIMIT=254
+
+# Presets that will reject paired-end sequences
+LONG_READ_PRESETS="map-ont map-hifi map-pb lr:hq ava-ont ava-pb"
+
+# Just for -h, verification is done by minimap2
+PRESETS="sr|map-ont|map-hifi|map-pb"
+
+HELP_FASTA="reference sequences, or a minimap2 index"
+HELP_OUTPUT="write sorted alignments to this file"
+HELP_OVERWRITE="replace the output file if it already exists"
+HELP_PRESET="how minimap2 aligns"
+HELP_THREADS="threads for alignment and sorting"
+
+# The arguments as the usage line and the count message write them.
+ARGUMENTS="READS [MATE]"
+
+die() {
+    printf '%s: %s\n' "$PROGRAM" "$1" >&2
+    exit 2
+}
+
+missing() {
+    die "missing required option --$1 ($2)"
+}
+
+# The help column is a floor of 28, widened by any invocation longer than it.
+# Nothing here reaches that, so the floor is what every row is set to.
+option() {
+    printf '  %-28s %s\n' "$1" "$2"
+}
+
+usage() {
+    printf '%s %s -- %s\n\n' "$PROGRAM" "$VERSION" "$SUMMARY"
+    printf 'usage: %s [options] -f FASTA -o BAM -x PRESET %s\n' "$PROGRAM" "$ARGUMENTS"
+
+    printf '\nArguments\n'
+    option "READS" "reads to align"
+    option "MATE" "the second file of a pair"
+
+    printf '\nInput and output\n'
+    option "-f, --fasta FASTA" "$HELP_FASTA"
+    option "-o, --output BAM" "$HELP_OUTPUT"
+    option "    --overwrite" "$HELP_OVERWRITE"
+
+    printf '\nAlignment\n'
+    option "-x, --preset PRESET" "$HELP_PRESET ($PRESETS)"
+
+    printf '\nPerformance\n'
+    option "-t, --threads N" "$HELP_THREADS (default 1)"
+
+    printf '\nInformation\n'
+    option "-h, --help" "show this help and exit"
+    option "-V, --version" "show the version and exit"
+}
+
+fasta=""
+output=""
+preset=""
+threads=1
+overwrite=false
+reads=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -V|--version)
+            printf '%s %s\n' "$PROGRAM" "$VERSION"
+            exit 0
+            ;;
+        -f|--fasta)
+            [[ $# -ge 2 ]] || die "$1 needs a value"
+            fasta=$2
+            shift 2
+            ;;
+        -o|--output)
+            [[ $# -ge 2 ]] || die "$1 needs a value"
+            output=$2
+            shift 2
+            ;;
+        -x|--preset)
+            [[ $# -ge 2 ]] || die "$1 needs a value"
+            preset=$2
+            shift 2
+            ;;
+        -t|--threads)
+            [[ $# -ge 2 ]] || die "$1 needs a value"
+            threads=$2
+            shift 2
+            ;;
+        --overwrite)
+            overwrite=true
+            shift
+            ;;
+        --)
+            shift
+            while [[ $# -gt 0 ]]; do
+                reads+=("$1")
+                shift
+            done
+            ;;
+        -*)
+            die "unrecognized option $1"
+            ;;
+        *)
+            reads+=("$1")
+            shift
+            ;;
+    esac
+done
+
+[[ -n $fasta ]]  || missing fasta "$HELP_FASTA"
+[[ -n $output ]] || missing output "$HELP_OUTPUT"
+[[ -n $preset ]] || missing preset "$HELP_PRESET"
+
+if [[ ${#reads[@]} -eq 0 || ${#reads[@]} -gt 2 ]]; then
+    die "expected $ARGUMENTS, got ${#reads[@]} arguments"
+fi
+
+if [[ ${#reads[@]} -eq 2 ]]; then
+    case " $LONG_READ_PRESETS " in
+        *" $preset "*) die "--preset: $preset reads do not come in pairs" ;;
+    esac
+fi
+
+[[ $threads =~ ^[1-9][0-9]*$ ]] || die "--threads: $threads is below 1"
+
+for tool in minimap2 samtools; do
+    command -v "$tool" >/dev/null 2>&1 || die "$tool is not on PATH"
+done
+
+[[ -r $fasta ]] || die "cannot read $fasta"
+
+for file in "${reads[@]}"; do
+    [[ -r $file ]] || die "cannot read $file"
+done
+
+[[ ! -d $output ]] || die "$output is a directory; -o names the file to write"
+
+if [[ -e $output && $overwrite != true ]]; then
+    die "$output exists; pass --overwrite to replace it"
+fi
+
+directory=$(dirname "$output")
+[[ -d $directory ]] || die "$directory is not a directory"
+
+# Sorted into place beside the output and renamed upon completion
+partial="$output.partial.$$"
+trap 'rm -f "$partial"' EXIT
+
+minimap2 -a -x "$preset" --secondary=no -t "$threads" "$fasta" "${reads[@]}" \
+    | awk -v limit="$NAME_LIMIT" '
+        BEGIN { FS = OFS = "\t" }
+        /^@/  { print; next }
+              { if (length($1) > limit) { $1 = substr($1, 1, limit) } print }' \
+    | samtools sort -@ "$threads" -o "$partial" -
+
+mv "$partial" "$output"
