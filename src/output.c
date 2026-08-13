@@ -5,6 +5,8 @@
 
 #include "output.h"
 
+#include "version.h"
+
 const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     [OUT_COVERAGE]   = { "coverage",       shape_per_base,   true,  OUT_F32, OUT_ZERO },
     [OUT_REACTIVITY] = { "reactivity",     shape_per_base,   true,  OUT_F32, OUT_NAN  },
@@ -80,4 +82,57 @@ int out_rank(out_field_id id)
     size_t dims[OUT_RANK_MAX];
 
     return out_dims(id, 0, 0, dims);
+}
+
+/* ------------------------------------------------------------------------ */
+/* The layout, described                                                     */
+/* ------------------------------------------------------------------------ */
+
+static const char *stored_name(out_stored stored)
+{
+    switch (stored) {
+        case OUT_F32:      return "float32";
+        case OUT_U64:      return "uint64";
+        case OUT_N_STORED: break;
+    }
+
+    return "unknown";
+}
+
+/* What a value the run never wrote reads as, which is not the same question as what type
+ * it is stored in: a count reads zero and a rate reads NaN. */
+static const char *absent_name(out_absent absent)
+{
+    switch (absent) {
+        case OUT_ZERO:     return "zero";
+        case OUT_NAN:      return "nan";
+        case OUT_N_ABSENT: break;
+    }
+
+    return "unknown";
+}
+
+void out_dump_layout(FILE *out)
+{
+    fprintf(out, "{\n  \"version\": \"%s\",\n  \"fields\": [\n", CMUTS_VERSION);
+
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        const out_field *field = &OUT_FIELDS[id];
+
+        fprintf(out,
+                "    {\n"
+                "      \"name\": \"%s\",\n"
+                "      \"row\": \"%s\",\n"
+                "      \"per_reference\": %s,\n"
+                "      \"rank\": %d,\n"
+                "      \"type\": \"%s\",\n"
+                "      \"absent\": \"%s\"\n"
+                "    }%s\n",
+                field->name, shape_name(field->row),
+                field->per_ref ? "true" : "false", out_rank(id),
+                stored_name(field->stored), absent_name(field->absent),
+                id + 1 < OUT_N_FIELDS ? "," : "");
+    }
+
+    fprintf(out, "  ]\n}\n");
 }

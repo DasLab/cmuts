@@ -753,13 +753,18 @@ static cli_status take_positionals(const cli_spec *spec, int argc, char **argv,
 
 /* Handles a request the tables can satisfy without arguments, returning whether one
  * was made. Called before any argument is required to be present. */
-static bool answer(const cli_spec *spec, cli_action action)
+static bool answer(const cli_spec *spec, const cli_option *opt)
 {
-    switch (action) {
+    if (!opt) {
+        return false;
+    }
+
+    switch (opt->action) {
         case CLI_SHOW_HELP:    cli_usage(spec, stdout);        return true;
         case CLI_SHOW_VERSION: printf("%s %s\n", spec->program, spec->version);
                                return true;
         case CLI_DUMP_OPTIONS: cli_dump_options(spec, stdout); return true;
+        case CLI_PRINT:        opt->print(stdout);             return true;
         case CLI_STORE:        return false;
     }
 
@@ -772,7 +777,7 @@ cli_status cli_parse(const cli_spec *spec, int argc, char **argv, void *args)
     struct option *longopts  = calloc(spec->n_options + 1, sizeof *longopts);
     char          *shortopts = calloc(shortopts_size, sizeof *shortopts);
     bool          *seen      = calloc(spec->n_options, sizeof *seen);
-    cli_action     requested = CLI_STORE;
+    const cli_option *requested = NULL;
     cli_status     status    = CLI_ERROR;
     int            found;
 
@@ -804,7 +809,7 @@ cli_status cli_parse(const cli_spec *spec, int argc, char **argv, void *args)
         seen[opt - spec->options] = true;
 
         if (!stores_a_value(opt)) {
-            requested = opt->action;
+            requested = opt;
             continue;
         }
 

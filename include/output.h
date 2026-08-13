@@ -18,6 +18,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "shape.h"
 
@@ -94,3 +95,7 @@ int out_dims(out_field_id id, int32_t n_refs, size_t cap, size_t *dims);
 
 /* Dimensions one field's dataset has. */
 int out_rank(out_field_id id);
+
+/* Writes the table above as JSON, for generating the documentation of the format from the
+ * program that writes it. */
+void out_dump_layout(FILE *out);

@@ -37,14 +37,16 @@ typedef struct {
     int         value;
 } cli_choice;
 
-/* What an option does besides storing a value. The three that print and exit are declared
+/* What an option does besides storing a value. Those that print and exit are declared
  * rather than recognized by name, so they need no field of their own and any program may
- * have them. */
+ * have them. CLI_PRINT is the one whose subject is the program's own: it names a function
+ * to call, so that a program may describe something this table knows nothing about. */
 typedef enum {
     CLI_STORE,
     CLI_SHOW_HELP,
     CLI_SHOW_VERSION,
     CLI_DUMP_OPTIONS,
+    CLI_PRINT,
 } cli_action;
 
 typedef struct {
@@ -64,6 +66,7 @@ typedef struct {
     bool              hidden;   /* kept out of the help, still described by JSON */
     const cli_choice *choices;  /* accepted values, for OPT_ENUM */
     cli_action        action;
+    void            (*print)(FILE *out);  /* what CLI_PRINT calls */
 } cli_option;
 
 typedef struct {

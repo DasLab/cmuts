@@ -39,3 +39,20 @@ size_t shape_values(shape_fn shape, size_t len, size_t cap)
 
     return values;
 }
+
+const char *shape_name(shape_fn shape)
+{
+    if (shape == shape_per_base) {
+        return "per base";
+    }
+
+    if (shape == shape_per_length) {
+        return "per length";
+    }
+
+    if (shape == shape_none) {
+        return "scalar";
+    }
+
+    return "unknown";
+}

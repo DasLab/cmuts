@@ -11,6 +11,7 @@
 #include <stddef.h>
 
 #include "filter.h"
+#include "output.h"
 #include "phmm.h"
 
 static const cli_choice STRAND_CHOICES[] = {
@@ -107,6 +108,9 @@ static const cli_option OPTIONS[] = {
     { .group = "Information", .name = "dump-options", .type = OPT_FLAG,
       .help = "describe every argument as JSON and exit",
       .hidden = true, .action = CLI_DUMP_OPTIONS },
+    { .group = "Information", .name = "dump-layout", .type = OPT_FLAG,
+      .help = "describe the output format as JSON and exit",
+      .hidden = true, .action = CLI_PRINT, .print = out_dump_layout },
 };
 
 static const cli_positional POSITIONALS[] = {
