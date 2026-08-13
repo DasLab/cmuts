@@ -155,6 +155,13 @@ check: $(BINS)
 docs: $(BINS)
 	@$(PYTHON) scripts/document.py $(BUILD) docs
 
+# The blocks are rewritten first, so the site cannot render a page describing a
+# program as it was. --strict fails on a broken link or a page left out.
+#
+#     uv pip install --python .venv/bin/python --group docs
+site: docs
+	@$(PYTHON) -m mkdocs build --strict
+
 # A clang that is not the system one needs the SDK spelled out.
 CLANG_TIDY ?= $(firstword $(wildcard /opt/homebrew/opt/llvm/bin/clang-tidy) clang-tidy)
 SDK        := $(if $(filter Darwin,$(shell uname)),-isysroot $(shell xcrun --show-sdk-path),)
@@ -178,6 +185,6 @@ lint: compile_commands.json
 clean:
 	rm -rf $(BUILD_ROOT) compile_commands.json
 
-.PHONY: all check clean docs install lint uninstall
+.PHONY: all check clean docs install lint site uninstall
 
 -include $(DEP)

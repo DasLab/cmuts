@@ -13,6 +13,12 @@ dev = [
     "numpy",
 ]
 
+# Separate from dev, which is what the tests need: mkdocs-material brings some
+# thirty packages that running the suite has no use for.
+docs = [
+    "mkdocs-material",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
