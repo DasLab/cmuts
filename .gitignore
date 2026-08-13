@@ -10,6 +10,10 @@ compile_commands.json
 # Indexes an editor builds from the above, and rebuilds as readily.
 .cache/
 
+# The documentation site, rendered from docs/ by mkdocs and served from a
+# branch of its own rather than from here.
+site/
+
 # Program output
 *.h5
 
