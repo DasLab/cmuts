@@ -8,7 +8,7 @@ Fast, multithreaded pair-HMM counting of MaP-seq mutations.
 - [htslib](https://github.com/samtools/htslib) 1.12 or newer
 - [HDF5](https://www.hdfgroup.org/solutions/hdf5/) 1.10 or newer
 
-On macOS with Homebrew:
+On macOS with [Homebrew](https://brew.sh):
 
 ```sh
 brew install htslib hdf5
