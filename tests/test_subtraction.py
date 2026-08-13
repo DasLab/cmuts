@@ -26,6 +26,7 @@ from outputs import (
     without,
     write_output,
 )
+from datasets import DATASETS
 from support import CMUTS_SUB, run_cmuts, run_subtract, try_subtract
 
 # Small enough to write out by hand and to read in a failure, and ragged enough
@@ -95,7 +96,9 @@ def everything(seed, n_refs=N_REFS, cap=CAP):
 # ---------------------------------------------------------------------------
 
 
-def test_the_layout_written_here_is_the_one_cmuts_writes(data, tmp_path):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_the_layout_written_here_is_the_one_cmuts_writes(datasets, tmp_path, name):
+    data = datasets(name)
     """Checks the description in outputs.py against a real cmuts run.
 
     Compares names, types and widths and never a value, which keeps the
@@ -574,7 +577,9 @@ def test_both_inputs_are_required(build, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_it_reads_what_cmuts_writes(data, tmp_path):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_it_reads_what_cmuts_writes(datasets, tmp_path, name):
+    data = datasets(name)
     """Asserts nothing about any value, only that the run succeeds and leaves
     a file shaped like its inputs."""
     treated = tmp_path / "treated.h5"

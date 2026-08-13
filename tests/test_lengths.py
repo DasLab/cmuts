@@ -7,6 +7,8 @@ row summing to fewer than the reads total. Only what survived the filter is
 counted, so samtools is given the same criteria.
 """
 
+from collections import namedtuple
+
 import h5py
 import numpy as np
 import pytest
@@ -15,6 +17,14 @@ from datasets import DATASETS
 from support import (
     reference_lengths, rows_by_name, run_cmuts, samtools_length_histogram,
 )
+
+# Unfiltered, and above the mapping quality most of what the generator writes
+# carries, so the histogram is checked over two different sets of reads.
+CRITERIA = (0, 30)
+
+# What a comparison against samtools covered: the references it ran over, and
+# the reads too long for any bin to hold.
+Compared = namedtuple("Compared", "references outside")
 
 
 def expected_row(histogram, width):
@@ -29,18 +39,13 @@ def expected_row(histogram, width):
     return row
 
 
-def compare(output, data, min_mapq):
-    """Checks every reference's row against samtools, returning how many reads
-    fell outside the range of bins. The criterion is passed to both rather than
-    left to a default, the two not sharing one."""
+def compare(output, data, min_mapq) -> Compared:
+    """Checks every reference's row against samtools. The criterion is passed
+    to both rather than left to a default, the two not sharing one."""
     expected = samtools_length_histogram(data, min_mapq=min_mapq)
     lengths = reference_lengths(data.fasta)
     row_of = rows_by_name(data.fasta)
     outside = 0
-
-    # A criterion that admits nothing leaves nothing to compare, and every
-    # assertion below would hold of an output that counted the wrong thing.
-    assert expected, "no read survives the criterion under test"
 
     with h5py.File(output, "r") as handle:
         written = handle["reads/lengths"][:]
@@ -56,50 +61,31 @@ def compare(output, data, min_mapq):
 
             outside += sum(c for n, c in histogram.items() if n > width)
 
-    return outside
+    return Compared(references=len(expected), outside=outside)
+
+
+@pytest.mark.parametrize("min_mapq", CRITERIA)
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_histogram_matches_samtools(datasets, checked, tmp_path, name, min_mapq):
+    data = datasets(name)
+    output = tmp_path / f"{name}.h5"
+    run_cmuts(data, output, min_mapq=min_mapq)
+
+    checked(compare(output, data, min_mapq).references)
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_histogram_matches_samtools(datasets, tmp_path, name):
+def test_a_read_longer_than_the_range_is_counted_only_by_the_total(datasets, checked,
+                                                                   tmp_path, name):
+    """A row is short by the reads no bin could hold and by nothing else, which
+    where none is too long leaves every row summing to the reads counted for
+    its reference.
+    """
     data = datasets(name)
     output = tmp_path / f"{name}.h5"
     run_cmuts(data, output, min_mapq=0)
 
-    compare(output, data, min_mapq=0)
-
-
-@pytest.mark.parametrize("name", ["plain", "clipped"])
-def test_histogram_matches_samtools_under_a_filter(datasets, tmp_path, name):
-    data = datasets(name)
-    output = tmp_path / f"{name}-filtered.h5"
-    run_cmuts(data, output, min_mapq=30)
-
-    compare(output, data, min_mapq=30)
-
-
-def test_each_row_sums_to_the_reads_counted_for_its_reference(datasets, tmp_path):
-    data = datasets("ragged")
-    output = tmp_path / "sums.h5"
-    run_cmuts(data, output, min_mapq=0)
-
-    assert compare(output, data, min_mapq=0) == 0, "this dataset overflows the range"
-
-    with h5py.File(output, "r") as handle:
-        counted = handle["reads/counted"][:]
-        written = handle["reads/lengths"][:]
-
-    # Every row, a reference no read reached being counted zero and written an
-    # empty histogram.
-    assert np.array_equal(written.sum(axis=1), counted)
-
-
-def test_a_read_longer_than_the_range_is_counted_only_by_the_total(datasets, tmp_path):
-    data = datasets("overflowing")
-    output = tmp_path / "overflowing.h5"
-    run_cmuts(data, output, min_mapq=0)
-
-    outside = compare(output, data, min_mapq=0)
-    assert outside, "the dataset under test produced no read past the range"
+    outside = compare(output, data, min_mapq=0).outside
 
     with h5py.File(output, "r") as handle:
         # Signed, so that a row holding more reads than were counted comes out
@@ -112,3 +98,5 @@ def test_a_read_longer_than_the_range_is_counted_only_by_the_total(datasets, tmp
     assert (missing >= 0).all(), "a row holds more reads than were counted"
     assert missing.sum() == outside, \
         "the reads outside the range are not what the total is short by"
+
+    checked(outside)

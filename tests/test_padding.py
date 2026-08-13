@@ -10,10 +10,14 @@ there. Anything summing these arrays depends on the distinction, so what each
 value means is fixed here rather than left to the writer.
 """
 
+import itertools
+from dataclasses import dataclass
+
 import h5py
 import numpy as np
 import pytest
 
+from datasets import DATASETS
 from outputs import BY_LENGTH, RATES
 from support import (
     arrays_of, reference_lengths, references_with_reads, rows_by_name, run_cmuts,
@@ -21,6 +25,10 @@ from support import (
 
 # Higher than any mapping quality a read can carry, so every read is rejected.
 REJECTS_EVERYTHING = 61
+
+# Enough apart that the middle one is not the only step, and starting below the
+# first whole observation so that nothing is discarded at all to begin with.
+DEPTHS = (0, 1, 5)
 
 
 def rectangular(output):
@@ -61,13 +69,52 @@ def per_reference(output):
     return {k: d[:] for k, d in arrays_of(output).items() if d.ndim == 1}
 
 
+@dataclass(frozen=True)
+class Scored:
+    """A run, and what a test needs to read its rows: where each reference was
+    written, how far it reaches, and whether any read arrived on it."""
+
+    data: object
+    output: object
+    lengths: dict
+    row_of: dict
+    reached: set
+
+    @property
+    def widest(self) -> int:
+        return max(self.lengths.values())
+
+    @property
+    def shorter(self) -> list:
+        """References the widest one leaves padding after."""
+        return [name for name, length in self.lengths.items() if length < self.widest]
+
+    @property
+    def missing(self) -> list:
+        """References no read reached."""
+        return [name for name in self.row_of if name not in self.reached]
+
+
 @pytest.fixture
-def ragged(datasets, tmp_path):
-    """Lengths ranging sixtyfold, so most rows are mostly padding."""
-    data = datasets("ragged")
-    output = tmp_path / "ragged.h5"
-    run_cmuts(data, output)
-    return data, output
+def scored(datasets, tmp_path):
+    """Runs one dataset, gathering what its output is read against. Each run
+    writes a file of its own, so one test may make several."""
+    written = itertools.count()
+
+    def run(name, **options):
+        data = datasets(name)
+        output = tmp_path / f"{name}{next(written)}.h5"
+        run_cmuts(data, output, **options)
+
+        return Scored(
+            data=data,
+            output=output,
+            lengths=reference_lengths(data.fasta),
+            row_of=rows_by_name(data.fasta),
+            reached=references_with_reads(data.bam),
+        )
+
+    return run
 
 
 # ---------------------------------------------------------------------------
@@ -75,34 +122,33 @@ def ragged(datasets, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_positions_past_a_reference_are_nan(ragged):
-    data, output = ragged
-    lengths = reference_lengths(data.fasta)
-    row_of = rows_by_name(data.fasta)
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_positions_past_a_reference_are_nan(scored, checked, name):
+    run = scored(name)
 
-    with h5py.File(output, "r") as handle:
-        for field, values in per_base(handle).items():
-            width = values.shape[1]
-            shorter = [n for n, ln in lengths.items() if ln < width]
-            assert shorter, f"{field}: no reference is narrower than the widest"
+    with h5py.File(run.output, "r") as handle:
+        fields = per_base(handle)
 
-            for name in shorter:
-                tail = values[row_of[name]][lengths[name]:]
-                assert np.isnan(tail).all(), f"{field}: {name} is padded with {tail[:4]}"
+    for reference in checked(run.shorter):
+        for field, values in fields.items():
+            tail = values[run.row_of[reference]][run.lengths[reference]:]
+
+            assert np.isnan(tail).all(), \
+                f"{field}: {reference} is padded with {tail[:4]}"
 
 
-def test_positions_within_a_reference_are_never_nan(ragged):
-    data, output = ragged
-    lengths = reference_lengths(data.fasta)
-    reached = references_with_reads(data.bam)
-    row_of = rows_by_name(data.fasta)
-    assert reached, "the dataset under test has no reference any read reached"
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_positions_within_a_reference_are_never_nan(scored, checked, name):
+    run = scored(name)
 
-    with h5py.File(output, "r") as handle:
-        for field, values in padded(handle).items():
-            for name in reached:
-                within = values[row_of[name]][:lengths[name]]
-                assert not np.isnan(within).any(), f"{field}: {name} has a hole in it"
+    with h5py.File(run.output, "r") as handle:
+        fields = padded(handle)
+
+    for reference in checked(run.reached):
+        for field, values in fields.items():
+            within = values[run.row_of[reference]][:run.lengths[reference]]
+
+            assert not np.isnan(within).any(), f"{field}: {reference} has a hole in it"
 
 
 # ---------------------------------------------------------------------------
@@ -110,93 +156,76 @@ def test_positions_within_a_reference_are_never_nan(ragged):
 # ---------------------------------------------------------------------------
 
 
-def test_a_reference_with_no_reads_is_zero_over_its_own_bases(datasets, tmp_path):
-    data = datasets("patchy")
-    output = tmp_path / "patchy.h5"
-    run_cmuts(data, output)
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_a_reference_with_no_reads_is_zero_over_its_own_bases(scored, checked, name):
+    run = scored(name)
 
-    lengths = reference_lengths(data.fasta)
-    widest = max(lengths.values())
-    reached = references_with_reads(data.bam)
-    row_of = rows_by_name(data.fasta)
-    missing = [name for name in row_of if name not in reached]
+    with h5py.File(run.output, "r") as handle:
+        counted, holes, totals = counts(handle), padded(handle), per_reference(handle)
 
-    assert missing, "the dataset under test covers every reference"
-    assert any(lengths[name] < widest for name in missing), \
-        "no uncovered reference is short enough to carry padding"
+    for reference in checked(run.missing):
+        row = run.row_of[reference]
+        length = run.lengths[reference]
 
-    with h5py.File(output, "r") as handle:
-        for field, values in counts(handle).items():
-            width = values.shape[1]
-            for name in missing:
-                extent = row_extent(field, lengths[name], width)
+        for field, values in counted.items():
+            extent = row_extent(field, length, values.shape[1])
 
-                assert (values[row_of[name]][:extent] == 0).all(), \
-                    f"{field}: {name} has no reads and is not zero"
+            assert (values[row][:extent] == 0).all(), \
+                f"{field}: {reference} has no reads and is not zero"
 
-        for field, values in padded(handle).items():
-            for name in missing:
-                assert np.isnan(values[row_of[name]][lengths[name]:]).all(), \
-                    f"{field}: {name} has padding that is not NaN"
+        for field, values in holes.items():
+            assert np.isnan(values[row][length:]).all(), \
+                f"{field}: {reference} has padding that is not NaN"
 
         # A count of reads is zero where no read arrived: NaN would say nothing
         # that zero does not.
-        for field, values in per_reference(handle).items():
-            for name in missing:
-                assert values[row_of[name]] == 0, \
-                    f"{field}: {name} has no reads but is not zero"
+        for field, values in totals.items():
+            assert values[row] == 0, \
+                f"{field}: {reference} has no reads but is not zero"
 
 
-def test_an_uncovered_reference_of_full_length_holds_no_nan(datasets, tmp_path):
-    data = datasets("flat")
-    output = tmp_path / "flat.h5"
-    run_cmuts(data, output)
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_an_uncovered_reference_of_full_length_holds_no_nan(scored, checked, name):
+    run = scored(name)
+    full_length = [name for name in run.missing if run.lengths[name] == run.widest]
 
-    reached = references_with_reads(data.bam)
-    row_of = rows_by_name(data.fasta)
-    missing = [name for name in row_of if name not in reached]
+    with h5py.File(run.output, "r") as handle:
+        holes, counted = padded(handle), counts(handle)
 
-    assert missing, "the dataset under test covers every reference"
+    for reference in checked(full_length):
+        row = run.row_of[reference]
 
-    with h5py.File(output, "r") as handle:
-        for field, values in padded(handle).items():
-            for name in missing:
-                assert not np.isnan(values[row_of[name]]).any(), \
-                    f"{field}: {name} holds a NaN"
+        for field, values in holes.items():
+            assert not np.isnan(values[row]).any(), f"{field}: {reference} holds a NaN"
 
-        for field, values in counts(handle).items():
-            for name in missing:
-                assert (values[row_of[name]] == 0).all(), f"{field}: {name} is not zero"
+        for field, values in counted.items():
+            assert (values[row] == 0).all(), f"{field}: {reference} is not zero"
 
 
-def test_a_reference_whose_reads_were_all_rejected_is_zero(datasets, tmp_path):
-    data = datasets("ragged")
-    output = tmp_path / "rejected.h5"
-    summary = run_cmuts(data, output, min_mapq=REJECTS_EVERYTHING)
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_a_reference_whose_reads_were_all_rejected_is_zero(scored, checked, name):
+    run = scored(name, min_mapq=REJECTS_EVERYTHING)
 
-    assert summary.kept == 0, "the filter under test let something through"
+    with h5py.File(run.output, "r") as handle:
+        holes, counted, totals = padded(handle), counts(handle), per_reference(handle)
 
-    lengths = reference_lengths(data.fasta)
-    reached = references_with_reads(data.bam)
-    row_of = rows_by_name(data.fasta)
-    assert reached, "the dataset under test has no reference any read reached"
+    for reference in checked(run.reached):
+        row = run.row_of[reference]
+        length = run.lengths[reference]
 
-    with h5py.File(output, "r") as handle:
-        for field, values in padded(handle).items():
-            for name in reached:
-                within = values[row_of[name]][:lengths[name]]
-                assert not np.isnan(within).any(), f"{field}: {name} went to NaN"
+        for field, values in holes.items():
+            assert not np.isnan(values[row][:length]).any(), \
+                f"{field}: {reference} went to NaN"
 
-        for field, values in counts(handle).items():
-            width = values.shape[1]
-            for name in reached:
-                within = values[row_of[name]][:row_extent(field, lengths[name], width)]
-                assert (within == 0).all(), f"{field}: {name} counted something"
+        for field, values in counted.items():
+            extent = row_extent(field, length, values.shape[1])
 
-        for field, values in per_reference(handle).items():
-            for name in reached:
-                assert values[row_of[name]] == 0 or field == "reads/rejected", \
-                    f"{field}: {name} is not zero"
+            assert (values[row][:extent] == 0).all(), \
+                f"{field}: {reference} counted something"
+
+        for field, values in totals.items():
+            assert values[row] == 0 or field == "reads/rejected", \
+                f"{field}: {reference} is not zero"
 
 
 # ---------------------------------------------------------------------------
@@ -204,51 +233,56 @@ def test_a_reference_whose_reads_were_all_rejected_is_zero(datasets, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_raising_the_minimum_depth_only_adds_nan_to_a_rate(datasets, tmp_path):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_a_rate_is_known_wherever_its_error_is(scored, checked, name):
     """Separates the two reasons a rate is NaN by the coverage, which is NaN
     outside a reference only."""
-    data = datasets("patchy")
-    seen = {}
+    run = scored(name)
 
-    for depth in (0, 1, 5):
-        output = tmp_path / f"depth{depth}.h5"
-        run_cmuts(data, output, min_depth=depth)
+    with h5py.File(run.output, "r") as handle:
+        reactivity = handle["reactivity"][:]
+        error = handle["error"][:]
+        coverage = handle["coverage"][:]
 
-        with h5py.File(output, "r") as handle:
-            reactivity = handle["reactivity"][:]
-            error = handle["error"][:]
-            coverage = handle["coverage"][:]
+    assert np.array_equal(np.isnan(reactivity), np.isnan(error)), \
+        "the rate and its error disagree about what is known"
 
-        assert np.array_equal(np.isnan(reactivity), np.isnan(error)), \
-            f"depth {depth}: the rate and its error disagree about what is known"
+    # Padding is not part of any reference, so no rate is had there either.
+    assert np.isnan(reactivity[np.isnan(coverage)]).all(), \
+        "a rate outside a reference is not NaN"
 
-        # Padding is not part of any reference, so no rate is had there either.
-        assert np.isnan(reactivity[np.isnan(coverage)]).all(), \
-            f"depth {depth}: a rate outside a reference is not NaN"
+    finite = checked(reactivity[~np.isnan(reactivity)])
 
-        finite = reactivity[~np.isnan(reactivity)]
-        assert finite.size, f"depth {depth}: no position carries a rate at all"
-        assert ((finite >= 0) & (finite <= 1)).all(), \
-            f"depth {depth}: a rate lies outside zero to one"
-
-        seen[depth] = np.isnan(reactivity)
-
-    assert (seen[1] >= seen[0]).all(), "a higher depth recovered a rate"
-    assert (seen[5] >= seen[1]).all(), "a higher depth recovered a rate"
-    assert seen[5].sum() > seen[0].sum(), "the depths under test discard the same rates"
+    assert ((finite >= 0) & (finite <= 1)).all(), \
+        f"a rate of {finite.min()} to {finite.max()} lies outside zero to one"
 
 
-def test_an_error_at_a_full_read_of_depth_is_at_most_a_half(datasets, tmp_path):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_raising_the_minimum_depth_only_discards_rates(scored, checked, name):
+    missing = {}
+
+    for depth in DEPTHS:
+        run = scored(name, min_depth=depth)
+
+        with h5py.File(run.output, "r") as handle:
+            missing[depth] = np.isnan(handle["reactivity"][:])
+
+    for lower, higher in itertools.pairwise(DEPTHS):
+        assert (missing[higher] >= missing[lower]).all(), \
+            f"depth {higher} recovered a rate that depth {lower} had not"
+
+    checked(missing[DEPTHS[-1]].sum() - missing[DEPTHS[0]].sum())
+
+
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_an_error_at_a_full_read_of_depth_is_at_most_a_half(scored, checked, name):
     """Runs at --min-depth 1, below which the standard error of a proportion
     can exceed a half."""
-    data = datasets("patchy")
-    output = tmp_path / "bounded.h5"
-    run_cmuts(data, output, min_depth=1)
+    run = scored(name, min_depth=1)
 
-    with h5py.File(output, "r") as handle:
+    with h5py.File(run.output, "r") as handle:
         error = handle["error"][:]
 
-    finite = error[~np.isnan(error)]
+    finite = checked(error[~np.isnan(error)])
 
-    assert finite.size, "no position carries an error at all"
-    assert finite.max() <= 0.5, f"an error of {finite.max()} over a whole read"
+    assert (finite <= 0.5).all(), f"an error of {finite.max()} over a whole read"

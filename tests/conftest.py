@@ -1,10 +1,17 @@
-"""Shared fixtures.
+"""Shared fixtures, and the check that every test asserts something somewhere.
 
 Datasets are generated once per session and cached by name, since building one
 costs more than every test that reads it.
+
+Every test runs over every dataset. A test states a contract; the datasets are
+the range of inputs it is tried on. No dataset holds every case, so a test is
+often vacuous on one of them: there is nothing there to assert over. It records
+that through the checked fixture instead of failing. A test vacuous on every
+dataset asserts nothing at all, and fails the run.
 """
 
 import shutil
+from collections import defaultdict
 
 import pytest
 
@@ -43,8 +50,63 @@ def datasets(tmp_path_factory):
     return get
 
 
+# How many cases each test asserted over, keyed by test and not by parameter,
+# so that every dataset a test ran over is judged together.
+_CHECKED = defaultdict(list)
+
+
+def _amount(cases) -> int:
+    """Returns the size of a container, or the number itself."""
+    try:
+        return len(cases)
+    except TypeError:
+        return int(cases)
+
+
 @pytest.fixture
-def data(datasets):
-    """The everyday dataset, for a test that needs one but not a particular
-    one."""
-    return datasets("plain")
+def checked(request):
+    """Records how many cases a test asserts over, and returns them.
+
+    Takes the place of asserting that the case appears in the data:
+    `for name in checked(missing)` runs over the references no read reached,
+    and zero of them marks the test vacuous on this dataset.
+
+    Takes the cases themselves or how many there are. A mask is neither: it is
+    as long where nothing is selected as where everything is, so select with it
+    first.
+    """
+    name = request.node.originalname or request.node.name
+
+    def record(cases):
+        _CHECKED[name].append(_amount(cases))
+        return cases
+
+    return record
+
+
+def _vacuous_everywhere():
+    """Returns the tests that were vacuous on every dataset.
+
+    Only a run over the whole catalogue shows this: a shorter one may have left
+    out the datasets holding the case.
+    """
+    return sorted(
+        name for name, counts in _CHECKED.items()
+        if len(counts) >= len(DATASETS) and not any(counts)
+    )
+
+
+def pytest_terminal_summary(terminalreporter):
+    vacuous = _vacuous_everywhere()
+
+    if vacuous:
+        terminalreporter.section("Vacuous on every dataset")
+        for name in vacuous:
+            terminalreporter.line(name)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    # A run that already failed says so, and one that stopped early is no
+    # evidence either way: its tests did not all run.
+    if exitstatus == 0 and _vacuous_everywhere():
+        session.exitstatus = 1

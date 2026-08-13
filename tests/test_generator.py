@@ -68,10 +68,16 @@ def test_a_different_seed_gives_different_data(tmp_path):
     assert records(first.bam) != records(second.bam)
 
 
-def test_stored_length_diverges_from_aligned_span(datasets):
+def _divergences(data):
+    """Reads whose stored sequence is longer than the reference span they
+    align to, and reads whose is shorter.
+
+    An insertion or a soft-clipped end stores bases that meet no reference
+    position; a deletion meets positions no stored base covers.
+    """
     longer = shorter = 0
 
-    for line in records(datasets("plain").bam, "-F", "4"):
+    for line in records(data.bam, "-F", "4"):
         fields = line.split("\t")
         stored = len(fields[9])
         span = _reference_span(fields[5])
@@ -79,7 +85,17 @@ def test_stored_length_diverges_from_aligned_span(datasets):
         longer += stored > span
         shorter += stored < span
 
-    assert longer > 0 and shorter > 0
+    return longer, shorter
+
+
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_a_read_can_store_more_than_the_span_it_aligns_to(datasets, checked, name):
+    checked(_divergences(datasets(name))[0])
+
+
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_a_read_can_store_less_than_the_span_it_aligns_to(datasets, checked, name):
+    checked(_divergences(datasets(name))[1])
 
 
 def _reference_span(cigar):

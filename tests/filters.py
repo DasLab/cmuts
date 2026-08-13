@@ -1,5 +1,10 @@
 """The criteria a run is given, and how to name one in a test report."""
 
+# Every criterion at once. The length bounds read the stored sequence, which a
+# CRAM reconstructs rather than holds, so this is the one to try where the
+# format may decide the answer.
+COMPOUND = {"min_mapq": 30, "strand": "reverse", "min_length": 100, "max_length": 500}
+
 # Combinations chosen so that each criterion is exercised on its own, at a
 # boundary, and alongside the others.
 FILTERS = [
@@ -13,7 +18,7 @@ FILTERS = [
     {"max_length": 300},
     {"min_length": 150, "max_length": 400},
     {"min_length": 9000},                      # admits nothing
-    {"min_mapq": 30, "strand": "reverse", "min_length": 100, "max_length": 500},
+    COMPOUND,
 ]
 
 # Criteria are given in full at every call, so no default is relied on.

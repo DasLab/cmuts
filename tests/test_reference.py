@@ -10,9 +10,24 @@ wrote one.
 import hashlib
 from dataclasses import replace
 
+import pytest
+
+from datasets import DATASETS
 from support import (
-    outputs_agree, reheadered, run_cmuts, sequences, substituted, try_cmuts, written,
+    outputs_agree, reheadered, references_with_reads, run_cmuts, sequences,
+    substituted, try_cmuts, written,
 )
+
+
+def sampled(data):
+    """The first reference any read reached, the last, and one between.
+
+    A checksum is checked where the bases behind it are read, so a reference
+    no read reached says nothing about which checksum was checked.
+    """
+    reached = sorted(references_with_reads(data.bam))
+
+    return [reached[0], reached[len(reached) // 2], reached[-1]] if reached else []
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +67,9 @@ def with_checksums(data, tmp_path, checksum=md5, only=None):
 # ---------------------------------------------------------------------------
 
 
-def test_a_matching_checksum_is_accepted(data, tmp_path):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_a_matching_checksum_is_accepted(datasets, tmp_path, name):
+    data = datasets(name)
     checked = run_cmuts(with_checksums(data, tmp_path), tmp_path / "checked.h5")
     plain = run_cmuts(data, tmp_path / "plain.h5")
 
@@ -60,7 +77,9 @@ def test_a_matching_checksum_is_accepted(data, tmp_path):
     assert outputs_agree(tmp_path / "checked.h5", tmp_path / "plain.h5")
 
 
-def test_a_substituted_reference_is_refused(data, tmp_path):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_a_substituted_reference_is_refused(datasets, tmp_path, name):
+    data = datasets(name)
     wrong = substituted(with_checksums(data, tmp_path), tmp_path)
     attempt = try_cmuts(wrong, tmp_path / "out.h5")
 
@@ -68,39 +87,50 @@ def test_a_substituted_reference_is_refused(data, tmp_path):
     assert "not the sequence the alignments were made against" in attempt.stderr
 
 
-def test_a_reference_without_a_checksum_is_not_checked(data, tmp_path):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_a_reference_without_a_checksum_is_not_checked(datasets, checked, tmp_path,
+                                                       name):
+    data = datasets(name)
     """Runs to the end against bases the alignments were not made from, and
     scores them: the result a checksum exists to refuse."""
     wrong, right = tmp_path / "wrong.h5", tmp_path / "right.h5"
 
     assert try_cmuts(substituted(data, tmp_path), wrong).returncode == 0
 
-    run_cmuts(data, right)
+    # Where every read was rejected the two runs count nothing either way, so
+    # the bases they counted it over cannot be told apart.
+    if checked(run_cmuts(data, right).kept):
+        assert not outputs_agree(wrong, right), \
+            "the substituted bases are not the ones that were scored"
 
-    assert not outputs_agree(wrong, right), \
-        "the substituted bases are not the ones that were scored"
 
-
-def test_the_checksum_checked_is_the_one_for_that_reference(data, tmp_path):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_the_checksum_checked_is_the_one_for_that_reference(datasets, checked,
+                                                            tmp_path, name):
+    data = datasets(name)
     declared = with_checksums(data, tmp_path)
-    names = list(sequences(data.fasta))
 
-    for name in (names[0], names[len(names) // 2], names[-1]):
-        attempt = try_cmuts(substituted(declared, tmp_path, only={name}),
+    for reference in checked(sampled(data)):
+        attempt = try_cmuts(substituted(declared, tmp_path, only={reference}),
                             tmp_path / "out.h5", overwrite=True)
 
-        assert attempt.returncode != 0, name
-        assert f'"{name}"' in attempt.stderr
+        assert attempt.returncode != 0, reference
+        assert f'"{reference}"' in attempt.stderr
 
 
-def test_a_checksum_on_a_single_reference_is_still_checked(data, tmp_path):
-    last = list(sequences(data.fasta))[-1]
-    declared = with_checksums(data, tmp_path, only={last})
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_a_checksum_on_a_single_reference_is_still_checked(datasets, checked,
+                                                           tmp_path, name):
+    data = datasets(name)
+    reached = sampled(data)
 
-    attempt = try_cmuts(substituted(declared, tmp_path, only={last}), tmp_path / "out.h5")
+    for reference in checked(reached[-1:]):
+        declared = with_checksums(data, tmp_path, only={reference})
+        attempt = try_cmuts(substituted(declared, tmp_path, only={reference}),
+                            tmp_path / "out.h5")
 
-    assert attempt.returncode != 0
-    assert f'"{last}"' in attempt.stderr
+        assert attempt.returncode != 0
+        assert f'"{reference}"' in attempt.stderr
 
 
 # ---------------------------------------------------------------------------
@@ -108,14 +138,18 @@ def test_a_checksum_on_a_single_reference_is_still_checked(data, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_a_checksum_is_read_whatever_its_case(data, tmp_path):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_a_checksum_is_read_whatever_its_case(datasets, tmp_path, name):
+    data = datasets(name)
     """The SAM spec fixes M5 as hexadecimal without fixing its case."""
     shouting = with_checksums(data, tmp_path, checksum=lambda seq: md5(seq).upper())
 
     assert try_cmuts(shouting, tmp_path / "out.h5").returncode == 0
 
 
-def test_a_soft_masked_reference_hashes_as_an_upper_case_one(data, tmp_path):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_a_soft_masked_reference_hashes_as_an_upper_case_one(datasets, tmp_path, name):
+    data = datasets(name)
     """The SAM spec defines M5 over the sequence uppercased."""
     masked = replace(data, fasta=written(
         {name: seq.lower() for name, seq in sequences(data.fasta).items()},
@@ -124,14 +158,18 @@ def test_a_soft_masked_reference_hashes_as_an_upper_case_one(data, tmp_path):
     assert try_cmuts(with_checksums(masked, tmp_path), tmp_path / "out.h5").returncode == 0
 
 
-def test_a_checksum_is_read_only_to_the_end_of_its_field(data, tmp_path):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_a_checksum_is_read_only_to_the_end_of_its_field(datasets, tmp_path, name):
+    data = datasets(name)
     trailing = with_checksums(data, tmp_path,
                               checksum=lambda seq: md5(seq) + "\tUR:file:/nowhere")
 
     assert try_cmuts(trailing, tmp_path / "out.h5").returncode == 0
 
 
-def test_a_checksum_that_is_not_an_md5_is_refused(data, tmp_path):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_a_checksum_that_is_not_an_md5_is_refused(datasets, tmp_path, name):
+    data = datasets(name)
     truncated = with_checksums(data, tmp_path, checksum=lambda seq: md5(seq)[:8])
     attempt = try_cmuts(truncated, tmp_path / "out.h5")
 

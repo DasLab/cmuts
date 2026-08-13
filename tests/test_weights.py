@@ -13,13 +13,11 @@ import h5py
 import numpy as np
 import pytest
 
+from datasets import DATASETS
 from support import run_cmuts
 
 # Every kind of difference a read can carry, and what each is worth by default.
 WEIGHTS = ("substitution_weight", "deletion_weight", "insertion_weight")
-
-# Datasets carrying between them every difference a weight applies to.
-CARRYING_DIFFERENCES = ["plain", "indels", "clipped"]
 
 # Powers of two, which scale a stored rate without rounding it, so the
 # comparison is exact.
@@ -48,8 +46,9 @@ def reactivity(output):
         return handle["reactivity"][:]
 
 
-@pytest.mark.parametrize("name", CARRYING_DIFFERENCES)
-def test_weighing_every_difference_at_zero_leaves_nothing_counted(datasets, tmp_path, name):
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_weighing_every_difference_at_zero_leaves_nothing_counted(datasets, checked,
+                                                                  tmp_path, name):
     """A difference worth nothing reaches no total, whatever the alignment says
     it is: the rates come to zero rather than to something small."""
     data = datasets(name)
@@ -59,15 +58,16 @@ def test_weighing_every_difference_at_zero_leaves_nothing_counted(datasets, tmp_
 
     reactivity, error = rates(output)
 
-    assert reactivity.size, "no position carries a rate, so nothing was tested"
+    checked(reactivity)
+
     assert (reactivity == 0).all(), f"a rate of {reactivity.max()} with nothing weighed"
     assert (error == 0).all(), f"an error of {error.max()} with nothing weighed"
 
 
 @pytest.mark.parametrize("scale", SCALES)
-@pytest.mark.parametrize("name", CARRYING_DIFFERENCES)
+@pytest.mark.parametrize("name", sorted(DATASETS))
 def test_scaling_the_weights_scales_every_rate_by_the_same_factor(
-    datasets, tmp_path, name, scale,
+    datasets, checked, tmp_path, name, scale,
 ):
     """Insertions are weighed at zero throughout, they being the kind that
     reaches the denominator as well."""
@@ -85,6 +85,9 @@ def test_scaling_the_weights_scales_every_rate_by_the_same_factor(
 
     assert np.array_equal(np.isnan(before), np.isnan(after)), \
         "the positions carrying a rate are not the same ones"
-    assert (before[known] > 0).any(), "every rate is zero, so nothing was tested"
     assert np.array_equal(after[known], scale * before[known]), \
         "a rate is not the weights' own multiple of itself"
+
+    # A rate of zero scales to zero whatever the factor, so only the positions
+    # carrying one say anything about the weights.
+    checked(before[known][before[known] > 0])

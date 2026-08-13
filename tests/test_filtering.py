@@ -35,7 +35,7 @@ def test_an_unavailable_mapping_quality_is_refused(tmp_path):
     assert summary.rejected == data.mapped
 
 
-@pytest.mark.parametrize("name", ["plain", "lowqual"])
+@pytest.mark.parametrize("name", sorted(DATASETS))
 def test_rejecting_everything_leaves_a_valid_file(datasets, tmp_path, name):
     data = datasets(name)
     summary = run_cmuts(data, tmp_path / "out.h5", min_length=9000)
@@ -45,9 +45,16 @@ def test_rejecting_everything_leaves_a_valid_file(datasets, tmp_path, name):
     assert summary.rows == data.touched
 
 
-def test_secondary_alignments_are_refused(datasets, tmp_path):
-    data, marked = with_secondary(datasets("plain"), tmp_path, every=3)
-    assert marked > 0, "the case being tested has to appear in the data"
+# One in three of the mapped reads, so that a dataset holding any leaves both a
+# marked read and an unmarked one.
+EVERY_THIRD = 3
+
+
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_secondary_alignments_are_refused(datasets, checked, tmp_path, name):
+    data, marked = with_secondary(datasets(name), tmp_path, every=EVERY_THIRD)
+
+    checked(marked)
 
     summary = run_cmuts(data, tmp_path / "out.h5", **UNFILTERED)
 
