@@ -154,6 +154,14 @@ PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 check: $(BINS)
 	PATH=$(CURDIR)/$(BUILD):$$PATH $(PYTHON) -m pytest
 
+# The pages describing a program are written from the program, so this builds
+# it first: a table can only describe what was built here, never a version of
+# it that is no longer around.
+DOCUMENTED := docs/basics.md
+
+docs: $(BUILD)/cmuts-hmm
+	$(PYTHON) scripts/document.py $(BUILD)/cmuts-hmm $(DOCUMENTED)
+
 # A clang that is not the system one needs the SDK spelled out.
 CLANG_TIDY ?= $(firstword $(wildcard /opt/homebrew/opt/llvm/bin/clang-tidy) clang-tidy)
 SDK        := $(if $(filter Darwin,$(shell uname)),-isysroot $(shell xcrun --show-sdk-path),)
@@ -177,6 +185,6 @@ lint: compile_commands.json
 clean:
 	rm -rf $(BUILD_ROOT) compile_commands.json
 
-.PHONY: all check clean install lint uninstall
+.PHONY: all check clean docs install lint uninstall
 
 -include $(DEP)
