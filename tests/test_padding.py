@@ -35,15 +35,26 @@ def rectangular(output):
 
 
 def counts(output):
-    """The rows holding counts. This excludes the rates, which also carry NaN
-    at any position failing --min-depth, so NaN in them does not mean padding
-    on its own."""
+    """The rows holding counts, whether a reference's own length bounds them or
+    a read length does. These are the ones a zero is meaningful in."""
     return {k: v for k, v in rectangular(output).items() if k not in RATES}
 
 
 def per_base(output):
     """The arrays a reference's own length bounds, which are the padded ones."""
     return {k: v for k, v in rectangular(output).items() if k not in PER_LENGTH}
+
+
+def padded(output):
+    """The arrays a NaN is meaningful in: bounded by a reference and holding
+    counts.
+
+    A row indexed by read length runs to its full width and holds whole
+    numbers, so no NaN can arise there. The rates carry one at any position
+    failing --min-depth as well, so NaN in them does not mean padding on its
+    own.
+    """
+    return {k: v for k, v in per_base(output).items() if k not in RATES}
 
 
 def row_extent(field, ref_len, width):
@@ -94,10 +105,9 @@ def test_positions_within_a_reference_are_never_nan(ragged):
     assert reached, "the dataset under test has no reference any read reached"
 
     with h5py.File(output, "r") as handle:
-        for field, values in counts(handle).items():
-            width = values.shape[1]
+        for field, values in padded(handle).items():
             for name in reached:
-                within = values[row_of[name]][:row_extent(field, lengths[name], width)]
+                within = values[row_of[name]][:lengths[name]]
                 assert not np.isnan(within).any(), f"{field}: {name} has a hole in it"
 
 
@@ -125,12 +135,14 @@ def test_a_reference_with_no_reads_is_zero_over_its_own_bases(datasets, tmp_path
         for field, values in counts(handle).items():
             width = values.shape[1]
             for name in missing:
-                row = values[row_of[name]]
                 extent = row_extent(field, lengths[name], width)
 
-                assert (row[:extent] == 0).all(), \
+                assert (values[row_of[name]][:extent] == 0).all(), \
                     f"{field}: {name} has no reads and is not zero"
-                assert np.isnan(row[extent:]).all(), \
+
+        for field, values in padded(handle).items():
+            for name in missing:
+                assert np.isnan(values[row_of[name]][lengths[name]:]).all(), \
                     f"{field}: {name} has padding that is not NaN"
 
         # A count of reads is zero where no read arrived: NaN would say nothing
@@ -153,11 +165,14 @@ def test_an_uncovered_reference_of_full_length_holds_no_nan(datasets, tmp_path):
     assert missing, "the dataset under test covers every reference"
 
     with h5py.File(output, "r") as handle:
+        for field, values in padded(handle).items():
+            for name in missing:
+                assert not np.isnan(values[row_of[name]]).any(), \
+                    f"{field}: {name} holds a NaN"
+
         for field, values in counts(handle).items():
             for name in missing:
-                row = values[row_of[name]]
-                assert not np.isnan(row).any(), f"{field}: {name} holds a NaN"
-                assert (row == 0).all(), f"{field}: {name} is not zero"
+                assert (values[row_of[name]] == 0).all(), f"{field}: {name} is not zero"
 
 
 def test_a_reference_whose_reads_were_all_rejected_is_zero(datasets, tmp_path):
@@ -173,11 +188,15 @@ def test_a_reference_whose_reads_were_all_rejected_is_zero(datasets, tmp_path):
     assert reached, "the dataset under test has no reference any read reached"
 
     with h5py.File(output, "r") as handle:
+        for field, values in padded(handle).items():
+            for name in reached:
+                within = values[row_of[name]][:lengths[name]]
+                assert not np.isnan(within).any(), f"{field}: {name} went to NaN"
+
         for field, values in counts(handle).items():
             width = values.shape[1]
             for name in reached:
                 within = values[row_of[name]][:row_extent(field, lengths[name], width)]
-                assert not np.isnan(within).any(), f"{field}: {name} went to NaN"
                 assert (within == 0).all(), f"{field}: {name} counted something"
 
         for field, values in per_reference(handle).items():

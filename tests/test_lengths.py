@@ -85,11 +85,12 @@ def test_each_row_sums_to_the_reads_counted_for_its_reference(datasets, tmp_path
     assert compare(output, data, min_mapq=0) == 0, "this dataset overflows the range"
 
     with h5py.File(output, "r") as handle:
-        reads = handle["reads/counted"][:]
+        counted = handle["reads/counted"][:]
         written = handle["reads/lengths"][:]
-        reached = ~np.isnan(reads)
 
-        assert np.array_equal(np.nansum(written[reached], axis=1), reads[reached])
+    # Every row, a reference no read reached being counted zero and written an
+    # empty histogram.
+    assert np.array_equal(written.sum(axis=1), counted)
 
 
 def test_a_read_longer_than_the_range_is_counted_only_by_the_total(datasets, tmp_path):
@@ -101,12 +102,13 @@ def test_a_read_longer_than_the_range_is_counted_only_by_the_total(datasets, tmp
     assert outside, "the dataset under test produced no read past the range"
 
     with h5py.File(output, "r") as handle:
-        reads = handle["reads/counted"][:]
-        written = handle["reads/lengths"][:]
-        reached = ~np.isnan(reads)
+        # Signed, so that a row holding more reads than were counted comes out
+        # negative instead of wrapping to the top of the unsigned range.
+        counted = handle["reads/counted"][:].astype(np.int64)
+        written = handle["reads/lengths"][:].sum(axis=1).astype(np.int64)
 
-        missing = reads[reached] - np.nansum(written[reached], axis=1)
+    missing = counted - written
 
-        assert (missing >= 0).all(), "a row holds more reads than were counted"
-        assert missing.sum() == outside, \
-            "the reads outside the range are not what the total is short by"
+    assert (missing >= 0).all(), "a row holds more reads than were counted"
+    assert missing.sum() == outside, \
+        "the reads outside the range are not what the total is short by"
