@@ -322,6 +322,15 @@ static refctx *pipeline_open_reference(const pipeline *p, int32_t tid)
     return ctx;
 }
 
+/* Whether the reference matches what every header declares for it, taking no context
+ * and writing no row. Every reference is checked, whether or not a read arrived on it
+ * and whether or not its row needs writing: the FASTA must hold the sequences the
+ * alignments were made against. */
+static bool pipeline_check_reference(const pipeline *p, int32_t tid)
+{
+    return refseq_advance(p->refs, tid) != NULL;
+}
+
 /* Opens and closes a reference the reader passed over, so that its row is written
  * unread. A reference that received nothing is zero everywhere, which the fill
  * value already gives -- but only where it is as long as the longest. A shorter one
@@ -341,6 +350,9 @@ static bool loader_emit_empty(loader *l, int32_t tid)
     return true;
 }
 
+/* Takes every reference the reader has passed since the last one it stopped at.
+ * Each is checked against the headers, and one needing a tail is opened as well,
+ * which is what writes its row. */
 static bool loader_account_through(loader *l, int32_t upto)
 {
     const pipeline *p = l->pipe;
@@ -348,8 +360,11 @@ static bool loader_account_through(loader *l, int32_t upto)
     while (l->owed < upto) {
         int32_t tid = l->owed++;
 
-        if ((size_t)cm_bam_stream_reflen(p->bam, tid) < p->ref_cap
-            && !loader_emit_empty(l, tid)) {
+        if ((size_t)cm_bam_stream_reflen(p->bam, tid) < p->ref_cap) {
+            if (!loader_emit_empty(l, tid)) {
+                return false;
+            }
+        } else if (!pipeline_check_reference(p, tid)) {
             return false;
         }
     }

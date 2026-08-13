@@ -14,8 +14,7 @@ import pytest
 
 from datasets import DATASETS
 from support import (
-    outputs_agree, reheadered, references_with_reads, run_cmuts, sequences,
-    substituted, try_cmuts, written,
+    outputs_agree, reheadered, run_cmuts, sequences, substituted, try_cmuts, written,
 )
 
 
@@ -25,14 +24,10 @@ def has_references(data) -> bool:
 
 
 def sampled(data):
-    """The first reference any read reached, the last, and one between.
+    """The first reference the FASTA declares, the last, and one between."""
+    names = sorted(sequences(data.fasta))
 
-    A checksum is checked where the bases behind it are read, so a reference
-    no read reached says nothing about which checksum was checked.
-    """
-    reached = sorted(references_with_reads(data.bam))
-
-    return [reached[0], reached[len(reached) // 2], reached[-1]] if reached else []
+    return [names[0], names[len(names) // 2], names[-1]] if names else []
 
 
 # ---------------------------------------------------------------------------

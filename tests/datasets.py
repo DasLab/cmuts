@@ -81,4 +81,7 @@ DATASETS = {
     # hundreds deep.
     "deep":    dict(seed=117, references=1, ref_length=30, reads_per_ref=1500,
                     read_length="5:30"),
+
+    # No reads at all, mapped or not, on references the header still declares.
+    "empty":   dict(seed=118, references=10, ref_length=200, covered=0, unmapped=0),
 }
