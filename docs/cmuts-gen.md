@@ -3,14 +3,14 @@
 <!-- BEGIN GENERATED OPTIONS -->
 ### Output
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `-o, --output PREFIX` | write PREFIX.bam and PREFIX.fasta (required) |
 | `--format FORMAT` | alignment format to write (bam, sam; default bam) |
 
 ### Layout
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `--references N` | how many references to write (default 100) |
 | `--ref-length DISTRIBUTION` | length of each reference (default 400) |
@@ -19,7 +19,7 @@
 
 ### Reads
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `--read-length DISTRIBUTION` | reference span each read covers (default 100:400) |
 | `--mapq DISTRIBUTION` | mapping quality of each read (default 0,1,10,30,42,60) |
@@ -29,7 +29,7 @@
 
 ### Differences from the reference
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `--mismatch-rate F` | per aligned base (0 to 1; default 0.01) |
 | `--insertions DISTRIBUTION` | insertion events per read (default 0:1) |
@@ -41,13 +41,13 @@
 
 ### Determinism
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `--seed N` | everything generated follows from this (default 1) |
 
 ### Information
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `-h, --help` | show this help and exit |
 | `-V, --version` | show the version and exit |

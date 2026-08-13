@@ -3,13 +3,13 @@
 <!-- BEGIN GENERATED OPTIONS -->
 ### Arguments
 
-| Argument | |
+| Argument | Description |
 | --- | --- |
 | `BAM...` | coordinate-sorted alignments |
 
 ### Input and output
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `-f, --fasta FASTA` | reference sequences (required) |
 | `-o, --output HDF5` | write results to this file (required) |
@@ -17,7 +17,7 @@
 
 ### Filtering
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `-q, --min-mapq N` | discard alignments below this mapping quality (0 to 254; default 20) |
 | `--min-length N` | discard reads shorter than this (default: no limit) |
@@ -26,7 +26,7 @@
 
 ### Counting
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `--band N` | reference positions the marginal may look either side of the CIGAR (default 2) |
 | `--min-depth D` | evidence a position needs before its rate is written (default 1) |
@@ -36,7 +36,7 @@
 
 ### Performance
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `-j, --workers N` | threads running the processing step (default 4) |
 | `--decode-threads N` | htslib threads for BGZF decompression (default 4) |
@@ -46,7 +46,7 @@
 
 ### Information
 
-| Option | |
+| Option | Description |
 | --- | --- |
 | `-h, --help` | show this help and exit |
 | `-V, --version` | show the version and exit |

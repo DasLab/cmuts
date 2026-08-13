@@ -117,7 +117,7 @@ def options(program: str) -> str:
     written = []
 
     if spoken["positionals"]:
-        written += ["### Arguments", "", "| Argument | |", "| --- | --- |"]
+        written += ["### Arguments", "", "| Argument | Description |", "| --- | --- |"]
         for positional in spoken["positionals"]:
             name = positional["metavar"] + ("..." if positional["variadic"] else "")
             written.append(f"| `{name}` | {positional['help']} |")
@@ -126,7 +126,7 @@ def options(program: str) -> str:
     shown = [option for option in spoken["options"] if not option["hidden"]]
 
     for group in dict.fromkeys(option["group"] for option in shown):
-        written += [f"### {group}", "", "| Option | |", "| --- | --- |"]
+        written += [f"### {group}", "", "| Option | Description |", "| --- | --- |"]
         written += [f"| `{invocation(option)}` | {option['help']}{note(option)} |"
                     for option in shown if option["group"] == group]
         written.append("")
