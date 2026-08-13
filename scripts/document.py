@@ -87,24 +87,20 @@ def fields(program: str) -> str:
     with no description gets a heading anyway, so that the block covers every
     dataset before the prose is written.
 
-    Each one is wrapped in a div the stylesheet draws a rule beside. The blank
-    lines around the tags are what keep the markdown between them markdown,
-    both here and on GitHub, which has no such stylesheet and shows the fields
-    plainly.
+    The heading is also what the stylesheet draws a rule beside: each one
+    opens a section of its own in the rendered page, so the block needs no
+    markup around it.
     """
     written = []
 
     for field in described(program, "--dump-layout")["fields"]:
         absent = ABSENT.get(field["absent"], field["absent"])
-        written += ['<div class="field" markdown>', "",
-                    f"### `{field['name']}`", "",
+        written += [f"### `{field['name']}`", "",
                     f"**Shape** `{shape(field)}` · **Type** `{field['type']}` · "
                     f"**Fill** `{absent}`", ""]
 
         if field["detail"]:
             written += [field["detail"], ""]
-
-        written += ["</div>", ""]
 
     return "\n".join(written).rstrip()
 

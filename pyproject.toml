@@ -13,10 +13,14 @@ dev = [
     "numpy",
 ]
 
-# Separate from dev, which is what the tests need: mkdocs-material brings some
-# thirty packages that running the suite has no use for.
+# Separate from dev, which is what the tests need: Sphinx brings some thirty
+# packages that running the suite has no use for.
 docs = [
-    "mkdocs-material",
+    "sphinx",
+    "furo",
+    "myst-parser",
+    "sphinx-inline-tabs",
+    "sphinx-autobuild",
 ]
 
 [tool.pytest.ini_options]

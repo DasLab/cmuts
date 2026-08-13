@@ -55,10 +55,10 @@ make docs   # rewrite the generated blocks under docs/
 make site   # additionally render the site into site/
 ```
 
-To preview the site locally:
+To preview the site locally, rebuilding as the sources change:
 
 ```sh
-.venv/bin/mkdocs serve
+.venv/bin/sphinx-autobuild docs site
 ```
 
 # Contributing

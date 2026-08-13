@@ -10,21 +10,23 @@ In order to build and run cmuts, you need
 - [htslib](https://github.com/samtools/htslib) 1.12 or newer
 - [HDF5](https://www.hdfgroup.org/solutions/hdf5/) 1.10 or newer
 
-=== "macOS"
+::::{tab} macOS
 
-    ```sh
-    brew install htslib hdf5
-    ```
+```sh
+brew install htslib hdf5
+```
 
-    Install [Homebrew](https://brew.sh) first if you don't have it.
+Install [Homebrew](https://brew.sh) first if you don't have it.
+::::
 
-=== "Debian & Ubuntu"
+::::{tab} Debian & Ubuntu
 
-    ```sh
-    apt install libhts-dev libhdf5-dev
-    ```
+```sh
+apt install libhts-dev libhdf5-dev
+```
 
-    Or load the appropriate modules for your cluster (examples [here](clusters.md)).
+Or load the appropriate modules for your cluster (examples [here](clusters.md)).
+::::
 
 ## Installation
 
@@ -39,3 +41,28 @@ This installs all cmuts binaries to `~/.local/bin`. Pass `BINDIR` to `make` to i
 ## Next Steps
 
 - Learn about the [basics of cmuts](basics.md)
+
+```{toctree}
+:hidden:
+
+self
+basics
+output
+```
+
+```{toctree}
+:hidden:
+:caption: Programs
+
+cmuts-hmm
+cmuts-sub
+cmuts-gen
+```
+
+```{toctree}
+:hidden:
+:caption: Reference
+
+counting
+clusters
+```

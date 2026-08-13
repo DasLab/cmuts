@@ -153,11 +153,12 @@ docs: $(BINS)
 	@$(PYTHON) scripts/document.py $(BUILD) docs
 
 # The blocks are rewritten first, so the site cannot render a page describing a
-# program as it was. --strict fails on a broken link or a page left out.
+# program as it was. -W fails on a broken link or a page missing from the
+# toctree; the doctrees are cached beside the site, which is not published.
 #
 #     uv pip install --python .venv/bin/python --group docs
 site: docs
-	@$(PYTHON) -m mkdocs build --strict
+	@$(PYTHON) -m sphinx -W -q -b html -d site/.doctrees docs site
 
 # A clang that is not the system one needs the SDK spelled out.
 CLANG_TIDY ?= $(firstword $(wildcard /opt/homebrew/opt/llvm/bin/clang-tidy) clang-tidy)
