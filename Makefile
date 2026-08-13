@@ -154,13 +154,10 @@ PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
 check: $(BINS)
 	PATH=$(CURDIR)/$(BUILD):$$PATH $(PYTHON) -m pytest
 
-# clang-tidy reads the compile database, not this file. A clang that is not the
-# system one also needs the SDK spelled out. Every source is described, the
-# programs' as well as the library's, each with its own directory on the include
-# path as the build gives it.
+# A clang that is not the system one needs the SDK spelled out.
 CLANG_TIDY ?= $(firstword $(wildcard /opt/homebrew/opt/llvm/bin/clang-tidy) clang-tidy)
 SDK        := $(if $(filter Darwin,$(shell uname)),-isysroot $(shell xcrun --show-sdk-path),)
-TIDY_FLAGS := -std=c11 $(SDK) -Iinclude $(HTS_CFLAGS) $(HDF5_CFLAGS)
+DB_FLAGS   := $(CFLAGS) $(SDK)
 
 compile_commands.json: Makefile $(SRC)
 	@{ printf '[\n'; \
@@ -169,7 +166,7 @@ compile_commands.json: Makefile $(SRC)
 	     [ $$first -eq 1 ] || printf ',\n'; \
 	     first=0; \
 	     printf '  { "directory": "%s", "file": "%s", "command": "%s" }' \
-	       "$(CURDIR)" "$$f" "$(CC) $(TIDY_FLAGS) -I$$(dirname $$f) -c $$f"; \
+	       "$(CURDIR)" "$$f" "$(CC) $(DB_FLAGS) -I$$(dirname $$f) -c $$f"; \
 	   done; \
 	   printf '\n]\n'; } > $@
 
