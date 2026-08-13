@@ -4,8 +4,6 @@ Replacing a previous result requires --overwrite, a run costing far more than
 the command that starts it.
 """
 
-import pytest
-
 from support import outputs_agree, run_cmuts, try_cmuts
 
 

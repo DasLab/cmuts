@@ -10,21 +10,14 @@ wrote one.
 import hashlib
 from dataclasses import replace
 
-import pytest
-
-from support import outputs_agree, reheadered, run_cmuts, sequences, try_cmuts
-
-COMPLEMENT = str.maketrans("ACGT", "TGCA")
+from support import (
+    outputs_agree, reheadered, run_cmuts, sequences, substituted, try_cmuts, written,
+)
 
 
 # ---------------------------------------------------------------------------
 # Rewriting a reference and the checksum its header declares
 # ---------------------------------------------------------------------------
-
-
-def written(records, path):
-    path.write_text("".join(f">{name}\n{seq}\n" for name, seq in records.items()))
-    return path
 
 
 def md5(seq):
@@ -54,16 +47,6 @@ def with_checksums(data, tmp_path, checksum=md5, only=None):
     return reheadered(data, tmp_path, rewrite)
 
 
-def substituted(data, tmp_path, only=None):
-    """A FASTA agreeing on every name and length, holding different bases."""
-    records = {
-        name: seq.translate(COMPLEMENT) if only is None or name in only else seq
-        for name, seq in sequences(data.fasta).items()
-    }
-
-    return replace(data, fasta=written(records, tmp_path / "substituted.fasta"))
-
-
 # ---------------------------------------------------------------------------
 # What a checksum settles
 # ---------------------------------------------------------------------------
@@ -86,7 +69,16 @@ def test_a_substituted_reference_is_refused(data, tmp_path):
 
 
 def test_a_reference_without_a_checksum_is_not_checked(data, tmp_path):
-    assert try_cmuts(substituted(data, tmp_path), tmp_path / "out.h5").returncode == 0
+    """Runs to the end against bases the alignments were not made from, and
+    scores them: the result a checksum exists to refuse."""
+    wrong, right = tmp_path / "wrong.h5", tmp_path / "right.h5"
+
+    assert try_cmuts(substituted(data, tmp_path), wrong).returncode == 0
+
+    run_cmuts(data, right)
+
+    assert not outputs_agree(wrong, right), \
+        "the substituted bases are not the ones that were scored"
 
 
 def test_the_checksum_checked_is_the_one_for_that_reference(data, tmp_path):

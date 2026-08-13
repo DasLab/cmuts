@@ -189,6 +189,31 @@ def with_secondary(data: Dataset, directory, every: int):
     return replace(data, bams=(bam,)), marked
 
 
+COMPLEMENT = str.maketrans("ACGT", "TGCA")
+
+
+def written(records, path):
+    """A FASTA holding the given sequences, by name, in the order given."""
+    path.write_text("".join(f">{name}\n{seq}\n" for name, seq in records.items()))
+
+    return path
+
+
+def substituted(data: Dataset, directory, only=None) -> Dataset:
+    """The same alignments against a FASTA agreeing on every name and length
+    and holding different bases.
+
+    Complemented, so a name and a length describe the reference as well as they
+    did and nothing but the bases can tell the two apart.
+    """
+    records = {
+        name: seq.translate(COMPLEMENT) if only is None or name in only else seq
+        for name, seq in sequences(data.fasta).items()
+    }
+
+    return replace(data, fasta=written(records, Path(directory) / "substituted.fasta"))
+
+
 def reheadered(data: Dataset, directory, transform) -> Dataset:
     """The same alignments behind a header the transform has rewritten.
 
@@ -229,6 +254,9 @@ def placements(directory, name, reference, read, cigars) -> Dataset:
 
     SAM is written directly: cmuts reads it as it reads BAM, and neither an
     index nor a conversion is needed for a file this size.
+
+    The totals are declared rather than counted, as the ones above are: this
+    writes every record itself, so what the file holds is not in question.
     """
     prefix = Path(directory) / name
     fasta = Path(f"{prefix}.fasta")

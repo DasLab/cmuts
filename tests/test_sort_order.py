@@ -6,8 +6,6 @@ when reads arrive grouped by reference.
 
 import subprocess
 
-import pytest
-
 from support import counted, reheadered, try_cmuts
 
 

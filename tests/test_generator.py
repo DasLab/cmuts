@@ -5,9 +5,9 @@ import subprocess
 
 import pytest
 
-from conftest import DATASETS
+from datasets import DATASETS
 from support import (
-    Dataset, generate, md_and_nm_tags, recomputed_md_and_nm_tags, records,
+    generate, md_and_nm_tags, recomputed_md_and_nm_tags, records,
 )
 
 

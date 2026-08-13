@@ -38,11 +38,15 @@ DIVIDED = 0.1
 # whole observation, which would leave every rate NaN.
 WEIGHTED = dict(insertion_weight=1, min_depth=0)
 
+# How far a placement's coverage may stand from the bases the read scores. The
+# band admits paths reaching a little further than the CIGAR alone.
+COVERED_TOLERANCE = 0.05
+
 CASES = [(kind, gap, run) for kind in KINDS for gap in GAPS for run in RUNS]
 CONTROLS = [(kind, gap, RUNS[0]) for kind in KINDS for gap in GAPS]
 
 
-def describe(case) -> str:
+def describe_case(case) -> str:
     kind, gap, run = case
     return f"{gap}{kind}-in-{run}"
 
@@ -96,7 +100,7 @@ def scored(kind: str, gap: int, read: str) -> int:
     return len(read) - gap if kind == "I" else len(read)
 
 
-@pytest.mark.parametrize("case", CASES, ids=describe)
+@pytest.mark.parametrize("case", CASES, ids=describe_case)
 def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
     kind, gap, run = case
     reference, read, cigars = homopolymer(kind, gap, run)
@@ -108,7 +112,8 @@ def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
     # Rows of zeros would agree with one another, so the comparison says nothing
     # unless every placement counted the read it was given.
     covered = np.nansum(written["coverage"], axis=1)
-    assert np.allclose(covered, scored(kind, gap, read), rtol=0.05, atol=0)
+    assert np.allclose(covered, scored(kind, gap, read),
+                       rtol=COVERED_TOLERANCE, atol=0)
 
     for name, rows in written.items():
         for cigar, row in zip(cigars, rows):
@@ -117,7 +122,7 @@ def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
                 f"{name} at {cigar} differs from {cigars[0]}"
 
 
-@pytest.mark.parametrize("case", CONTROLS, ids=describe)
+@pytest.mark.parametrize("case", CONTROLS, ids=describe_case)
 def test_a_band_narrower_than_the_gap_leaves_the_placements_apart(tmp_path, case):
     """Asserted over the reactivity and not the coverage: an inserted base
     covers nothing at any placement, so the coverage can agree across

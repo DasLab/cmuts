@@ -35,7 +35,7 @@ def test_a_split_file_counts_the_same_as_the_whole(data, tmp_path, parts):
     assert outputs_agree(tmp_path / "whole.h5", tmp_path / "split.h5")
 
 
-def test_more_files_than_references_still_counts_the_same(datasets, tmp_path):
+def test_a_reference_missing_from_most_of_the_files_counts_the_same(datasets, tmp_path):
     data = datasets("sparse")
 
     run_cmuts(data, tmp_path / "whole.h5")

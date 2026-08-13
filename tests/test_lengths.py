@@ -11,7 +11,7 @@ import h5py
 import numpy as np
 import pytest
 
-from conftest import DATASETS
+from datasets import DATASETS
 from support import (
     reference_lengths, rows_by_name, run_cmuts, samtools_length_histogram,
 )
