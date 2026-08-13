@@ -83,16 +83,20 @@ For the datasets whose size depends on the reference lengths, the size is always
 !!! warning
     NaNs also appear at low-depth bases in the reactivity and error datasets.
 
-## Reading a profile
+## Reading Outputs
 
 ```python
 import h5py
 import numpy as np
 
-with h5py.File("results.h5") as f:
+with h5py.File("output.h5") as f:
     reactivity = f["reactivity"][:]
-    coverage = f["coverage"][:]
+    error = f["error"][:]
+```
 
-# The bases of one reference, without the padding past its end.
-row = reactivity[0][~np.isnan(coverage[0])]
+### Signal-To-Noise
+
+```python
+snr = reactivity / error                     # per-base
+snr = np.mean(reactivity / error, axis=-1)   # per-reference
 ```

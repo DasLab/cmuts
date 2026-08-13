@@ -1,5 +1,7 @@
 # cmuts-sub
 
+## CLI Options
+
 <!-- BEGIN GENERATED cmuts-sub OPTIONS -->
 ### Arguments
 

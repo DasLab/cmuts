@@ -1,5 +1,8 @@
 # cmuts-hmm
 
+
+## CLI Options
+
 <!-- BEGIN GENERATED cmuts-hmm OPTIONS -->
 ### Arguments
 

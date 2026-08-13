@@ -1,4 +1,4 @@
-# cmuts
+# Introduction
 
 cmuts is a software suite for processing MaP-seq datasets, as well as its cousins RING-MaP and MOHCA-seq, or more generally any experiment where the readouts are mutations to a known reference sequence.
 
@@ -35,3 +35,7 @@ make install
 ```
 
 This installs all cmuts binaries to `~/.local/bin`. Pass `BINDIR` to `make` to install them elsewhere.
+
+## Next Steps
+
+- Learn about the [basics of cmuts](basics.md)

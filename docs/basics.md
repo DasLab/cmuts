@@ -1,4 +1,4 @@
-# Using cmuts
+# Basics
 
 Running cmuts requires one or more coordinate-sorted alignment files (SAM, BAM, or CRAM) and the reference FASTA to which they were aligned. For a full list of the arguments each command takes, please read their respective pages.
 

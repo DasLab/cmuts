@@ -1,5 +1,7 @@
 # cmuts-gen
 
+## CLI Options
+
 <!-- BEGIN GENERATED cmuts-gen OPTIONS -->
 ### Output
 
