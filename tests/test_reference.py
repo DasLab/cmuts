@@ -90,9 +90,9 @@ def test_a_substituted_reference_is_refused(datasets, tmp_path, name):
 @pytest.mark.parametrize("name", sorted(DATASETS))
 def test_a_reference_without_a_checksum_is_not_checked(datasets, checked, tmp_path,
                                                        name):
-    data = datasets(name)
     """Runs to the end against bases the alignments were not made from, and
     scores them: the result a checksum exists to refuse."""
+    data = datasets(name)
     wrong, right = tmp_path / "wrong.h5", tmp_path / "right.h5"
 
     assert try_cmuts(substituted(data, tmp_path), wrong).returncode == 0
@@ -140,8 +140,8 @@ def test_a_checksum_on_a_single_reference_is_still_checked(datasets, checked,
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
 def test_a_checksum_is_read_whatever_its_case(datasets, tmp_path, name):
-    data = datasets(name)
     """The SAM spec fixes M5 as hexadecimal without fixing its case."""
+    data = datasets(name)
     shouting = with_checksums(data, tmp_path, checksum=lambda seq: md5(seq).upper())
 
     assert try_cmuts(shouting, tmp_path / "out.h5").returncode == 0
@@ -149,8 +149,8 @@ def test_a_checksum_is_read_whatever_its_case(datasets, tmp_path, name):
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
 def test_a_soft_masked_reference_hashes_as_an_upper_case_one(datasets, tmp_path, name):
-    data = datasets(name)
     """The SAM spec defines M5 over the sequence uppercased."""
+    data = datasets(name)
     masked = replace(data, fasta=written(
         {name: seq.lower() for name, seq in sequences(data.fasta).items()},
         tmp_path / "masked.fasta"))

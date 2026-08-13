@@ -15,8 +15,8 @@
 
 int main(int argc, char **argv)
 {
-    cli_args defaults = cmuts_defaults();
-    cli_spec spec     = cmuts_spec(&defaults);
+    cli_args defaults = cmuts_hmm_defaults();
+    cli_spec spec     = cmuts_hmm_spec(&defaults);
     cli_args args;
     char     error[CM_ERROR_MAX];
 

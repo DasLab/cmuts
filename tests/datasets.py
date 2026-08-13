@@ -35,7 +35,7 @@ DATASETS = {
     "lowqual": dict(seed=107, references=15, reads_per_ref=20, mapq=0),
 
     # 255 alongside a quality that passes and one that does not: the SAM spec's
-    # "unavailable", which cmuts refuses at every threshold and samtools admits
+    # "unavailable", which cmuts-hmm refuses at every threshold and samtools admits
     # at every one.
     "unavailable": dict(seed=112, references=15, reads_per_ref=20,
                         mapq="0,60,255"),

@@ -1,7 +1,7 @@
 """Several files counted as one.
 
 Each reference has a single row in the output no matter how many files its reads
-came from, so cmuts merges the files on the reference instead of running them
+came from, so cmuts-hmm merges the files on the reference instead of running them
 one after another, which would overwrite the first row with the second.
 """
 

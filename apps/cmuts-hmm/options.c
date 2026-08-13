@@ -1,4 +1,4 @@
-/* options.c -- cmuts's command line, as one table.
+/* options.c -- cmuts-hmm's command line, as one table.
  *
  * Rows use designated initializers, so that a field added to cli_option takes its default
  * rather than having to be spelled out in every row.
@@ -119,15 +119,15 @@ static const cli_positional POSITIONALS[] = {
       .variadic = true, .count_offset = offsetof(cli_args, pipeline.n_bams) },
 };
 
-cli_args cmuts_defaults(void)
+cli_args cmuts_hmm_defaults(void)
 {
     return (cli_args){ .pipeline = pipeline_defaults() };
 }
 
-cli_spec cmuts_spec(const cli_args *defaults)
+cli_spec cmuts_hmm_spec(const cli_args *defaults)
 {
     return (cli_spec){
-        .program       = "cmuts",
+        .program       = "cmuts-hmm",
         .version       = CMUTS_VERSION,
         .summary       = "Fast, multithreaded pair-HMM counting of MaP-seq mutations.",
         .options       = OPTIONS,

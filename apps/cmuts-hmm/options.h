@@ -1,4 +1,4 @@
-/* options.h -- what cmuts accepts on the command line.
+/* options.h -- what cmuts-hmm accepts on the command line.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -18,7 +18,7 @@ typedef struct {
     pipeline_config pipeline;
 } cli_args;
 
-cli_args cmuts_defaults(void);
+cli_args cmuts_hmm_defaults(void);
 
 /* The spec borrows defaults, which must outlive it. */
-cli_spec cmuts_spec(const cli_args *defaults);
+cli_spec cmuts_hmm_spec(const cli_args *defaults);

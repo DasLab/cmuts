@@ -1,12 +1,12 @@
 """Running the programs under test, and asking samtools what to expect.
 
 samtools is the oracle: it decides independently how many reads should survive
-a set of criteria, and the tests ask only whether cmuts agrees. Nothing here
+a set of criteria, and the tests ask only whether cmuts-hmm agrees. Nothing here
 inspects what the processing step computed, so these tests stay valid however
 that changes.
 
 Alignments built here by hand have no oracle. They carry an ambiguity the
-reference cannot resolve, and what is asked of them is that cmuts answers it the
+reference cannot resolve, and what is asked of them is that cmuts-hmm answers it the
 same way however the ambiguity was written down.
 """
 
@@ -25,10 +25,10 @@ from outputs import RATES
 
 ROOT = Path(__file__).resolve().parent.parent
 
-CMUTS = "cmuts"
+CMUTS_HMM = "cmuts-hmm"
 CMUTS_GEN = "cmuts-gen"
 CMUTS_SUB = "cmuts-sub"
-PROGRAMS = (CMUTS, CMUTS_GEN, CMUTS_SUB)
+PROGRAMS = (CMUTS_HMM, CMUTS_GEN, CMUTS_SUB)
 
 
 def located(name: str) -> Path | None:
@@ -37,7 +37,7 @@ def located(name: str) -> Path | None:
 
     make check puts the build directory first on PATH, which is what decides
     between an ordinary build and a sanitized one. A search that got as far as
-    an installed cmuts would test whatever was installed, whenever that was, so
+    an installed cmuts-hmm would test whatever was installed, whenever that was, so
     anything outside the repository counts as not found.
     """
     found = shutil.which(name)
@@ -73,7 +73,7 @@ class Dataset:
     """Alignments and the reference they came from, with the totals that no
     later filter can change.
 
-    The alignments may be spread over several files, which cmuts reads as one.
+    The alignments may be spread over several files, which cmuts-hmm reads as one.
     The totals are of them all, so they carry over a split.
     """
 
@@ -218,7 +218,7 @@ def reheadered(data: Dataset, directory, transform) -> Dataset:
     """The same alignments behind a header the transform has rewritten.
 
     Only the header changes, so the totals carry over and any difference in
-    what cmuts does is down to what the header says.
+    what cmuts-hmm does is down to what the header says.
     """
     header = Path(directory) / "header.sam"
     header.write_text(transform(_run(["samtools", "view", "-H", data.bam]).stdout))
@@ -252,7 +252,7 @@ def placements(directory, name, reference, read, cigars) -> Dataset:
     the output differ only in how the alignment was written. Each takes the name of
     the CIGAR it carries, which is what a failure has to report.
 
-    SAM is written directly: cmuts reads it as it reads BAM, and neither an
+    SAM is written directly: cmuts-hmm reads it as it reads BAM, and neither an
     index nor a conversion is needed for a file this size.
 
     The totals are declared rather than counted, as the ones above are: this
@@ -329,9 +329,9 @@ SEQUENCE_COLUMN = 9
 def surviving(data: Dataset, min_mapq: int, strand: str) -> list:
     """The records passing a mapping quality and a strand.
 
-    Unmapped and secondary reads are excluded, as cmuts excludes them under
+    Unmapped and secondary reads are excluded, as cmuts-hmm excludes them under
     every criterion, and so are the reads of unavailable mapping quality:
-    samtools admits those at every -q and cmuts refuses them at every bound,
+    samtools admits those at every -q and cmuts-hmm refuses them at every bound,
     which is a deliberate divergence and belongs to the oracle rather than to
     each test consulting it.
     """
@@ -351,7 +351,7 @@ def samtools_kept(
 
     samtools takes strand and mapping quality as flags but not length, so this
     measures the sequence column directly. A bound of zero is left unapplied,
-    matching what cmuts does with one unset.
+    matching what cmuts-hmm does with one unset.
     """
     lengths = (
         len(line.split("\t")[SEQUENCE_COLUMN])
@@ -440,7 +440,7 @@ def recomputed_md_and_nm_tags(data: Dataset, directory):
 
 
 # ---------------------------------------------------------------------------
-# What cmuts says
+# What cmuts-hmm says
 # ---------------------------------------------------------------------------
 
 
@@ -468,7 +468,7 @@ def read_summary(path) -> Summary:
 
 
 def _cmuts_command(data: Dataset, output, workers: int, options):
-    command = [CMUTS, "-f", data.fasta, "-o", output, "-j", workers]
+    command = [CMUTS_HMM, "-f", data.fasta, "-o", output, "-j", workers]
 
     for key, value in options.items():
         # A flag carries no value of its own.

@@ -59,7 +59,7 @@ def test_every_format_gives_the_same_answer(datasets, tmp_path, name, fmt, filte
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
 def test_cram_decodes_against_the_reference_it_was_given(datasets, tmp_path, name):
-    """Renames the reference recorded in the CRAM header aside, leaving cmuts
+    """Renames the reference recorded in the CRAM header aside, leaving cmuts-hmm
     no source for the bases but --fasta."""
     native = datasets(name)
     data = converted(native, tmp_path, "cram")
@@ -73,7 +73,7 @@ def test_cram_decodes_against_the_reference_it_was_given(datasets, tmp_path, nam
     with unreachable(data.fasta):
         run_cmuts(hidden, tmp_path / "cram.h5")
 
-    # Read counts agree whichever reference cmuts decoded against, so only the
+    # Read counts agree whichever reference cmuts-hmm decoded against, so only the
     # per-base fields show which one it used.
     assert outputs_agree(tmp_path / "cram.h5", tmp_path / "bam.h5")
 

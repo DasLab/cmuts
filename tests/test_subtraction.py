@@ -40,7 +40,7 @@ COMBINED = [field.name for field in FIELDS] + [RUN_TOTAL]
 
 @pytest.fixture(params=["plain", "chunked"])
 def storage(request):
-    """The two ways an input may be stored. cmuts writes chunked, shuffled and
+    """The two ways an input may be stored. cmuts-hmm writes chunked, shuffled and
     deflated, and the result must be the same either way, so every test that
     reads values runs against both."""
     return request.param
@@ -92,18 +92,18 @@ def everything(seed, n_refs=N_REFS, cap=CAP):
 
 
 # ---------------------------------------------------------------------------
-# The layout, which is shared with cmuts
+# The layout, which is shared with cmuts-hmm
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_the_layout_written_here_is_the_one_cmuts_writes(datasets, tmp_path, name):
-    data = datasets(name)
-    """Checks the description in outputs.py against a real cmuts run.
+def test_the_layout_written_here_is_the_one_cmuts_hmm_writes(datasets, tmp_path, name):
+    """Checks the description in outputs.py against a real cmuts-hmm run.
 
     Compares names, types and widths and never a value, which keeps the
     reactivity calculation out of the comparison.
     """
+    data = datasets(name)
     counted = tmp_path / "counted.h5"
     run_cmuts(data, counted)
     real = layout_of(counted)
@@ -578,10 +578,10 @@ def test_both_inputs_are_required(build, tmp_path):
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_it_reads_what_cmuts_writes(datasets, tmp_path, name):
-    data = datasets(name)
+def test_it_reads_what_cmuts_hmm_writes(datasets, tmp_path, name):
     """Asserts nothing about any value, only that the run succeeds and leaves
     a file shaped like its inputs."""
+    data = datasets(name)
     treated = tmp_path / "treated.h5"
     untreated = tmp_path / "untreated.h5"
 

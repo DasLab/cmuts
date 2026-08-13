@@ -126,7 +126,7 @@ void queue_push_all(queue *q, void *const *items, size_t n)
         return;
     }
 
-    fputs("cmuts: a closed queue refused work that had nowhere else to go\n", stderr);
+    fputs("cmuts-hmm: a closed queue refused work that had nowhere else to go\n", stderr);
     abort();
 }
 

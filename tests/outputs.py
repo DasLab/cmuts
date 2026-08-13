@@ -2,13 +2,13 @@
 
 cmuts-sub takes two outputs and writes a third. Its result depends only on the
 values in those files and not on how they were produced, so nothing here runs
-cmuts to obtain them: the inputs are written directly, with values chosen to
+cmuts-hmm to obtain them: the inputs are written directly, with values chosen to
 exercise each rule. Tests built this way cover only the subtraction, and remain
 valid if the reactivity calculation changes.
 
 The layout is the one thing the two programs share. It is written out here
-rather than read from a cmuts run, so that the description is a contract and
-not a copy of whatever cmuts currently produces.
+rather than read from a cmuts-hmm run, so that the description is a contract and
+not a copy of whatever cmuts-hmm currently produces.
 """
 
 from __future__ import annotations
@@ -178,7 +178,7 @@ def _values(field: Field, n_refs: int, cap: int, given) -> np.ndarray:
 
 def _storage(storage: str, wanted: tuple) -> dict:
     """How the datasets are stored, which a reader's result must not depend on.
-    cmuts writes chunked, shuffled and deflated; a plainly written file holds
+    cmuts-hmm writes chunked, shuffled and deflated; a plainly written file holds
     the same values and is the other case worth reading.
 
     A dataset with no rows cannot be chunked, so this writes an empty one

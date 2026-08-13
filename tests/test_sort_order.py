@@ -1,4 +1,4 @@
-"""cmuts requires a coordinate-sorted file and must say so.
+"""cmuts-hmm requires a coordinate-sorted file and must say so.
 
 A reference is finished the moment the reader moves past it, which holds only
 when reads arrive grouped by reference.
@@ -82,8 +82,8 @@ def test_an_hd_line_without_a_sort_order_is_refused(datasets, tmp_path, name):
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
 def test_a_sort_order_on_a_line_that_is_not_hd_is_refused(datasets, tmp_path, name):
-    data = datasets(name)
     """The SAM spec carries the sort order on @HD and nowhere else."""
+    data = datasets(name)
     def rewrite(text):
         lines = [line for line in text.splitlines() if not line.startswith("@HD")]
         lines[0] = lines[0].replace("@SQ\t", "@SQ\tSO:coordinate\t", 1)
