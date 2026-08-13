@@ -1,0 +1,25 @@
+name: Dependencies
+description: What cmuts is built against, and what its tests are run with.
+
+runs:
+  using: composite
+  steps:
+    # samtools is the oracle the tests compare against, not a build dependency.
+    - name: Install the libraries and samtools
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" = macOS ]; then
+          brew install htslib hdf5 samtools
+        else
+          sudo apt-get update
+          sudo apt-get install -y libhts-dev libhdf5-dev samtools pkg-config
+        fi
+
+    - uses: astral-sh/setup-uv@v5
+
+    # make takes .venv/bin/python where it finds one.
+    - name: Install the test dependencies
+      shell: bash
+      run: |
+        uv venv .venv
+        uv pip install --python .venv/bin/python --group dev
