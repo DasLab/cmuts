@@ -16,12 +16,8 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
 
-nav:
-  - Home: index.md
-  - Running cmuts: running.md
-  - The output file: output.md
-  - How cmuts counts: counting.md
-
 markdown_extensions:
   - admonition
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
