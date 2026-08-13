@@ -15,7 +15,6 @@
 #include "h5reader.h"
 #include "h5writer.h"
 #include "output.h"
-#include "version.h"
 
 typedef enum {
     SUB_TREATED,
@@ -36,37 +35,7 @@ typedef enum {
     SUB_QUADRATURE,
     SUB_RATIO,
     SUB_RATIO_ERROR,
-    SUB_N_RULES,
 } sub_rule;
-
-typedef struct {
-    const char *name;
-    const char *detail;  /* what the rule does to the values, in one phrase */
-} sub_rule_description;
-
-static const sub_rule_description DESCRIPTIONS[SUB_N_RULES] = {
-    [SUB_SUM] = {
-        .name   = "sum",
-        .detail = "every input added",
-    },
-    [SUB_DIFFERENCE] = {
-        .name   = "difference",
-        .detail = "the untreated value taken from the treated one",
-    },
-    [SUB_QUADRATURE] = {
-        .name   = "quadrature",
-        .detail = "the two added in quadrature",
-    },
-    [SUB_RATIO] = {
-        .name   = "ratio",
-        .detail = "that difference over the control's value, and missing where the "
-                  "control measured nothing to divide by",
-    },
-    [SUB_RATIO_ERROR] = {
-        .name   = "ratio error",
-        .detail = "the error of that ratio, taking the three runs as independent",
-    },
-};
 
 static const sub_rule RULES[OUT_N_FIELDS][SUB_N_MODES] = {
     [OUT_COVERAGE]   = { SUB_SUM,        SUB_SUM         },
@@ -262,8 +231,6 @@ static int combine_f32(const subtraction *s, sub_rule how, const void *const *in
             gather_f32(s, OUT_REACTIVITY, rate);
             ratio_error_f32(rate, v, out, n);
             return 0;
-        case SUB_N_RULES:
-            break;
     }
 
     return -1;
@@ -586,31 +553,4 @@ int subtract_run(const subtract_config *cfg, char *error, size_t error_len)
 
     subtraction_teardown(&s);
     return status;
-}
-
-/* ------------------------------------------------------------------------ */
-/* The rules, described                                                      */
-/* ------------------------------------------------------------------------ */
-
-void subtract_dump_rules(FILE *out)
-{
-    fprintf(out, "{\n  \"version\": \"%s\",\n  \"fields\": [\n", CMUTS_VERSION);
-
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        const sub_rule_description *alone = &DESCRIPTIONS[RULES[id][SUB_UNCONTROLLED]];
-        const sub_rule_description *controlled = &DESCRIPTIONS[RULES[id][SUB_CONTROLLED]];
-
-        fprintf(out,
-                "    {\n"
-                "      \"name\": \"%s\",\n"
-                "      \"uncontrolled\": { \"rule\": \"%s\", \"detail\": \"%s\" },\n"
-                "      \"controlled\": { \"rule\": \"%s\", \"detail\": \"%s\" }\n"
-                "    }%s\n",
-                OUT_FIELDS[id].name,
-                alone->name, alone->detail,
-                controlled->name, controlled->detail,
-                id + 1 < OUT_N_FIELDS ? "," : "");
-    }
-
-    fprintf(out, "  ]\n}\n");
 }
