@@ -9,7 +9,6 @@
 [dependency-groups]
 dev = [
     "pytest",
-    "hypothesis",
     "h5py",
     "numpy",
 ]
