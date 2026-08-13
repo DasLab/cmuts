@@ -420,7 +420,7 @@ def test_a_background_of_zeros_leaves_the_treated_run_unchanged(build, subtract)
 
     output = subtract(treated, nothing)
 
-    for name in ("reactivity", "error", "coverage", "reads/counted"):
+    for name in COMBINED:
         assert np.array_equal(field_of(output, name), field_of(treated, name)), name
 
 
