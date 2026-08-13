@@ -214,6 +214,11 @@ def substituted(data: Dataset, directory, only=None) -> Dataset:
     return replace(data, fasta=written(records, Path(directory) / "substituted.fasta"))
 
 
+def header_of(data: Dataset) -> str:
+    """The header samtools prints for the file, as text."""
+    return _run(["samtools", "view", "-H", data.bam]).stdout
+
+
 def reheadered(data: Dataset, directory, transform) -> Dataset:
     """The same alignments behind a header the transform has rewritten.
 
@@ -221,7 +226,7 @@ def reheadered(data: Dataset, directory, transform) -> Dataset:
     what cmuts-hmm does is down to what the header says.
     """
     header = Path(directory) / "header.sam"
-    header.write_text(transform(_run(["samtools", "view", "-H", data.bam]).stdout))
+    header.write_text(transform(header_of(data)))
 
     bam = Path(directory) / "reheadered.bam"
     with open(bam, "wb") as handle:

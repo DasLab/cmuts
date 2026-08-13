@@ -17,15 +17,18 @@ from support import (
 
 @pytest.mark.parametrize("filters", FILTERS, ids=describe_filters)
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_read_counts_match_samtools(datasets, tmp_path, name, filters):
+def test_read_counts_match_samtools(datasets, falsifiable, tmp_path, name, filters):
     data = datasets(name)
+
+    falsifiable(data.mapped > 0)
+
     summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))
 
     assert_counts_agree(summary, data, criteria(filters))
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_an_unavailable_mapping_quality_is_refused(datasets, checked, tmp_path, name):
+def test_an_unavailable_mapping_quality_is_refused(datasets, falsifiable, tmp_path, name):
     """Counted from the records here rather than taken from samtools_kept,
     which is told of the same divergence and would agree with a filter that
     never applied it."""
@@ -34,17 +37,20 @@ def test_an_unavailable_mapping_quality_is_refused(datasets, checked, tmp_path, 
     unavailable = [line for line in mapped
                    if int(line.split("\t")[MAPQ_COLUMN]) == UNAVAILABLE_MAPQ]
 
-    summary = run_cmuts(data, tmp_path / "out.h5", **UNFILTERED)
+    falsifiable(len(unavailable) > 0)
 
-    checked(unavailable)
+    summary = run_cmuts(data, tmp_path / "out.h5", **UNFILTERED)
 
     assert summary.kept == len(mapped) - len(unavailable), \
         "a read of unavailable mapping quality survived a threshold of zero"
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_rejecting_everything_leaves_a_valid_file(datasets, tmp_path, name):
+def test_rejecting_everything_leaves_a_valid_file(datasets, falsifiable, tmp_path, name):
     data = datasets(name)
+
+    falsifiable(data.mapped > 0)
+
     summary = run_cmuts(data, tmp_path / "out.h5", min_length=9000)
 
     assert summary.kept == 0
@@ -58,10 +64,10 @@ EVERY_THIRD = 3
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_secondary_alignments_are_refused(datasets, checked, tmp_path, name):
+def test_secondary_alignments_are_refused(datasets, falsifiable, tmp_path, name):
     data, marked = with_secondary(datasets(name), tmp_path, every=EVERY_THIRD)
 
-    checked(marked)
+    falsifiable(marked > 0)
 
     summary = run_cmuts(data, tmp_path / "out.h5", **UNFILTERED)
 

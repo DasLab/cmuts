@@ -46,10 +46,14 @@ def unreachable(path):
 @pytest.mark.parametrize("filters", CRITERIA, ids=describe_filters)
 @pytest.mark.parametrize("fmt", FORMATS)
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_every_format_gives_the_same_answer(datasets, tmp_path, name, fmt, filters):
+def test_every_format_gives_the_same_answer(datasets, falsifiable, tmp_path, name, fmt,
+                                            filters):
     native = datasets(name)
     data = converted(native, tmp_path, fmt)
     summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))
+
+    # Only a run that kept reads compares what the format stored.
+    falsifiable(summary.kept > 0)
 
     assert_counts_agree(summary, data, criteria(filters))
 
@@ -58,7 +62,8 @@ def test_every_format_gives_the_same_answer(datasets, tmp_path, name, fmt, filte
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_cram_decodes_against_the_reference_it_was_given(datasets, tmp_path, name):
+def test_cram_decodes_against_the_reference_it_was_given(datasets, falsifiable,
+                                                         tmp_path, name):
     """Renames the reference recorded in the CRAM header aside, leaving cmuts-hmm
     no source for the bases but --fasta."""
     native = datasets(name)
@@ -71,22 +76,29 @@ def test_cram_decodes_against_the_reference_it_was_given(datasets, tmp_path, nam
     run_cmuts(native, tmp_path / "bam.h5")
 
     with unreachable(data.fasta):
-        run_cmuts(hidden, tmp_path / "cram.h5")
+        summary = run_cmuts(hidden, tmp_path / "cram.h5")
 
     # Read counts agree whichever reference cmuts-hmm decoded against, so only the
-    # per-base fields show which one it used.
+    # per-base fields show which one it used. cmuts-hmm writes those from reads.
+    falsifiable(summary.kept > 0)
+
     assert outputs_agree(tmp_path / "cram.h5", tmp_path / "bam.h5")
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_cram_is_refused_against_bases_it_was_not_written_from(datasets, tmp_path,
-                                                                 name):
+def test_a_cram_is_refused_against_bases_it_was_not_written_from(datasets, falsifiable,
+                                                                 tmp_path, name):
     """A CRAM stores its sequences as differences from a reference and carries
     an M5 for each, samtools declaring one as it converts. Decoding it against
     other bases fails in htslib, before the checksum in the header is reached,
     so this asserts the refusal and not the reason given for it.
     """
-    data = converted(datasets(name), tmp_path, "cram")
+    native = datasets(name)
+    data = converted(native, tmp_path, "cram")
+
+    # htslib fails while decoding a record, so a file holding none never
+    # reaches the refusal.
+    falsifiable(native.mapped > 0)
 
     attempt = try_cmuts(substituted(data, tmp_path), tmp_path / "out.h5")
 

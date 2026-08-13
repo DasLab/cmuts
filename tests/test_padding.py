@@ -123,13 +123,15 @@ def scored(datasets, tmp_path):
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_positions_past_a_reference_are_nan(scored, checked, name):
+def test_positions_past_a_reference_are_nan(scored, falsifiable, name):
     run = scored(name)
+
+    falsifiable(len(run.shorter) > 0)
 
     with h5py.File(run.output, "r") as handle:
         fields = per_base(handle)
 
-    for reference in checked(run.shorter):
+    for reference in run.shorter:
         for field, values in fields.items():
             tail = values[run.row_of[reference]][run.lengths[reference]:]
 
@@ -138,13 +140,15 @@ def test_positions_past_a_reference_are_nan(scored, checked, name):
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_positions_within_a_reference_are_never_nan(scored, checked, name):
+def test_positions_within_a_reference_are_never_nan(scored, falsifiable, name):
     run = scored(name)
+
+    falsifiable(len(run.reached) > 0)
 
     with h5py.File(run.output, "r") as handle:
         fields = padded(handle)
 
-    for reference in checked(run.reached):
+    for reference in run.reached:
         for field, values in fields.items():
             within = values[run.row_of[reference]][:run.lengths[reference]]
 
@@ -157,13 +161,15 @@ def test_positions_within_a_reference_are_never_nan(scored, checked, name):
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_reference_with_no_reads_is_zero_over_its_own_bases(scored, checked, name):
+def test_a_reference_with_no_reads_is_zero_over_its_own_bases(scored, falsifiable, name):
     run = scored(name)
+
+    falsifiable(len(run.missing) > 0)
 
     with h5py.File(run.output, "r") as handle:
         counted, holes, totals = counts(handle), padded(handle), per_reference(handle)
 
-    for reference in checked(run.missing):
+    for reference in run.missing:
         row = run.row_of[reference]
         length = run.lengths[reference]
 
@@ -185,14 +191,16 @@ def test_a_reference_with_no_reads_is_zero_over_its_own_bases(scored, checked, n
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_an_uncovered_reference_of_full_length_holds_no_nan(scored, checked, name):
+def test_an_uncovered_reference_of_full_length_holds_no_nan(scored, falsifiable, name):
     run = scored(name)
     full_length = [name for name in run.missing if run.lengths[name] == run.widest]
+
+    falsifiable(len(full_length) > 0)
 
     with h5py.File(run.output, "r") as handle:
         holes, counted = padded(handle), counts(handle)
 
-    for reference in checked(full_length):
+    for reference in full_length:
         row = run.row_of[reference]
 
         for field, values in holes.items():
@@ -203,13 +211,15 @@ def test_an_uncovered_reference_of_full_length_holds_no_nan(scored, checked, nam
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_reference_whose_reads_were_all_rejected_is_zero(scored, checked, name):
+def test_a_reference_whose_reads_were_all_rejected_is_zero(scored, falsifiable, name):
     run = scored(name, min_mapq=REJECTS_EVERYTHING)
+
+    falsifiable(len(run.reached) > 0)
 
     with h5py.File(run.output, "r") as handle:
         holes, counted, totals = padded(handle), counts(handle), per_reference(handle)
 
-    for reference in checked(run.reached):
+    for reference in run.reached:
         row = run.row_of[reference]
         length = run.lengths[reference]
 
@@ -234,7 +244,7 @@ def test_a_reference_whose_reads_were_all_rejected_is_zero(scored, checked, name
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_rate_is_known_wherever_its_error_is(scored, checked, name):
+def test_a_rate_is_known_wherever_its_error_is(scored, falsifiable, name):
     """Separates the two reasons a rate is NaN by the coverage, which is NaN
     outside a reference only."""
     run = scored(name)
@@ -244,6 +254,10 @@ def test_a_rate_is_known_wherever_its_error_is(scored, checked, name):
         error = handle["error"][:]
         coverage = handle["coverage"][:]
 
+    finite = reactivity[~np.isnan(reactivity)]
+
+    falsifiable(finite.size > 0)
+
     assert np.array_equal(np.isnan(reactivity), np.isnan(error)), \
         "the rate and its error disagree about what is known"
 
@@ -251,14 +265,12 @@ def test_a_rate_is_known_wherever_its_error_is(scored, checked, name):
     assert np.isnan(reactivity[np.isnan(coverage)]).all(), \
         "a rate outside a reference is not NaN"
 
-    finite = checked(reactivity[~np.isnan(reactivity)])
-
     assert ((finite >= 0) & (finite <= 1)).all(), \
         f"a rate of {finite.min()} to {finite.max()} lies outside zero to one"
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_raising_the_minimum_depth_only_discards_rates(scored, checked, name):
+def test_raising_the_minimum_depth_only_discards_rates(scored, falsifiable, name):
     missing = {}
 
     for depth in DEPTHS:
@@ -267,15 +279,15 @@ def test_raising_the_minimum_depth_only_discards_rates(scored, checked, name):
         with h5py.File(run.output, "r") as handle:
             missing[depth] = np.isnan(handle["reactivity"][:])
 
+    falsifiable(missing[DEPTHS[-1]].sum() > missing[DEPTHS[0]].sum())
+
     for lower, higher in itertools.pairwise(DEPTHS):
         assert (missing[higher] >= missing[lower]).all(), \
             f"depth {higher} recovered a rate that depth {lower} had not"
 
-    checked(missing[DEPTHS[-1]].sum() - missing[DEPTHS[0]].sum())
-
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_an_error_at_a_full_read_of_depth_is_at_most_a_half(scored, checked, name):
+def test_an_error_at_a_full_read_of_depth_is_at_most_a_half(scored, falsifiable, name):
     """Runs at --min-depth 1, below which the standard error of a proportion
     can exceed a half."""
     run = scored(name, min_depth=1)
@@ -283,6 +295,8 @@ def test_an_error_at_a_full_read_of_depth_is_at_most_a_half(scored, checked, nam
     with h5py.File(run.output, "r") as handle:
         error = handle["error"][:]
 
-    finite = checked(error[~np.isnan(error)])
+    finite = error[~np.isnan(error)]
+
+    falsifiable(finite.size > 0)
 
     assert (finite <= 0.5).all(), f"an error of {finite.max()} over a whole read"

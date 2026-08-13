@@ -97,7 +97,8 @@ def everything(seed, n_refs=N_REFS, cap=CAP):
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_the_layout_written_here_is_the_one_cmuts_hmm_writes(datasets, tmp_path, name):
+def test_the_layout_written_here_is_the_one_cmuts_hmm_writes(datasets, falsifiable,
+                                                             tmp_path, name):
     """Checks the description in outputs.py against a real cmuts-hmm run.
 
     Compares names, types and widths and never a value, which keeps the
@@ -111,6 +112,9 @@ def test_the_layout_written_here_is_the_one_cmuts_hmm_writes(datasets, tmp_path,
     assert set(real) == {field.name for field in FIELDS} | {RUN_TOTAL}
 
     n_refs, cap = real["coverage"][0]
+
+    # The widths compared below come from the rows, one per reference.
+    falsifiable(n_refs > 0)
 
     for field in FIELDS:
         found, dtype = real[field.name]
@@ -578,15 +582,17 @@ def test_both_inputs_are_required(build, tmp_path):
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_it_reads_what_cmuts_hmm_writes(datasets, tmp_path, name):
+def test_it_reads_what_cmuts_hmm_writes(datasets, falsifiable, tmp_path, name):
     """Asserts nothing about any value, only that the run succeeds and leaves
     a file shaped like its inputs."""
     data = datasets(name)
     treated = tmp_path / "treated.h5"
     untreated = tmp_path / "untreated.h5"
 
-    run_cmuts(data, treated)
+    summary = run_cmuts(data, treated)
     run_cmuts(data, untreated, min_mapq=30)
+
+    falsifiable(summary.rows > 0)
 
     output = run_subtract(treated, untreated, tmp_path / "difference.h5")
 

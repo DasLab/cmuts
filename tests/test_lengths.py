@@ -66,16 +66,16 @@ def compare(output, data, min_mapq) -> Compared:
 
 @pytest.mark.parametrize("min_mapq", CRITERIA)
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_histogram_matches_samtools(datasets, checked, tmp_path, name, min_mapq):
+def test_histogram_matches_samtools(datasets, falsifiable, tmp_path, name, min_mapq):
     data = datasets(name)
     output = tmp_path / f"{name}.h5"
     run_cmuts(data, output, min_mapq=min_mapq)
 
-    checked(compare(output, data, min_mapq).references)
+    falsifiable(compare(output, data, min_mapq).references > 0)
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_read_longer_than_the_range_is_counted_only_by_the_total(datasets, checked,
+def test_a_read_longer_than_the_range_is_counted_only_by_the_total(datasets, falsifiable,
                                                                    tmp_path, name):
     """A row is short by the reads no bin could hold and by nothing else, which
     where none is too long leaves every row summing to the reads counted for
@@ -86,6 +86,8 @@ def test_a_read_longer_than_the_range_is_counted_only_by_the_total(datasets, che
     run_cmuts(data, output, min_mapq=0)
 
     outside = compare(output, data, min_mapq=0).outside
+
+    falsifiable(outside > 0)
 
     with h5py.File(output, "r") as handle:
         # Signed, so that a row holding more reads than were counted comes out
@@ -98,5 +100,3 @@ def test_a_read_longer_than_the_range_is_counted_only_by_the_total(datasets, che
     assert (missing >= 0).all(), "a row holds more reads than were counted"
     assert missing.sum() == outside, \
         "the reads outside the range are not what the total is short by"
-
-    checked(outside)

@@ -47,7 +47,7 @@ def reactivity(output):
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_weighing_every_difference_at_zero_leaves_nothing_counted(datasets, checked,
+def test_weighing_every_difference_at_zero_leaves_nothing_counted(datasets, falsifiable,
                                                                   tmp_path, name):
     """A difference worth nothing reaches no total, whatever the alignment says
     it is: the rates come to zero rather than to something small."""
@@ -58,7 +58,7 @@ def test_weighing_every_difference_at_zero_leaves_nothing_counted(datasets, chec
 
     reactivity, error = rates(output)
 
-    checked(reactivity)
+    falsifiable(reactivity.size > 0)
 
     assert (reactivity == 0).all(), f"a rate of {reactivity.max()} with nothing weighed"
     assert (error == 0).all(), f"an error of {error.max()} with nothing weighed"
@@ -67,7 +67,7 @@ def test_weighing_every_difference_at_zero_leaves_nothing_counted(datasets, chec
 @pytest.mark.parametrize("scale", SCALES)
 @pytest.mark.parametrize("name", sorted(DATASETS))
 def test_scaling_the_weights_scales_every_rate_by_the_same_factor(
-    datasets, checked, tmp_path, name, scale,
+    datasets, falsifiable, tmp_path, name, scale,
 ):
     """Insertions are weighed at zero throughout, they being the kind that
     reaches the denominator as well."""
@@ -83,11 +83,11 @@ def test_scaling_the_weights_scales_every_rate_by_the_same_factor(
     before, after = reactivity(full), reactivity(scaled)
     known = ~np.isnan(before)
 
+    # A rate of zero scales to zero whatever the factor, so only the positions
+    # carrying one say anything about the weights.
+    falsifiable((before[known] > 0).any())
+
     assert np.array_equal(np.isnan(before), np.isnan(after)), \
         "the positions carrying a rate are not the same ones"
     assert np.array_equal(after[known], scale * before[known]), \
         "a rate is not the weights' own multiple of itself"
-
-    # A rate of zero scales to zero whatever the factor, so only the positions
-    # carrying one say anything about the weights.
-    checked(before[known][before[known] > 0])

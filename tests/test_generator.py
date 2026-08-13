@@ -12,27 +12,43 @@ from support import (
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_md_and_nm_match_samtools(datasets, tmp_path, name):
+def test_md_and_nm_match_samtools(datasets, falsifiable, tmp_path, name):
     """samtools recomputes both from nothing but the alignment and the reference, so
     agreement checks the generator against something other than itself."""
     data = datasets(name)
+    tags = md_and_nm_tags(data.bam)
 
-    assert md_and_nm_tags(data.bam) == recomputed_md_and_nm_tags(data, tmp_path)
+    falsifiable(len(tags) > 0)
+
+    assert tags == recomputed_md_and_nm_tags(data, tmp_path)
+
+
+def _alignments_in(data) -> int:
+    """How many records the file holds, placed on a reference or not."""
+    return data.mapped + data.unmapped
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_alignments_are_well_formed(datasets, name):
-    subprocess.run(["samtools", "quickcheck", str(datasets(name).bam)], check=True)
+def test_alignments_are_well_formed(datasets, falsifiable, name):
+    data = datasets(name)
+
+    falsifiable(_alignments_in(data) > 0)
+
+    subprocess.run(["samtools", "quickcheck", str(data.bam)], check=True)
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_coordinate_sorted_without_sorting(datasets, name):
-    subprocess.run(["samtools", "index", str(datasets(name).bam)],
+def test_coordinate_sorted_without_sorting(datasets, falsifiable, name):
+    data = datasets(name)
+
+    falsifiable(_alignments_in(data) > 0)
+
+    subprocess.run(["samtools", "index", str(data.bam)],
                    check=True, capture_output=True)
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_header_lengths_match_the_reference(datasets, name):
+def test_header_lengths_match_the_reference(datasets, falsifiable, name):
     data = datasets(name)
     declared = {}
 
@@ -41,6 +57,8 @@ def test_header_lengths_match_the_reference(datasets, name):
             continue
         fields = dict(field.split(":", 1) for field in line.split("\t")[1:])
         declared[fields["SN"]] = int(fields["LN"])
+
+    falsifiable(len(declared) > 0)
 
     actual, name = {}, None
     for line in data.fasta.read_text().splitlines():
@@ -89,13 +107,13 @@ def _divergences(data):
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_read_can_store_more_than_the_span_it_aligns_to(datasets, checked, name):
-    checked(_divergences(datasets(name))[0])
+def test_a_read_can_store_more_than_the_span_it_aligns_to(datasets, falsifiable, name):
+    falsifiable(_divergences(datasets(name))[0] > 0)
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_read_can_store_less_than_the_span_it_aligns_to(datasets, checked, name):
-    checked(_divergences(datasets(name))[1])
+def test_a_read_can_store_less_than_the_span_it_aligns_to(datasets, falsifiable, name):
+    falsifiable(_divergences(datasets(name))[1] > 0)
 
 
 def _reference_span(cigar):

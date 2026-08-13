@@ -69,4 +69,4 @@ Tests which run a program over an alignment are parametrized over the alignments
 
 Tests which build their own inputs are the exception, and the generator produces neither kind: `test_subtraction.py` writes the output files it reads, and `test_marginalization.py` writes alignments with specific CIGARs.
 
-To ensure tests are not vacuous, the `checked` fixture is used to signal that the test is falsifiable on the current dataset. A test in which no dataset passes a truthy object to `checked` fails the run, signalling the need for a new dataset in `tests/datasets.py`.
+To ensure tests are not vacuous, the `falsifiable` fixture is used to signal whether the test is falsifiable on the current dataset. Place the call between the setup and the assertions of the test. A test in which no dataset declares itself falsifiable fails the run, signalling the need for a new dataset in `tests/datasets.py`.

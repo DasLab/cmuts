@@ -19,6 +19,11 @@ from support import (
 )
 
 
+def has_references(data) -> bool:
+    """Whether the FASTA declares a reference to take a checksum over."""
+    return len(sequences(data.fasta)) > 0
+
+
 def sampled(data):
     """The first reference any read reached, the last, and one between.
 
@@ -68,8 +73,11 @@ def with_checksums(data, tmp_path, checksum=md5, only=None):
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_matching_checksum_is_accepted(datasets, tmp_path, name):
+def test_a_matching_checksum_is_accepted(datasets, falsifiable, tmp_path, name):
     data = datasets(name)
+
+    falsifiable(has_references(data))
+
     checked = run_cmuts(with_checksums(data, tmp_path), tmp_path / "checked.h5")
     plain = run_cmuts(data, tmp_path / "plain.h5")
 
@@ -78,8 +86,11 @@ def test_a_matching_checksum_is_accepted(datasets, tmp_path, name):
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_substituted_reference_is_refused(datasets, tmp_path, name):
+def test_a_substituted_reference_is_refused(datasets, falsifiable, tmp_path, name):
     data = datasets(name)
+
+    falsifiable(has_references(data))
+
     wrong = substituted(with_checksums(data, tmp_path), tmp_path)
     attempt = try_cmuts(wrong, tmp_path / "out.h5")
 
@@ -88,7 +99,7 @@ def test_a_substituted_reference_is_refused(datasets, tmp_path, name):
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_reference_without_a_checksum_is_not_checked(datasets, checked, tmp_path,
+def test_a_reference_without_a_checksum_is_not_checked(datasets, falsifiable, tmp_path,
                                                        name):
     """Runs to the end against bases the alignments were not made from, and
     scores them: the result a checksum exists to refuse."""
@@ -97,20 +108,27 @@ def test_a_reference_without_a_checksum_is_not_checked(datasets, checked, tmp_pa
 
     assert try_cmuts(substituted(data, tmp_path), wrong).returncode == 0
 
+    kept = run_cmuts(data, right).kept
+
     # Where every read was rejected the two runs count nothing either way, so
     # the bases they counted it over cannot be told apart.
-    if checked(run_cmuts(data, right).kept):
+    falsifiable(kept > 0)
+
+    if kept:
         assert not outputs_agree(wrong, right), \
             "the substituted bases are not the ones that were scored"
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_the_checksum_checked_is_the_one_for_that_reference(datasets, checked,
+def test_the_checksum_checked_is_the_one_for_that_reference(datasets, falsifiable,
                                                             tmp_path, name):
     data = datasets(name)
     declared = with_checksums(data, tmp_path)
+    reached = sampled(data)
 
-    for reference in checked(sampled(data)):
+    falsifiable(len(reached) > 0)
+
+    for reference in reached:
         attempt = try_cmuts(substituted(declared, tmp_path, only={reference}),
                             tmp_path / "out.h5", overwrite=True)
 
@@ -119,12 +137,14 @@ def test_the_checksum_checked_is_the_one_for_that_reference(datasets, checked,
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_checksum_on_a_single_reference_is_still_checked(datasets, checked,
+def test_a_checksum_on_a_single_reference_is_still_checked(datasets, falsifiable,
                                                            tmp_path, name):
     data = datasets(name)
-    reached = sampled(data)
+    last = sampled(data)[-1:]
 
-    for reference in checked(reached[-1:]):
+    falsifiable(len(last) > 0)
+
+    for reference in last:
         declared = with_checksums(data, tmp_path, only={reference})
         attempt = try_cmuts(substituted(declared, tmp_path, only={reference}),
                             tmp_path / "out.h5")
@@ -139,18 +159,25 @@ def test_a_checksum_on_a_single_reference_is_still_checked(datasets, checked,
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_checksum_is_read_whatever_its_case(datasets, tmp_path, name):
+def test_a_checksum_is_read_whatever_its_case(datasets, falsifiable, tmp_path, name):
     """The SAM spec fixes M5 as hexadecimal without fixing its case."""
     data = datasets(name)
+
+    falsifiable(has_references(data))
+
     shouting = with_checksums(data, tmp_path, checksum=lambda seq: md5(seq).upper())
 
     assert try_cmuts(shouting, tmp_path / "out.h5").returncode == 0
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_soft_masked_reference_hashes_as_an_upper_case_one(datasets, tmp_path, name):
+def test_a_soft_masked_reference_hashes_as_an_upper_case_one(datasets, falsifiable,
+                                                             tmp_path, name):
     """The SAM spec defines M5 over the sequence uppercased."""
     data = datasets(name)
+
+    falsifiable(has_references(data))
+
     masked = replace(data, fasta=written(
         {name: seq.lower() for name, seq in sequences(data.fasta).items()},
         tmp_path / "masked.fasta"))
@@ -159,8 +186,12 @@ def test_a_soft_masked_reference_hashes_as_an_upper_case_one(datasets, tmp_path,
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_checksum_is_read_only_to_the_end_of_its_field(datasets, tmp_path, name):
+def test_a_checksum_is_read_only_to_the_end_of_its_field(datasets, falsifiable,
+                                                         tmp_path, name):
     data = datasets(name)
+
+    falsifiable(has_references(data))
+
     trailing = with_checksums(data, tmp_path,
                               checksum=lambda seq: md5(seq) + "\tUR:file:/nowhere")
 
@@ -168,8 +199,11 @@ def test_a_checksum_is_read_only_to_the_end_of_its_field(datasets, tmp_path, nam
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_checksum_that_is_not_an_md5_is_refused(datasets, tmp_path, name):
+def test_a_checksum_that_is_not_an_md5_is_refused(datasets, falsifiable, tmp_path, name):
     data = datasets(name)
+
+    falsifiable(has_references(data))
+
     truncated = with_checksums(data, tmp_path, checksum=lambda seq: md5(seq)[:8])
     attempt = try_cmuts(truncated, tmp_path / "out.h5")
 

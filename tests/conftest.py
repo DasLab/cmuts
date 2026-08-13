@@ -1,18 +1,12 @@
-"""Shared fixtures, and the check that every test asserts something somewhere.
+"""Shared fixtures and vacuity checks.
 
-Datasets are generated once per session and cached by name, since building one
-costs more than every test that reads it.
-
-Every test runs over every dataset. A test states a contract; the datasets are
-the range of inputs it is tried on. No dataset holds every case, so a test is
-often vacuous on one of them: there is nothing there to assert over. It records
-that through the checked fixture instead of failing. A test vacuous on every
-dataset asserts nothing at all, and fails the run.
+Datasets are generated once per session and cached by name. Tests which parametrize over datasets must make use of the falsifiable fixture to ensure at least one dataset would detect an issue in the contract the test checks for. A test vacuous on every dataset fails the run rather than silently passing.
 """
 
 import shutil
 from collections import defaultdict
 
+import numpy as np
 import pytest
 
 # support carries assertions of its own, and pytest rewrites them only where it
@@ -33,7 +27,7 @@ def pytest_configure(config):
         )
 
     if not shutil.which("samtools"):
-        pytest.exit("samtools is required; it is what the tests check against", returncode=2)
+        pytest.exit("samtools is required", returncode=2)
 
 
 @pytest.fixture(scope="session")
@@ -50,53 +44,71 @@ def datasets(tmp_path_factory):
     return get
 
 
-# How many cases each test asserted over, keyed by test and not by parameter,
-# so that every dataset a test ran over is judged together.
-_CHECKED = defaultdict(list)
+# Whether each test had anything to assert over, keyed by test and not by
+# parameter, so that every dataset a test ran over is judged together.
+_DECLARED = defaultdict(list)
 
 
-def _amount(cases) -> int:
-    """Returns how many cases there are: the size of a container, or the number
-    itself.
+def _named(node) -> str:
+    """Returns the test's name without the parameters it was called with."""
+    return node.originalname or node.name
 
-    A boolean mask is neither, and raises. Its length is the same whether it
-    selects everything or nothing, so len() would report full coverage for a
-    test that asserted over nothing. Counting its True values instead would be
-    wrong the other way: a case need not be a nonzero value, and
-    test_weights.py asserts that a set of rates are all zero.
+
+def _dataset_under_test(node):
+    """Returns the dataset a test was called with, or None where it ran over
+    none. A test runs over a dataset when its name parameter is one in the
+    catalogue."""
+    callspec = getattr(node, "callspec", None)
+    name = callspec.params.get("name") if callspec else None
+
+    return name if name in DATASETS else None
+
+
+@pytest.fixture(autouse=True)
+def _declaration(request):
+    """Records a test that ends without declaring as vacuous on this dataset.
+
+    A missing declaration counts as False, so a test that never calls
+    falsifiable fails the run in the same way as one that declares False on
+    every dataset.
     """
-    if getattr(cases, "dtype", None) == bool:
-        raise TypeError("checked takes the cases or how many, not a mask over them")
+    if _dataset_under_test(request.node) is None:
+        yield
+        return
 
-    return len(cases) if hasattr(cases, "__len__") else int(cases)
+    name = _named(request.node)
+    declared = len(_DECLARED[name])
+
+    yield
+
+    if len(_DECLARED[name]) == declared:
+        _DECLARED[name].append(False)
 
 
 @pytest.fixture
-def checked(request):
-    """Records how many cases a test asserts over, and returns them.
+def falsifiable(request):
+    """Records whether the test has anything to assert over on this dataset.
 
-    Takes the place of asserting that the case appears in the data:
-    `for name in checked(missing)` runs over the references no read reached,
-    and zero of them marks the test vacuous on this dataset.
+    Takes the place of asserting that the case appears in the data. In
+    `falsifiable(len(missing) > 0)` the cases are the references no read
+    reached; where a dataset holds none, the test is vacuous on it.
     """
-    name = request.node.originalname or request.node.name
+    name = _named(request.node)
 
-    def record(cases):
-        _CHECKED[name].append(_amount(cases))
-        return cases
+    def record(has_cases):
+        if not isinstance(has_cases, (bool, np.bool_)):
+            raise TypeError("falsifiable takes whether there are cases, not the cases")
+
+        _DECLARED[name].append(bool(has_cases))
 
     return record
 
 
 def _vacuous_everywhere():
-    """Returns the tests that were vacuous on every dataset.
-
-    Only a run over the whole catalogue shows this: a shorter one may have left
-    out the datasets holding the case.
-    """
+    """Returns the tests that were vacuous on every dataset."""
     return sorted(
-        name for name, counts in _CHECKED.items()
-        if len(counts) >= len(DATASETS) and not any(counts)
+        name for name, declared in _DECLARED.items()
+        if not any(declared)
     )
 
 
@@ -110,7 +122,6 @@ def pytest_terminal_summary(terminalreporter):
 
 
 def pytest_sessionfinish(session, exitstatus):
-    # A run that already failed reports it, and one that stopped early is no
-    # evidence either way: its tests did not all run.
+    # Failures take precedence over vacuity
     if exitstatus == 0 and _vacuous_everywhere():
         session.exitstatus = 1
