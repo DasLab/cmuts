@@ -68,10 +68,7 @@ def _amount(cases) -> int:
     if getattr(cases, "dtype", None) == bool:
         raise TypeError("checked takes the cases or how many, not a mask over them")
 
-    try:
-        return len(cases)
-    except TypeError:
-        return int(cases)
+    return len(cases) if hasattr(cases, "__len__") else int(cases)
 
 
 @pytest.fixture
