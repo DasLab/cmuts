@@ -17,6 +17,12 @@ filter_config filter_defaults(void)
     };
 }
 
+bool filter_satisfiable(const filter_config *filter)
+{
+    return filter->max_length == FILTER_LENGTH_UNBOUNDED
+           || filter->max_length >= filter->min_length;
+}
+
 /* MAPQ 255 means "unavailable" in the SAM specification, so a read carrying it is discarded
  * at every threshold: an aligner that reported no confidence in a placement is not reporting
  * confidence of 255. samtools compares it numerically, admitting it everywhere, so the two

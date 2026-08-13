@@ -46,4 +46,8 @@ typedef struct {
 
 filter_config filter_defaults(void);
 
+/* Whether any read can meet the criteria. An upper length bound below the lower one is met
+ * by no read of any length, unlike a bound that merely no read in a file happens to meet. */
+bool filter_satisfiable(const filter_config *filter);
+
 bool filter_accepts(const filter_config *filter, const cm_bam_record *read);

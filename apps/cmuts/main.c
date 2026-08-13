@@ -9,6 +9,7 @@
 
 #include "cli.h"
 #include "error.h"
+#include "filter.h"
 #include "options.h"
 #include "pipeline.h"
 
@@ -27,6 +28,13 @@ int main(int argc, char **argv)
         case CLI_DONE:  return 0;
         case CLI_ERROR: return 2;
         case CLI_OK:    break;
+    }
+
+    /* Reported here, and as a usage error, because cli_parse checks each option against its
+     * own range and cannot see a pair of them. */
+    if (!filter_satisfiable(&args.pipeline.filter_config)) {
+        fprintf(stderr, "%s: --max-length is below --min-length\n", spec.program);
+        return 2;
     }
 
     if (pipeline_run(&args.pipeline, error, sizeof error) < 0) {
