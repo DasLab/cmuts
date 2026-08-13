@@ -5,8 +5,10 @@ import pytest
 from datasets import DATASETS
 from filters import FILTERS, UNFILTERED, criteria, describe_filters
 from support import (
+    MAPQ_COLUMN,
+    UNAVAILABLE_MAPQ,
     assert_counts_agree,
-    generate,
+    records,
     run_cmuts,
     samtools_kept,
     with_secondary,
@@ -22,17 +24,22 @@ def test_read_counts_match_samtools(datasets, tmp_path, name, filters):
     assert_counts_agree(summary, data, criteria(filters))
 
 
-def test_an_unavailable_mapping_quality_is_refused(tmp_path):
-    """Asserted against the summary and not against samtools, which admits
-    MAPQ 255 at every threshold."""
-    data = generate(tmp_path, "unavailable", seed=112, references=8,
-                    reads_per_ref=10, mapq=255, unmapped=0)
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_an_unavailable_mapping_quality_is_refused(datasets, checked, tmp_path, name):
+    """Counted from the records here rather than taken from samtools_kept,
+    which is told of the same divergence and would agree with a filter that
+    never applied it."""
+    data = datasets(name)
+    mapped = records(data.bam, "-F", "0x104")
+    unavailable = [line for line in mapped
+                   if int(line.split("\t")[MAPQ_COLUMN]) == UNAVAILABLE_MAPQ]
 
     summary = run_cmuts(data, tmp_path / "out.h5", **UNFILTERED)
 
-    assert data.mapped > 0
-    assert summary.kept == 0
-    assert summary.rejected == data.mapped
+    checked(unavailable)
+
+    assert summary.kept == len(mapped) - len(unavailable), \
+        "a read of unavailable mapping quality survived a threshold of zero"
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
@@ -58,8 +65,11 @@ def test_secondary_alignments_are_refused(datasets, checked, tmp_path, name):
 
     summary = run_cmuts(data, tmp_path / "out.h5", **UNFILTERED)
 
-    assert summary.kept == data.mapped - marked, "surviving reads"
     assert summary.kept == samtools_kept(data, **UNFILTERED), "agreement with samtools"
 
     # They are refused rather than overlooked, so they show up as rejected.
+    # Others may be refused alongside them, which is why the count is a bound
+    # and not the total: a read of unavailable mapping quality is refused for
+    # a reason of its own.
+    assert summary.rejected >= marked, "a marked read was not refused"
     assert summary.kept + summary.rejected == data.mapped, "reads accounted for"

@@ -318,6 +318,31 @@ def references_with_reads(bam) -> set:
     return {line.split("\t")[2] for line in records(bam, "-F", "4")}
 
 
+# The SAM spec's "unavailable", which is not a score above every threshold.
+UNAVAILABLE_MAPQ = 255
+
+# Where a record holds its mapping quality and its stored sequence.
+MAPQ_COLUMN = 4
+SEQUENCE_COLUMN = 9
+
+
+def surviving(data: Dataset, min_mapq: int, strand: str) -> list:
+    """The records passing a mapping quality and a strand.
+
+    Unmapped and secondary reads are excluded, as cmuts excludes them under
+    every criterion, and so are the reads of unavailable mapping quality:
+    samtools admits those at every -q and cmuts refuses them at every bound,
+    which is a deliberate divergence and belongs to the oracle rather than to
+    each test consulting it.
+    """
+    flags = ("-F", "0x104", "-q", str(min_mapq), *STRAND_FLAGS[strand])
+
+    return [
+        line for line in records(data.bam, *flags)
+        if int(line.split("\t")[MAPQ_COLUMN]) != UNAVAILABLE_MAPQ
+    ]
+
+
 def samtools_kept(
     data: Dataset, min_mapq: int = 0, strand: str = "both",
     min_length: int = 0, max_length: int = 0,
@@ -326,11 +351,12 @@ def samtools_kept(
 
     samtools takes strand and mapping quality as flags but not length, so this
     measures the sequence column directly. A bound of zero is left unapplied,
-    matching what cmuts does with one unset, and unmapped and secondary reads
-    are excluded here as cmuts excludes them under every criterion.
+    matching what cmuts does with one unset.
     """
-    flags = ("-F", "0x104", "-q", str(min_mapq), *STRAND_FLAGS[strand])
-    lengths = (len(line.split("\t")[9]) for line in records(data.bam, *flags))
+    lengths = (
+        len(line.split("\t")[SEQUENCE_COLUMN])
+        for line in surviving(data, min_mapq, strand)
+    )
 
     return sum(
         1
@@ -349,12 +375,11 @@ def samtools_length_histogram(
     one for the file as a whole, and there its -q is a trimming parameter and
     not a bound on mapping quality, so it counts reads this filter would drop.
     """
-    flags = ("-F", "0x104", "-q", str(min_mapq), *STRAND_FLAGS[strand])
     counts = defaultdict(Counter)
 
-    for line in records(data.bam, *flags):
+    for line in surviving(data, min_mapq, strand):
         columns = line.split("\t")
-        counts[columns[2]][len(columns[9])] += 1
+        counts[columns[2]][len(columns[SEQUENCE_COLUMN])] += 1
 
     return counts
 
