@@ -1,0 +1,27 @@
+site_name: cmuts
+site_description: Fast, multithreaded pair-HMM counting of MaP-seq mutations.
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.top
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - Running cmuts: running.md
+  - The output file: output.md
+  - Subtracting a background: subtracting.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
