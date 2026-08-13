@@ -78,11 +78,6 @@ NAME     := cmuts
 # the library it refers to; adding one means adding a directory and a word here.
 PROGRAMS := cmuts-hmm cmuts-gen cmuts-sub
 
-# Of those, the ones a user runs. The generator writes test fixtures and
-# benchmark inputs, which is work done from the build tree; nothing looks for it
-# on PATH.
-INSTALLED := cmuts-hmm cmuts-sub
-
 LIB      := $(BUILD)/lib$(NAME).a
 
 # Sources under src/ are the library and nothing else: no entry point lives
@@ -135,12 +130,12 @@ $(BUILD)/src/%.o: src/%.c
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-install: $(addprefix $(BUILD)/,$(INSTALLED))
+install: $(BINS)
 	$(INSTALL) -d $(DESTDIR)$(BINDIR)
 	$(INSTALL) -m 755 $^ $(DESTDIR)$(BINDIR)
 
 uninstall:
-	rm -f $(addprefix $(DESTDIR)$(BINDIR)/,$(INSTALLED))
+	rm -f $(addprefix $(DESTDIR)$(BINDIR)/,$(PROGRAMS))
 
 # Prefers a virtual environment holding the test dependencies, which the
 # programs themselves do not need:
@@ -158,9 +153,16 @@ check: $(BINS)
 # them first: a table can only describe what was built here, never a version of
 # it that is no longer around. A program's arguments go on the page named after
 # it, and each page takes whichever tables its markers ask for.
+#
+# The datasets an output holds are described by the program that writes them.
+LAYOUT_FROM := cmuts-hmm
+LAYOUT_PAGE := docs/basics.md
+
 docs: $(BINS)
-	$(PYTHON) scripts/document.py $(BUILD)/cmuts-hmm docs/basics.md docs/cmuts-hmm.md
-	$(PYTHON) scripts/document.py $(BUILD)/cmuts-sub docs/cmuts-sub.md
+	@for program in $(PROGRAMS); do \
+	    $(PYTHON) scripts/document.py $(BUILD)/$$program docs/$$program.md; \
+	done
+	@$(PYTHON) scripts/document.py $(BUILD)/$(LAYOUT_FROM) $(LAYOUT_PAGE)
 
 # A clang that is not the system one needs the SDK spelled out.
 CLANG_TIDY ?= $(firstword $(wildcard /opt/homebrew/opt/llvm/bin/clang-tidy) clang-tidy)
