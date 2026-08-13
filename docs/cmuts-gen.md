@@ -1,6 +1,6 @@
 # cmuts-gen
 
-<!-- BEGIN GENERATED OPTIONS -->
+<!-- BEGIN GENERATED cmuts-gen OPTIONS -->
 ### Output
 
 | Option | Description |
@@ -51,4 +51,4 @@
 | --- | --- |
 | `-h, --help` | show this help and exit |
 | `-V, --version` | show the version and exit |
-<!-- END GENERATED OPTIONS -->
+<!-- END GENERATED cmuts-gen OPTIONS -->

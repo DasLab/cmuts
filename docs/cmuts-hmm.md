@@ -1,6 +1,6 @@
 # cmuts-hmm
 
-<!-- BEGIN GENERATED OPTIONS -->
+<!-- BEGIN GENERATED cmuts-hmm OPTIONS -->
 ### Arguments
 
 | Argument | Description |
@@ -50,4 +50,4 @@
 | --- | --- |
 | `-h, --help` | show this help and exit |
 | `-V, --version` | show the version and exit |
-<!-- END GENERATED OPTIONS -->
+<!-- END GENERATED cmuts-hmm OPTIONS -->

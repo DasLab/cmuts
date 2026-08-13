@@ -14,7 +14,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_F32,
         .absent  = OUT_ZERO,
-        .detail  = NULL,
+        .detail  = "The number of reads in which this base was present, weighted by PHRED scores.",
     },
     [OUT_REACTIVITY] = {
         .name    = "reactivity",
@@ -22,7 +22,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_F32,
         .absent  = OUT_NAN,
-        .detail  = NULL,
+        .detail  = "The mutation rate at this base, weighted by PHRED scores and in accordance with the HMM parameters.",
     },
     [OUT_ERROR] = {
         .name    = "error",
@@ -30,7 +30,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_F32,
         .absent  = OUT_NAN,
-        .detail  = NULL,
+        .detail  = "Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors.",
     },
     [OUT_LENGTHS] = {
         .name    = "reads/lengths",
@@ -38,7 +38,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_U64,
         .absent  = OUT_ZERO,
-        .detail  = NULL,
+        .detail  = "The number of reads passing all filters, binned by length.",
     },
     [OUT_READS] = {
         .name    = "reads/counted",
@@ -46,7 +46,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_U64,
         .absent  = OUT_ZERO,
-        .detail  = NULL,
+        .detail  = "The number of reads passing all filters.",
     },
     [OUT_REJECTED] = {
         .name    = "reads/rejected",
@@ -54,7 +54,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_U64,
         .absent  = OUT_ZERO,
-        .detail  = NULL,
+        .detail  = "The number of reads rejected by at least one filter.",
     },
     [OUT_UNMAPPED] = {
         .name    = "reads/unmapped",
@@ -62,7 +62,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = false,
         .stored  = OUT_U64,
         .absent  = OUT_ZERO,
-        .detail  = NULL,
+        .detail  = "The number of reads not aligned to any reference.",
     },
 };
 
@@ -148,8 +148,8 @@ static const char *stored_name(out_stored stored)
     return "unknown";
 }
 
-/* What a value the run never wrote reads as, which is not the same question as what type
- * it is stored in: a count reads zero and a rate reads NaN. */
+/* The value read back where the run wrote nothing, which is not the same as the type it
+ * is stored in: zero for a count, NaN for a rate. */
 static const char *absent_name(out_absent absent)
 {
     switch (absent) {
@@ -161,8 +161,8 @@ static const char *absent_name(out_absent absent)
     return "unknown";
 }
 
-/* A sentence as JSON, or null where a field carries none. Prose is quoted, so what would
- * end the string early is escaped. */
+/* A sentence as JSON, or null where a field has none. Escapes the characters that would
+ * otherwise end the string early. */
 static void print_detail(FILE *out, const char *detail)
 {
     if (!detail) {
