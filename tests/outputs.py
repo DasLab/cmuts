@@ -30,15 +30,17 @@ class Field:
     kind: str
     dtype: str
     fill: float
+    rate: bool = False
 
 
 # The datasets an output holds, as output.h declares them. A rate is float and
 # missing where it was not measured; a count is a whole unsigned and zero where
-# nothing was counted.
+# nothing was counted. A rate is also the one kind two files hold one value of
+# rather than a total, so nothing adds it up.
 FIELDS = (
     Field("coverage", PER_BASE, "f4", 0.0),
-    Field("reactivity", PER_BASE, "f4", np.nan),
-    Field("error", PER_BASE, "f4", np.nan),
+    Field("reactivity", PER_BASE, "f4", np.nan, rate=True),
+    Field("error", PER_BASE, "f4", np.nan, rate=True),
     Field("reads/lengths", PER_LENGTH, "u8", 0),
     Field("reads/counted", SCALAR, "u8", 0),
     Field("reads/rejected", SCALAR, "u8", 0),
@@ -50,6 +52,12 @@ RUN_TOTAL = "reads/unmapped"
 READS_GROUP = "reads"
 
 BY_NAME = {field.name: field for field in FIELDS}
+
+# The groups the tests sort the datasets into, each read off the declaration
+# above rather than listed again beside it.
+RATES = tuple(field.name for field in FIELDS if field.rate)
+BY_LENGTH = tuple(field.name for field in FIELDS if field.kind == PER_LENGTH)
+FLOATING = tuple(field.name for field in FIELDS if field.dtype.startswith("f"))
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +223,7 @@ def field_of(path, name) -> np.ndarray:
         return handle[name][()]
 
 
-def datasets_of(path) -> dict:
+def layout_of(path) -> dict:
     """Every dataset of a file, by path, with its shape and dtype. The counts
     about reads sit in a group of their own, so a name is a path and not a
     key."""

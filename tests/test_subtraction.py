@@ -16,10 +16,11 @@ import pytest
 from outputs import (
     BY_NAME,
     FIELDS,
+    FLOATING,
     RUN_TOTAL,
     combined,
-    datasets_of,
     field_of,
+    layout_of,
     rewidened,
     shape,
     without,
@@ -34,10 +35,6 @@ CAP = 6
 
 # Every dataset the arithmetic applies to, run totals included.
 COMBINED = [field.name for field in FIELDS] + [RUN_TOTAL]
-
-# The datasets holding a rate or a fraction, which are the ones that can be
-# marked as never measured.
-FLOATING = ("coverage", "reactivity", "error")
 
 
 @pytest.fixture(params=["plain", "chunked"])
@@ -106,7 +103,7 @@ def test_the_layout_written_here_is_the_one_cmuts_writes(data, tmp_path):
     """
     counted = tmp_path / "counted.h5"
     run_cmuts(data, counted)
-    real = datasets_of(counted)
+    real = layout_of(counted)
 
     assert set(real) == {field.name for field in FIELDS} | {RUN_TOTAL}
 
@@ -388,7 +385,7 @@ def test_the_columns_past_a_reference_stay_nan(build, subtract):
 def test_the_output_is_shaped_and_typed_like_its_inputs(build, subtract):
     treated, untreated = build(everything(seed=2)), build(everything(seed=9))
 
-    assert datasets_of(subtract(treated, untreated)) == datasets_of(treated)
+    assert layout_of(subtract(treated, untreated)) == layout_of(treated)
 
 
 def test_a_file_against_itself_leaves_a_reactivity_of_zero(build, subtract):
@@ -591,4 +588,4 @@ def test_it_reads_what_cmuts_writes(data, tmp_path):
 
     output = run_subtract(treated, untreated, tmp_path / "difference.h5")
 
-    assert datasets_of(output) == datasets_of(treated)
+    assert layout_of(output) == layout_of(treated)

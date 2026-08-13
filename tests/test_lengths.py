@@ -13,7 +13,7 @@ import pytest
 
 from conftest import DATASETS
 from support import (
-    rows_by_name, run_cmuts, samtools_length_histogram, sequences,
+    reference_lengths, rows_by_name, run_cmuts, samtools_length_histogram,
 )
 
 
@@ -34,7 +34,7 @@ def compare(output, data, min_mapq):
     fell outside the range of bins. The criterion is passed to both rather than
     left to a default, the two not sharing one."""
     expected = samtools_length_histogram(data, min_mapq=min_mapq)
-    lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
+    lengths = reference_lengths(data.fasta)
     row_of = rows_by_name(data.fasta)
     outside = 0
 

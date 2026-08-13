@@ -14,24 +14,18 @@ import h5py
 import numpy as np
 import pytest
 
+from outputs import BY_LENGTH, RATES
 from support import (
-    RATES, datasets_of, references_with_reads, rows_by_name, run_cmuts, sequences,
+    arrays_of, reference_lengths, references_with_reads, rows_by_name, run_cmuts,
 )
 
 # Higher than any mapping quality a read can carry, so every read is rejected.
 REJECTS_EVERYTHING = 61
 
 
-# Both kinds of row have the same shape, so this lists the ones indexed by read
-# length. Every other row is indexed by reference position and runs only as far
-# as its own reference; a length is not a position, so these rows hold data to
-# their full width.
-PER_LENGTH = ("reads/lengths",)
-
-
 def rectangular(output):
     """The arrays with a row per reference, indexed by position or by length."""
-    return {k: d[:] for k, d in datasets_of(output).items() if d.ndim == 2}
+    return {k: d[:] for k, d in arrays_of(output).items() if d.ndim == 2}
 
 
 def counts(output):
@@ -42,7 +36,7 @@ def counts(output):
 
 def per_base(output):
     """The arrays a reference's own length bounds, which are the padded ones."""
-    return {k: v for k, v in rectangular(output).items() if k not in PER_LENGTH}
+    return {k: v for k, v in rectangular(output).items() if k not in BY_LENGTH}
 
 
 def padded(output):
@@ -59,12 +53,12 @@ def padded(output):
 
 def row_extent(field, ref_len, width):
     """Columns of a row that hold data; the rest is padding."""
-    return width if field in PER_LENGTH else ref_len
+    return width if field in BY_LENGTH else ref_len
 
 
 def per_reference(output):
     """The arrays with one value for each reference."""
-    return {k: d[:] for k, d in datasets_of(output).items() if d.ndim == 1}
+    return {k: d[:] for k, d in arrays_of(output).items() if d.ndim == 1}
 
 
 @pytest.fixture
@@ -83,7 +77,7 @@ def ragged(datasets, tmp_path):
 
 def test_positions_past_a_reference_are_nan(ragged):
     data, output = ragged
-    lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
+    lengths = reference_lengths(data.fasta)
     row_of = rows_by_name(data.fasta)
 
     with h5py.File(output, "r") as handle:
@@ -99,7 +93,7 @@ def test_positions_past_a_reference_are_nan(ragged):
 
 def test_positions_within_a_reference_are_never_nan(ragged):
     data, output = ragged
-    lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
+    lengths = reference_lengths(data.fasta)
     reached = references_with_reads(data.bam)
     row_of = rows_by_name(data.fasta)
     assert reached, "the dataset under test has no reference any read reached"
@@ -121,7 +115,7 @@ def test_a_reference_with_no_reads_is_zero_over_its_own_bases(datasets, tmp_path
     output = tmp_path / "patchy.h5"
     run_cmuts(data, output)
 
-    lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
+    lengths = reference_lengths(data.fasta)
     widest = max(lengths.values())
     reached = references_with_reads(data.bam)
     row_of = rows_by_name(data.fasta)
@@ -182,7 +176,7 @@ def test_a_reference_whose_reads_were_all_rejected_is_zero(datasets, tmp_path):
 
     assert summary.kept == 0, "the filter under test let something through"
 
-    lengths = {name: len(seq) for name, seq in sequences(data.fasta).items()}
+    lengths = reference_lengths(data.fasta)
     reached = references_with_reads(data.bam)
     row_of = rows_by_name(data.fasta)
     assert reached, "the dataset under test has no reference any read reached"

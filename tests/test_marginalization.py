@@ -10,7 +10,7 @@ import h5py
 import numpy as np
 import pytest
 
-from support import datasets_of, placements, run_cmuts
+from support import arrays_of, placements, run_cmuts
 
 KINDS = ("D", "I")
 GAPS = (1, 2, 3)
@@ -76,7 +76,7 @@ def written_rows(output, placements: int) -> dict:
     """
     with h5py.File(output, "r") as handle:
         # A run total has no rows to compare, being one number for the file.
-        rows = {k: d[:] for k, d in datasets_of(handle).items() if d.ndim >= 1}
+        rows = {k: d[:] for k, d in arrays_of(handle).items() if d.ndim >= 1}
 
     for name, values in rows.items():
         assert len(values) == placements, \
@@ -85,7 +85,7 @@ def written_rows(output, placements: int) -> dict:
     return rows
 
 
-def spread(rows) -> float:
+def divergence(rows) -> float:
     """How far apart the rows of one dataset stand, over every position."""
     return float(np.nanmax(np.nanmax(rows, axis=0) - np.nanmin(rows, axis=0)))
 
@@ -130,4 +130,4 @@ def test_a_band_narrower_than_the_gap_leaves_the_placements_apart(tmp_path, case
 
     narrow = written_rows(tmp_path / "narrow.h5", len(cigars))
 
-    assert spread(narrow["reactivity"]) > DIVIDED
+    assert divergence(narrow["reactivity"]) > DIVIDED

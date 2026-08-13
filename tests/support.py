@@ -21,6 +21,8 @@ from pathlib import Path
 import h5py
 import numpy as np
 
+from outputs import RATES
+
 ROOT = Path(__file__).resolve().parent.parent
 
 CMUTS = "cmuts"
@@ -255,6 +257,12 @@ def placements(directory, name, reference, read, cigars) -> Dataset:
 # ---------------------------------------------------------------------------
 
 
+def reference_lengths(fasta) -> dict:
+    """The length of every reference, by name, which is how far its own row of
+    an output reaches."""
+    return {name: len(seq) for name, seq in sequences(fasta).items()}
+
+
 def sequences(fasta):
     """Every record of a FASTA, by name, in file order."""
     records, name = {}, None
@@ -467,20 +475,16 @@ def outputs_agree(first, second) -> bool:
     adding a field to the output does not leave it unchecked.
     """
     with h5py.File(first, "r") as a, h5py.File(second, "r") as b:
-        left, right = datasets_of(a), datasets_of(b)
+        left, right = arrays_of(a), arrays_of(b)
 
         return set(left) == set(right) and all(
             _datasets_agree(left[k], right[k]) for k in left
         )
 
 
-# Rates, not counts: two files hold twice the reads and the same reactivity.
-RATES = ("reactivity", "error")
-
-
-def datasets_of(handle) -> dict:
-    """Every dataset of an output, by path. The counts about reads sit in a
-    group of their own, so a name is a path and not a key."""
+def arrays_of(handle) -> dict:
+    """Every dataset of an open output, by path. The counts about reads sit in
+    a group of their own, so a name is a path and not a key."""
     found = {}
 
     handle.visititems(
@@ -496,5 +500,5 @@ def counted_fields(path):
     with h5py.File(path, "r") as output:
         # Counts are unsigned and coverage is a float; both are added over. The
         # rates are neither, two files holding twice the reads and one rate.
-        return [k for k, d in datasets_of(output).items()
+        return [k for k, d in arrays_of(output).items()
                 if d.ndim >= 1 and k not in RATES]
