@@ -49,6 +49,6 @@ This installs `cmuts` and `cmuts-sub` to `~/.local/bin`. Pass `BINDIR` to `make`
 
 ## Where to go next
 
-- [Running cmuts](running.md) — what the options do to a run
+- [Running cmuts](running.md) — the commands for each kind of run
 - [The output file](output.md) — what a result holds and how to read it
-- [Subtracting a background](subtracting.md) — `cmuts-sub`
+- [How cmuts counts](counting.md) — what reaches a total, and what a rate needs

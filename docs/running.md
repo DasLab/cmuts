@@ -1,35 +1,51 @@
 # Running cmuts
 
+Every run takes the reference sequences and one or more coordinate-sorted alignment files, and writes an HDF5 file. `samtools sort` produces the alignments; no index is needed, and BAM, SAM and CRAM are all read.
+
+## One sample
+
 ```sh
-cmuts -f references.fasta -o results.h5 alignments.bam
+cmuts -f references.fasta -o counts.h5 alignments.bam
 ```
 
-The alignments must be coordinate sorted, and cmuts refuses a file that is not. `samtools sort` produces one. The FASTA must hold the same references, in the same order as the alignment header declares them; where the header carries an M5 checksum, cmuts checks the sequences against it and refuses a FASTA that does not match.
+## Reads split across several files
 
-An existing output file is never replaced without `--overwrite`.
+Files are read as one, so a run spread over lanes needs no merging first.
 
-## Which reads are counted
+```sh
+cmuts -f references.fasta -o counts.h5 lane1.bam lane2.bam lane3.bam
+```
 
-Unmapped reads are counted separately and never reach a reference. Secondary alignments, records storing no sequence, and records carrying no CIGAR are always refused. So is a read of mapping quality 255, which the SAM specification defines as "unavailable" rather than as a score above every threshold.
+## A treated sample and its background
 
-Beyond that, `--min-mapq`, `--min-length`, `--max-length` and `--strand` decide what is kept. The length bounds are on the sequence a read stores, which is not the span it covers on the reference: a read carrying insertions or soft-clipped ends stores more than it aligns to, and one carrying deletions stores less.
+Counting a treated sample and an untreated one gives two files, and `cmuts-sub` takes the background off the signal. The result holds the same datasets, so whatever reads a cmuts output reads it too.
 
-Every mapped read is either counted or rejected, and both totals are written, so nothing goes missing between the file and the result.
+```sh
+cmuts -f references.fasta -o treated.h5 treated.bam
+cmuts -f references.fasta -o untreated.h5 untreated.bam
+cmuts-sub -o reactivity.h5 treated.h5 untreated.h5
+```
 
-## What is counted as a modification
+Add `--clip` to raise a negative reactivity to zero, for the tools downstream that require it.
 
-A substitution, a deletion and an insertion each carry a weight between 0 and 1, set by `--substitution-weight`, `--deletion-weight` and `--insertion-weight`. A weight of zero leaves that kind of difference out of the total entirely.
+## Normalizing against a denatured control
 
-Insertions are weighed at zero by default. An inserted base sits between two reference positions rather than at one, so counting it means deciding which position it belongs to.
+A denatured sample measures how reachable each position is with no structure to hide it. Dividing by it puts different references on a comparable scale.
 
-## Ambiguous gaps
+```sh
+cmuts-sub -o reactivity.h5 -d denatured.h5 treated.h5 untreated.h5
+```
 
-A deletion inside a run of the same base can be written after any base of the run, and every CIGAR that writes it describes the same alignment. cmuts marginalizes over the placements the aligner might have chosen instead, so the result does not depend on which one it did choose.
+## Choosing which reads count
 
-`--band` is how far either side of the CIGAR the marginal looks, in reference positions. It must be at least as wide as the gap for the placements of that gap to agree; the default of 2 covers the gaps that occur in practice, and a wider band costs time.
+```sh
+cmuts -f references.fasta -o counts.h5 \
+      --min-mapq 30 --min-length 100 --max-length 500 --strand forward \
+      alignments.bam
+```
 
-## Which positions get a rate
+The length bounds are on the sequence a read stores, which is not the span it covers on the reference: soft-clipped ends and insertions store more than they align to, and deletions store less. Some reads are refused whatever is set here, which [How cmuts counts](counting.md) lists.
 
-`--min-depth` is the evidence a position needs before a rate is written for it. Below it, the reactivity and its error are missing rather than zero: a position nothing was observed at has no rate, which is a different statement from a position where nothing was modified.
+## Replacing a result
 
-The default of 1 is one whole observation. Below that the standard error of a proportion is divided by a fraction and stops being bounded by a half, so a rate reported there would carry an error that says little.
+An existing output file is never overwritten unless `--overwrite` is given, a run costing far more than the command that starts it.

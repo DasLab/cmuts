@@ -20,7 +20,7 @@ nav:
   - Home: index.md
   - Running cmuts: running.md
   - The output file: output.md
-  - Subtracting a background: subtracting.md
+  - How cmuts counts: counting.md
 
 markdown_extensions:
   - admonition
