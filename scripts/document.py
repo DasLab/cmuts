@@ -38,8 +38,12 @@ def shape(field: dict) -> str:
 
 
 def table(layout: dict) -> str:
-    """The datasets an output holds, one to a row."""
-    header = ["| Dataset | Shape | Type | Unwritten |", "| --- | --- | --- | --- |"]
+    """The datasets an output holds, one to a row.
+
+    The last column is the dataset's HDF5 fill value, which a reader can ask a
+    file for. What seeing it means is the output page's, differing by field.
+    """
+    header = ["| Dataset | Shape | Type | Fill |", "| --- | --- | --- | --- |"]
     absent = {"nan": "NaN", "zero": "zero"}
 
     rows = [
