@@ -83,10 +83,10 @@ def spread(field, n_refs=N_REFS, cap=CAP, seed=0):
     return rng.random(size=wanted).astype(np.float32)
 
 
-def everything(seed):
+def everything(seed, n_refs=N_REFS, cap=CAP):
     """A value for every field at once, so that a test of one field runs on a
     file whose other fields are not zero."""
-    return {field.name: spread(field.name, seed=seed + i)
+    return {field.name: spread(field.name, n_refs, cap, seed=seed + i)
             for i, field in enumerate(FIELDS)}
 
 
@@ -435,16 +435,13 @@ def test_two_runs_agree_byte_for_byte(build, tmp_path):
 
 @pytest.mark.parametrize("n_refs, cap", [(1, 1), (1, 40), (3, 1), (400, 2)])
 def test_each_field_follows_its_rule_at_any_shape(build, subtract, n_refs, cap):
-    values = {"reactivity": spread("reactivity", n_refs, cap, seed=11),
-              "reads/counted": spread("reads/counted", n_refs, cap, seed=12)}
-    other = {"reactivity": spread("reactivity", n_refs, cap, seed=21),
-             "reads/counted": spread("reads/counted", n_refs, cap, seed=22)}
+    shaped = dict(n_refs=n_refs, cap=cap)
 
-    treated = build(values, n_refs=n_refs, cap=cap)
-    untreated = build(other, n_refs=n_refs, cap=cap)
+    treated = build(everything(seed=11, **shaped), unmapped=17, **shaped)
+    untreated = build(everything(seed=21, **shaped), unmapped=3, **shaped)
     output = subtract(treated, untreated)
 
-    for name in ("reactivity", "reads/counted"):
+    for name in COMBINED:
         assert np.array_equal(
             field_of(output, name), combined(name, treated, untreated),
         ), name
