@@ -39,8 +39,8 @@ typedef struct {
 
 /* What an option does besides storing a value. Those that print and exit are declared
  * rather than recognized by name, so they need no field of their own and any program may
- * have them. CLI_PRINT is the one whose subject is the program's own: it names a function
- * to call, so that a program may describe something this table knows nothing about. */
+ * have them. CLI_PRINT names a function to call, which is how a program prints something
+ * specific to it without this header declaring what that is. */
 typedef enum {
     CLI_STORE,
     CLI_SHOW_HELP,

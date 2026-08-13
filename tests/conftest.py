@@ -59,11 +59,11 @@ def _amount(cases) -> int:
     """Returns how many cases there are: the size of a container, or the number
     itself.
 
-    A mask is neither, and is refused. It is as long where it selects nothing
-    as where it selects everything, so counting one would call a test covered
-    wherever it ran. Counting what a mask selects instead would be wrong the
-    other way, since a case is not required to be a nonzero value: a rate of
-    zero is what test_weights.py asserts over.
+    A boolean mask is neither, and raises. Its length is the same whether it
+    selects everything or nothing, so len() would report full coverage for a
+    test that asserted over nothing. Counting its True values instead would be
+    wrong the other way: a case need not be a nonzero value, and
+    test_weights.py asserts that a set of rates are all zero.
     """
     if getattr(cases, "dtype", None) == bool:
         raise TypeError("checked takes the cases or how many, not a mask over them")

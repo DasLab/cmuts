@@ -31,10 +31,10 @@ def table(headings: list, rows: list) -> str:
 
 
 def described(program: str, flag: str) -> dict:
-    """What a program says about itself.
+    """Runs one of a program's dump flags and parses the JSON it prints.
 
-    A program that will not answer is a page asking the wrong one, so the
-    refusal is reported as it was given rather than raised through.
+    A non-zero exit usually means the page asked for a dump this program does
+    not have, so the message it printed is shown instead of a traceback.
     """
     told = subprocess.run([program, flag], capture_output=True, text=True)
 
@@ -63,8 +63,9 @@ def shape(field: dict) -> str:
 def layout(program: str) -> str:
     """The datasets an output holds, one to a row.
 
-    The last column is the dataset's HDF5 fill value, which a reader can ask a
-    file for. What seeing it means is the output page's, differing by field.
+    The last column is the dataset's HDF5 fill value, which h5py reports as
+    dataset.fillvalue. What that value means differs by field, and the output
+    page covers it.
     """
     absent = {"nan": "NaN", "zero": "zero"}
 
@@ -77,10 +78,10 @@ def layout(program: str) -> str:
 
 
 def fields(program: str) -> str:
-    """The same datasets at length, each with what its numbers are.
+    """The same datasets at length, each with its description.
 
-    A field carrying no sentence is written without one rather than skipped, so
-    that a dataset never goes unlisted for want of prose.
+    A field with no description is listed without one rather than skipped, so
+    that the block covers every dataset before the prose is written.
     """
     written = []
 
@@ -105,8 +106,8 @@ def fields(program: str) -> str:
 def rules(program: str) -> str:
     """What each dataset is combined by, with a denatured control and without.
 
-    A field combined the same way either way is written once, since a column
-    repeating its neighbour says only that the control changes nothing there.
+    Where both modes use the same rule the second column reads "the same",
+    rather than repeating the phrase for five of the seven fields.
     """
     rows = []
 
@@ -134,12 +135,11 @@ def invocation(option: dict) -> str:
 
 
 def note(option: dict) -> str:
-    """What the help says about an option beyond what it is for: the values it
-    takes, and the one it has when it is not given.
+    """The values an option takes and the one it has when it is not given.
 
-    A range is given only where both ends are declared. Every count is bounded
-    below by zero, which says nothing; a mapping quality stopping at 254 and a
-    weight at 1 are the bounds worth reading.
+    A range is included only where both ends are declared. Every count has a
+    floor of zero, which is not worth printing; the useful ranges are the
+    mapping quality's 0 to 254 and a weight's 0 to 1.
     """
     notes = []
 
@@ -160,8 +160,8 @@ def note(option: dict) -> str:
 
 
 def options(program: str) -> str:
-    """Every argument a program takes, under the headings its help groups them
-    by. The hidden ones describe the program to a machine and are left out."""
+    """Every argument a program takes, under the headings the help groups them
+    by. Hidden options exist for this script to read and are left out."""
     spoken = described(program, "--dump-options")
     written = []
 

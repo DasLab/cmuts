@@ -55,8 +55,8 @@ shape_extents shape_per_base(size_t len, size_t cap);
 shape_extents shape_per_length(size_t len, size_t cap);
 shape_extents shape_none(size_t len, size_t cap);
 
-/* What a shape is called, for describing a field to something outside the program. A shape
- * added above is named here as well, or it describes itself as unknown. */
+/* The name of a shape, for the JSON description of a field. A shape added above needs a
+ * name here too; one without gets "unknown". */
 const char *shape_name(shape_fn shape);
 
 /* Gives the extents held: what was reported, or all there is room for, whichever is fewer.

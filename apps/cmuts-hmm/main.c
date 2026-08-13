@@ -30,8 +30,8 @@ int main(int argc, char **argv)
         case CLI_OK:    break;
     }
 
-    /* Reported here, and as a usage error, because cli_parse checks each option against its
-     * own range and cannot see a pair of them. */
+    /* A usage error, reported here: cli_parse checks each option against its own range,
+     * and a constraint between two options cannot be written in the table. */
     if (!filter_satisfiable(&args.pipeline.filter_config)) {
         fprintf(stderr, "%s: --max-length is below --min-length\n", spec.program);
         return 2;
