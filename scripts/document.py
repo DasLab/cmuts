@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
-"""Writes the parts of the documentation that describe the programs.
+"""Documentation generation based on the current binaries.
 
-A program describes itself, so nothing here restates what one holds or what one
-accepts: the tables come from `--dump-layout` and `--dump-options`, which read
-the same declarations the program runs from.
-
-A page says which table it wants by carrying its markers, and only what lies
-between them is replaced, so a page is edited around them and never inside
-them.
+Programs describe their inputs and outputs via `--dump-layout` and
+`--dump-options`. This script formats and inserts these data into the
+documentation into sections marked by HTML markers.
 
     scripts/document.py build/release/cmuts-hmm docs/basics.md docs/cmuts-hmm.md
 """
@@ -22,6 +18,16 @@ from pathlib import Path
 # indexed by read length reaches twice that, a read being longer than what it
 # aligns to.
 EXTENTS = {"per base": "l", "per length": "2l", "scalar": None}
+
+
+def table(headings: list, rows: list) -> str:
+    """A markdown table. A cell holding a pipe would end its column early, so
+    every cell is written with its pipes escaped."""
+    def line(cells):
+        return "| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |"
+
+    return "\n".join([line(headings), line("---" for _ in headings)]
+                     + [line(row) for row in rows])
 
 
 def described(program: str, flag: str) -> dict:
@@ -60,14 +66,14 @@ def layout(program: str) -> str:
     The last column is the dataset's HDF5 fill value, which a reader can ask a
     file for. What seeing it means is the output page's, differing by field.
     """
-    rows = ["| Dataset | Shape | Type | Fill |", "| --- | --- | --- | --- |"]
     absent = {"nan": "NaN", "zero": "zero"}
 
-    for field in described(program, "--dump-layout")["fields"]:
-        rows.append(f"| `{field['name']}` | `{shape(field)}` | {field['type']} "
-                    f"| {absent.get(field['absent'], field['absent'])} |")
-
-    return "\n".join(rows)
+    return table(
+        ["Dataset", "Shape", "Type", "Fill"],
+        [[f"`{field['name']}`", f"`{shape(field)}`", field["type"],
+          absent.get(field["absent"], field["absent"])]
+         for field in described(program, "--dump-layout")["fields"]],
+    )
 
 
 def fields(program: str) -> str:
@@ -102,15 +108,15 @@ def rules(program: str) -> str:
     A field combined the same way either way is written once, since a column
     repeating its neighbour says only that the control changes nothing there.
     """
-    rows = ["| Dataset | Without a control | With one |", "| --- | --- | --- |"]
+    rows = []
 
     for field in described(program, "--dump-rules")["fields"]:
         alone, controlled = field["uncontrolled"], field["controlled"]
         with_one = "the same" if controlled == alone else controlled["detail"]
 
-        rows.append(f"| `{field['name']}` | {alone['detail']} | {with_one} |")
+        rows.append([f"`{field['name']}`", alone["detail"], with_one])
 
-    return "\n".join(rows)
+    return table(["Dataset", "Without a control", "With one"], rows)
 
 
 # ---------------------------------------------------------------------------
@@ -160,19 +166,16 @@ def options(program: str) -> str:
     written = []
 
     if spoken["positionals"]:
-        written += ["### Arguments", "", "| Argument | Description |", "| --- | --- |"]
-        for positional in spoken["positionals"]:
-            name = positional["metavar"] + ("..." if positional["variadic"] else "")
-            written.append(f"| `{name}` | {positional['help']} |")
-        written.append("")
+        rows = [[f"`{p['metavar']}{'...' if p['variadic'] else ''}`", p["help"]]
+                for p in spoken["positionals"]]
+        written += ["### Arguments", "", table(["Argument", "Description"], rows), ""]
 
     shown = [option for option in spoken["options"] if not option["hidden"]]
 
     for group in dict.fromkeys(option["group"] for option in shown):
-        written += [f"### {group}", "", "| Option | Description |", "| --- | --- |"]
-        written += [f"| `{invocation(option)}` | {option['help']}{note(option)} |"
-                    for option in shown if option["group"] == group]
-        written.append("")
+        rows = [[f"`{invocation(option)}`", option["help"] + note(option)]
+                for option in shown if option["group"] == group]
+        written += [f"### {group}", "", table(["Option", "Description"], rows), ""]
 
     return "\n".join(written).rstrip()
 
