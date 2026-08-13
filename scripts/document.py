@@ -92,6 +92,28 @@ def fields(program: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# What the subtraction does to each of them
+# ---------------------------------------------------------------------------
+
+
+def rules(program: str) -> str:
+    """What each dataset is combined by, with a denatured control and without.
+
+    A field combined the same way either way is written once, since a column
+    repeating its neighbour says only that the control changes nothing there.
+    """
+    rows = ["| Dataset | Without a control | With one |", "| --- | --- | --- |"]
+
+    for field in described(program, "--dump-rules")["fields"]:
+        alone, controlled = field["uncontrolled"], field["controlled"]
+        with_one = "the same" if controlled == alone else controlled["detail"]
+
+        rows.append(f"| `{field['name']}` | {alone['detail']} | {with_one} |")
+
+    return "\n".join(rows)
+
+
+# ---------------------------------------------------------------------------
 # The arguments a program takes
 # ---------------------------------------------------------------------------
 
@@ -159,7 +181,7 @@ def options(program: str) -> str:
 # Writing them into the pages
 # ---------------------------------------------------------------------------
 
-WRITERS = {"LAYOUT": layout, "FIELDS": fields, "OPTIONS": options}
+WRITERS = {"LAYOUT": layout, "FIELDS": fields, "RULES": rules, "OPTIONS": options}
 
 
 def spliced(text: str, kind: str, generated: str) -> str:

@@ -26,13 +26,16 @@ The default of 1 is one whole observation. Below that, the standard error of a p
 
 ## What subtraction does to each dataset
 
-| Dataset | After `cmuts-sub` |
-| --- | --- |
-| `reactivity` | the treated rate less the untreated one |
-| `error` | the two errors added in quadrature |
-| `coverage` | the two coverages added |
-| `reads/*` | the two counts added |
+<!-- BEGIN GENERATED RULES -->
+| Dataset | Without a control | With one |
+| --- | --- | --- |
+| `coverage` | every input added | the same |
+| `reactivity` | the untreated value taken from the treated one | that difference over the control's value, and missing where the control measured nothing to divide by |
+| `error` | the two added in quadrature | the error of that ratio, taking the three runs as independent |
+| `reads/lengths` | every input added | the same |
+| `reads/counted` | every input added | the same |
+| `reads/rejected` | every input added | the same |
+| `reads/unmapped` | every input added | the same |
+<!-- END GENERATED RULES -->
 
 A rate is missing wherever either input is missing one, since a difference needs both. `--clip` raises a negative difference to zero and leaves a missing value missing, rather than reading it as a zero to raise.
-
-Given a denatured control, the reactivity becomes the background-subtracted rate over the control's and the error follows the division. Where the control measured nothing at a position, there is nothing to divide by and the result is missing there.

@@ -7,6 +7,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 
 typedef struct {
     const char *treated_path;
@@ -22,3 +23,7 @@ typedef struct {
 /* Combines the inputs field by field into a file of the same layout, under the rule each
  * field follows. Returns 0, or -1 with a description in error. */
 int subtract_run(const subtract_config *cfg, char *error, size_t error_len);
+
+/* Writes the rule each field follows as JSON, with and without a control, for
+ * generating the documentation of the subtraction from the program doing it. */
+void subtract_dump_rules(FILE *out);

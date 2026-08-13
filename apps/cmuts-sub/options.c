@@ -35,6 +35,9 @@ static const cli_option OPTIONS[] = {
     { .group = "Information", .name = "dump-options", .type = OPT_FLAG,
       .help = "describe every argument as JSON and exit",
       .hidden = true, .action = CLI_DUMP_OPTIONS },
+    { .group = "Information", .name = "dump-rules", .type = OPT_FLAG,
+      .help = "describe what each field is combined by as JSON and exit",
+      .hidden = true, .action = CLI_PRINT, .print = subtract_dump_rules },
 };
 
 static const cli_positional POSITIONALS[] = {
