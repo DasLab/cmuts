@@ -2,6 +2,22 @@
 
 cmuts writes HDF5 files with a consistent schema, containing output reactivity values, statistical errors, and coverage statistics.
 
+## File Attributes
+
+Every file records what produced it, on the root group. These are attributes and not datasets, so `h5py` reads them from `f.attrs`.
+
+<!-- BEGIN GENERATED cmuts-hmm ATTRIBUTES -->
+| Attribute | Description |
+| --- | --- |
+| `program` | The name of the program that produced this file. |
+| `version` | The version of cmuts that produced this file. |
+<!-- END GENERATED cmuts-hmm ATTRIBUTES -->
+
+```python
+with h5py.File("output.h5") as f:
+    print(f.attrs["program"], f.attrs["version"])
+```
+
 ## Output Datasets
 
 <!-- BEGIN GENERATED cmuts-hmm FIELDS -->

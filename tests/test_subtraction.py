@@ -22,6 +22,7 @@ from outputs import (
     FLOAT_FIELDS,
     REACTIVITY,
     UNMAPPED,
+    attributes_of,
     delete_field,
     field_of,
     layout_of,
@@ -29,7 +30,14 @@ from outputs import (
     shape,
     write_output,
 )
-from programs import CMUTS_SUB, attempt, run_cmuts, run_subtract, try_subtract
+from programs import (
+    CMUTS_SUB,
+    attempt,
+    reported_version,
+    run_cmuts,
+    run_subtract,
+    try_subtract,
+)
 from subtraction import expected
 
 # Small enough to write out by hand and to read in a failure, and ragged enough
@@ -142,6 +150,13 @@ def test_the_layout_written_here_is_the_one_cmuts_hmm_writes(data, falsifiable,
         assert dtype == np.dtype(field.dtype), field.name
 
     assert real[UNMAPPED][0] == (), "a run total belongs to no reference"
+
+
+def test_the_difference_names_the_program_that_wrote_it(build, subtract):
+    output = subtract(build(), build())
+
+    assert attributes_of(output)["program"] == CMUTS_SUB
+    assert attributes_of(output)["version"] == reported_version(CMUTS_SUB)
 
 
 # ---------------------------------------------------------------------------

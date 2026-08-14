@@ -30,6 +30,10 @@
 #include "refctx.h"
 #include "refrow.h"
 #include "refseq.h"
+
+/* The name written into the output as the program that produced it. This file is the
+ * whole of cmuts-hmm, so the name is given here. */
+#define PIPELINE_PROGRAM "cmuts-hmm"
 #include "tally.h"
 
 /* Completed references drained per pop. The consumer is never the bottleneck, so
@@ -638,8 +642,8 @@ static int pipeline_build_buffers(pipeline *p, const pipeline_config *cfg,
 static int pipeline_open_output(pipeline *p, const pipeline_config *cfg,
                                 bool may_replace, char *error, size_t error_len)
 {
-    p->out = h5writer_create(cfg->output_path, cm_bam_stream_nref(p->bam), p->ref_cap,
-                             may_replace);
+    p->out = h5writer_create(cfg->output_path, PIPELINE_PROGRAM,
+                             cm_bam_stream_nref(p->bam), p->ref_cap, may_replace);
     if (!p->out) {
         snprintf(error, error_len, "out of memory");
         return -1;

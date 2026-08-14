@@ -14,6 +14,7 @@
 
 #include "error.h"
 #include "h5layout.h"
+#include "version.h"
 
 struct h5writer {
     hid_t   file;
@@ -61,6 +62,67 @@ int h5writer_may_replace(const char *path, bool overwrite, bool *may_replace,
      * in between is not quietly replaced. An empty file already there has to be
      * truncated instead. */
     *may_replace = overwrite || access(path, F_OK) == 0;
+    return 0;
+}
+
+/* ------------------------------------------------------------------------ */
+/* What wrote the file                                                       */
+/* ------------------------------------------------------------------------ */
+
+/* Writes one string attribute on the root group.
+ *
+ * A file identifier resolves to the root group, so the attribute is written on the file
+ * as a whole. The string is stored at its own length and not padded to a fixed one, so two
+ * files written by the same program agree byte for byte. */
+static int write_identity(hid_t file, const char *name, const char *value)
+{
+    hid_t space = H5Screate(H5S_SCALAR);
+    hid_t type  = H5Tcopy(H5T_C_S1);
+    hid_t attr  = H5I_INVALID_HID;
+    int   status = -1;
+
+    if (space < 0 || type < 0 || H5Tset_size(type, strlen(value)) < 0) {
+        goto done;
+    }
+
+    attr = H5Acreate2(file, name, type, space, H5P_DEFAULT, H5P_DEFAULT);
+
+    if (attr >= 0 && H5Awrite(attr, type, value) >= 0) {
+        status = 0;
+    }
+
+done:
+    if (attr >= 0) {
+        H5Aclose(attr);
+    }
+    if (type >= 0) {
+        H5Tclose(type);
+    }
+    if (space >= 0) {
+        H5Sclose(space);
+    }
+
+    return status;
+}
+
+/* Records which program wrote the file, and at which version. output.h names the
+ * attributes; the values are what this run holds.
+ *
+ * Neither value varies between two runs over one input, which is what leaves two such
+ * runs identical byte for byte. */
+static int stamp_identity(h5writer *w, const char *program)
+{
+    const char *value[OUT_N_ATTRS] = {
+        [OUT_ATTR_PROGRAM] = program,
+        [OUT_ATTR_VERSION] = CMUTS_VERSION,
+    };
+
+    for (out_attr_id id = 0; id < OUT_N_ATTRS; id++) {
+        if (write_identity(w->file, OUT_ATTRIBUTES[id].name, value[id]) < 0) {
+            return -1;
+        }
+    }
+
     return 0;
 }
 
@@ -271,8 +333,8 @@ static int create_fields(h5writer *w)
     return 0;
 }
 
-h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
-                          bool overwrite)
+h5writer *h5writer_create(const char *path, const char *program, int32_t n_refs,
+                          size_t ref_cap, bool overwrite)
 {
     h5writer *w = writer_alloc(n_refs, ref_cap);
 
@@ -283,6 +345,7 @@ h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
     if (build_padding(w) == 0 &&
         build_memspace(w) == 0 &&
         create_file(w, path, overwrite) == 0 &&
+        stamp_identity(w, program) == 0 &&
         create_groups(w) == 0) {
         create_fields(w);
     }

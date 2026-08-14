@@ -84,6 +84,19 @@ def layout(program: str) -> str:
     )
 
 
+def attributes(program: str) -> str:
+    """The attributes an output carries, one to a row.
+
+    These sit on the root group and describe the run, so h5py reads them from
+    the file's own attrs and not from any dataset.
+    """
+    return table(
+        ["Attribute", "Description"],
+        [[f"`{attribute['name']}`", attribute["detail"]]
+         for attribute in described(program, "--dump-layout")["attributes"]],
+    )
+
+
 def fields(program: str) -> str:
     """The same datasets at length, each under a heading of its own.
 
@@ -173,7 +186,8 @@ def options(program: str) -> str:
 # Writing them into the pages
 # ---------------------------------------------------------------------------
 
-WRITERS = {"LAYOUT": layout, "FIELDS": fields, "OPTIONS": options}
+WRITERS = {"LAYOUT": layout, "ATTRIBUTES": attributes, "FIELDS": fields,
+           "OPTIONS": options}
 
 # A block names the program that answers it and the table wanted from it, so a
 # page is found by looking in it rather than by being listed somewhere.

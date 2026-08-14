@@ -71,6 +71,25 @@ typedef struct {
 
 extern const out_field OUT_FIELDS[OUT_N_FIELDS];
 
+/* What an output carries besides its fields.
+ *
+ * These describe the run and not any reference, so they are written as attributes on the
+ * root group: everything reading an output walks its datasets, and an attribute stays out
+ * of that. Their values differ from one run to the next, so the table names them and the
+ * writer is given what each holds. */
+typedef enum {
+    OUT_ATTR_PROGRAM,
+    OUT_ATTR_VERSION,
+    OUT_N_ATTRS,
+} out_attr_id;
+
+typedef struct {
+    const char *name;
+    const char *detail;  /* what it holds, in one sentence */
+} out_attribute;
+
+extern const out_attribute OUT_ATTRIBUTES[OUT_N_ATTRS];
+
 /* The reference dimension, where a field has one, and the extents of its row. */
 #define OUT_RANK_MAX (1 + SHAPE_RANK_MAX)
 
@@ -83,9 +102,8 @@ size_t out_values(out_field_id id, size_t len, size_t cap);
 size_t out_widest(size_t cap);
 
 /* Give the bytes one of a field's values occupies, and the most any field's value
- * occupies. A
- * buffer taking a row of any field is as long as out_widest values of out_widest_bytes
- * each. */
+ * occupies. A buffer taking a row of any field is as long as out_widest values of
+ * out_widest_bytes each. */
 size_t out_stored_bytes(out_field_id id);
 size_t out_widest_bytes(void);
 

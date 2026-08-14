@@ -66,6 +66,17 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     },
 };
 
+const out_attribute OUT_ATTRIBUTES[OUT_N_ATTRS] = {
+    [OUT_ATTR_PROGRAM] = {
+        .name   = "program",
+        .detail = "The name of the program that produced this file.",
+    },
+    [OUT_ATTR_VERSION] = {
+        .name   = "version",
+        .detail = "The version of cmuts that produced this file.",
+    },
+};
+
 size_t out_values(out_field_id id, size_t len, size_t cap)
 {
     return shape_values(OUT_FIELDS[id].row, len, cap);
@@ -184,9 +195,28 @@ static void print_detail(FILE *out, const char *detail)
     fputc('"', out);
 }
 
+/* Every attribute the output carries, as the objects of a JSON array. */
+static void dump_attributes(FILE *out)
+{
+    for (out_attr_id id = 0; id < OUT_N_ATTRS; id++) {
+        fprintf(out, "    {\n      \"name\": \"%s\",\n      \"detail\": ",
+                OUT_ATTRIBUTES[id].name);
+
+        print_detail(out, OUT_ATTRIBUTES[id].detail);
+
+        fprintf(out, "\n    }%s\n", id + 1 < OUT_N_ATTRS ? "," : "");
+    }
+}
+
+/* cmuts_version is the version of the program dumping this, which is not the version
+ * attribute above: that one is written into a file and says what produced it. */
 void out_dump_layout(FILE *out)
 {
-    fprintf(out, "{\n  \"version\": \"%s\",\n  \"fields\": [\n", CMUTS_VERSION);
+    fprintf(out, "{\n  \"cmuts_version\": \"%s\",\n  \"attributes\": [\n", CMUTS_VERSION);
+
+    dump_attributes(out);
+
+    fprintf(out, "  ],\n  \"fields\": [\n");
 
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
         const out_field *field = &OUT_FIELDS[id];

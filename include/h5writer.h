@@ -36,9 +36,12 @@ typedef struct h5writer h5writer;
 int h5writer_may_replace(const char *path, bool overwrite, bool *may_replace,
                          char *error, size_t error_len);
 
-/* Creates the file, failing where one is already at the path unless overwrite is set. */
-h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
-                          bool overwrite);
+/* Creates the file, failing where one is already at the path unless overwrite is set.
+ *
+ * program names what is writing the file, and is recorded on the root group alongside the
+ * version, so that a result read back later can be traced to what produced it. */
+h5writer *h5writer_create(const char *path, const char *program, int32_t n_refs,
+                          size_t ref_cap, bool overwrite);
 void      h5writer_close(h5writer *w);
 
 /* Writes one field's values for a reference of len bases, narrowing the accumulated doubles

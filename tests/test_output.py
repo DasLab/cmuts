@@ -1,12 +1,13 @@
-"""What happens to a file already at the output path.
+"""What a run leaves at the output path.
 
 Replacing a previous result requires --overwrite, a run costing far more than
-the command that starts it.
+the command that starts it. The program and version stamped on the result are
+covered here as well.
 """
 
 from datasets import DATASETS
-from outputs import outputs_agree
-from programs import run_cmuts, try_cmuts
+from outputs import attributes_of, outputs_agree
+from programs import CMUTS_HMM, reported_version, run_cmuts, try_cmuts
 
 # Higher than the first run's threshold of zero, so the two runs of an
 # overwrite count different reads.
@@ -93,3 +94,26 @@ def test_a_file_that_is_not_an_output_is_left_intact(data, falsifiable, tmp_path
 
     assert attempt.returncode != 0
     assert notes.read_text() == NOTES
+
+
+def test_outputs_are_labelled_with_the_program(data, falsifiable, tmp_path):
+    output = tmp_path / "out.h5"
+
+    # The attribute is written by every run, whatever it counted.
+    falsifiable(True)
+
+    run_cmuts(data, output)
+
+    assert attributes_of(output)["program"] == CMUTS_HMM
+
+
+def test_outputs_are_versioned(data, falsifiable, tmp_path):
+    """Compared against the version the program prints, so that a release
+    cannot change one without the other."""
+    output = tmp_path / "out.h5"
+
+    falsifiable(True)
+
+    run_cmuts(data, output)
+
+    assert attributes_of(output)["version"] == reported_version(CMUTS_HMM)

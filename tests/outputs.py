@@ -184,6 +184,14 @@ def fields_of(path, names) -> dict:
         return {name: handle[name][()] for name in names}
 
 
+def attributes_of(path) -> dict:
+    """Reads the attributes of the root group, as text. HDF5 hands a string back
+    as bytes, whatever it was written from."""
+    with h5py.File(path, "r") as handle:
+        return {name: value.decode() if isinstance(value, bytes) else value
+                for name, value in handle.attrs.items()}
+
+
 def layout_of(path) -> dict:
     """Returns the shape and type of every dataset, by path."""
     with h5py.File(path, "r") as handle:

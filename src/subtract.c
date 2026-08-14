@@ -16,6 +16,10 @@
 #include "h5writer.h"
 #include "output.h"
 
+/* The name written into the output as the program that produced it. This file is the
+ * whole of cmuts-sub, so the name is given here. */
+#define SUBTRACT_PROGRAM "cmuts-sub"
+
 typedef enum {
     SUB_TREATED,
     SUB_UNTREATED,
@@ -505,8 +509,8 @@ static int build_buffers(subtraction *s, char *error, size_t error_len)
 static int open_output(subtraction *s, bool may_replace, char *error,
                        size_t error_len)
 {
-    s->out = h5writer_create(s->cfg->output_path, s->n_refs, s->ref_cap,
-                             may_replace);
+    s->out = h5writer_create(s->cfg->output_path, SUBTRACT_PROGRAM, s->n_refs,
+                             s->ref_cap, may_replace);
     if (!s->out) {
         snprintf(error, error_len, "out of memory");
         return -1;

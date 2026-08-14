@@ -61,6 +61,12 @@ def execute_into(path, command):
     return path
 
 
+def reported_version(program: str) -> str:
+    """Returns the version a program prints for --version, which it gives after
+    its own name."""
+    return execute([program, "--version"]).stdout.split()[-1]
+
+
 def samtools(*arguments) -> str:
     """Runs samtools and returns what it printed."""
     return execute(["samtools", *arguments]).stdout
