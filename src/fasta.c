@@ -54,7 +54,7 @@ cm_fasta_reader *cm_fasta_open(const char *path, const char **why)
 
     reader->file = bgzf_open(path, "r");
     if (!reader->file) {
-        /* Single-threaded, this being reached before any thread is started.
+        /* Single-threaded, since this is reached before any thread is started.
          * NOLINTNEXTLINE(concurrency-mt-unsafe) */
         *why = strerror(errno);
         reader_free(reader);
@@ -82,8 +82,8 @@ void cm_fasta_close(cm_fasta_reader *reader)
 /* Iteration                                                                 */
 /* ------------------------------------------------------------------------ */
 
-/* The record's description, or NULL where the header line carries none. kseq leaves the
- * comment empty rather than absent in that case. */
+/* Gives the record's description, or NULL where the header line carries none. kseq
+ * leaves the comment empty and not absent in that case. */
 static const char *record_comment(const kseq_t *seq)
 {
     return seq->comment.l > 0 ? seq->comment.s : NULL;

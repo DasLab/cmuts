@@ -8,7 +8,7 @@
 #include <math.h>
 #include <stdbool.h>
 
-/* Chunks are sized in bytes rather than rows, so that a file of few long references
+/* Chunks are sized in bytes and not rows, so that a file of few long references
  * and one of many short references both land near this figure. */
 #define TARGET_CHUNK_BYTES (1u << 20)
 
@@ -73,8 +73,9 @@ hid_t h5layout_type(out_field_id id)
     return H5I_INVALID_HID;
 }
 
-/* The type a field's values are handed over in, which is the one it is stored as. A value
- * read from a file and written to another passes through nothing wider on the way. */
+/* Returns the type a field's values are handed over in, which is the one it is stored
+ * as. A value read from a file and written to another passes through nothing wider on
+ * the way. */
 hid_t h5layout_memory_type(out_field_id id)
 {
     switch (OUT_FIELDS[id].stored) {
@@ -86,10 +87,10 @@ hid_t h5layout_memory_type(out_field_id id)
     return H5I_INVALID_HID;
 }
 
-/* A field's absence marker, in the type the field is stored as.
+/* Gives a field's absence marker, in the type the field is stored as.
  *
  * An unsigned has no NaN, so that one pairing has no fill and a field declaring it is
- * refused rather than filled with something that means otherwise. A storage type added
+ * refused, and not filled with something that means otherwise. A storage type added
  * without fills of its own is refused the same way. */
 const void *h5layout_fill(out_field_id id)
 {

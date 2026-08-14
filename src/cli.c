@@ -1,4 +1,4 @@
-/* cli.c -- command line parsing, driven by a program's option table.
+/* cli.c -- command line parsing
  *
  * Every argument a program accepts is described once, in its cli_spec. The short
  * option string, the getopt_long table, assignment, bounds checking, the usage
@@ -29,15 +29,11 @@
 #define INVOCATION_MAX 64  /* both forms of an option, and its placeholder */
 #define CEILING_MAX    32  /* an option's largest value, written out */
 #define SET_LIST_MAX   64  /* the choices a set holds, comma separated */
-
-/* The note giving an option's default. A string default is written out in full,
- * so this is the one of these a row can outgrow, and the note is truncated where
- * it does. */
-#define DEFAULT_NOTE_MAX 64
+#define DEFAULT_NOTE_MAX 64 /* the note giving an option's default. */
 
 /* The column an option's help begins in, shared with the arguments list so the
- * two cannot step apart. A floor rather than a fixed width, since a metavar may
- * be wider than it leaves room for. */
+ * two cannot step apart. A floor and not a fixed width, since a metavar may be
+ * wider than it leaves room for. */
 #define HELP_COLUMN 28
 
 /* Reports an option getopt would not accept, quoting it as the caller wrote it.
@@ -68,8 +64,6 @@ static bool takes_argument(const cli_option *opt)
     return opt->type != OPT_FLAG;
 }
 
-/* Whether the option writes to the args struct. One that prints and exits has no
- * destination, so its offset is never used. */
 static bool stores_a_value(const cli_option *opt)
 {
     return opt->action == CLI_STORE;
@@ -102,7 +96,7 @@ static const cli_option *option_by_id(const cli_spec *spec, int id)
 /* ------------------------------------------------------------------------ */
 
 /* Builds the short option string. The leading colon has getopt report a missing
- * value separately from an unknown option, the two getting different messages. */
+ * value separately from an unknown option, so they can get different messages. */
 static void build_short_options(const cli_spec *spec, char *out, size_t size)
 {
     size_t n = 0;
@@ -173,11 +167,10 @@ static int parse_choice(const cli_option *opt, const char *text, const char *pro
     return parse_choice_n(opt, text, strlen(text), program, out);
 }
 
-/* Every choice a comma-separated list names, OR'd together.
+/* Parses every choice a comma-separated list names, OR'd together.
  *
  * The empty subset is a choice worth zero. Asking for it alongside another is a
- * contradiction rather than a preference between the two, so it is refused instead of
- * resolved. */
+ * contradiction and not a preference between the two, so it is refused. */
 static int parse_set(const cli_option *opt, const char *text, const char *program,
                      int *out)
 {
@@ -208,8 +201,8 @@ static int parse_set(const cli_option *opt, const char *text, const char *progra
     return 0;
 }
 
-/* The largest whole number an option will take. One with no ceiling of its own is
- * bounded by what its destination can hold, so no value is accepted that the field
+/* Returns the largest whole number an option will take. One with no ceiling of its own
+ * is bounded by what its destination can hold, so no value is accepted that the field
  * would silently truncate. */
 static long integer_ceiling(const cli_option *opt)
 {
@@ -225,7 +218,7 @@ static double real_ceiling(const cli_option *opt)
     return opt->maximum != CLI_UNBOUNDED ? (double)opt->maximum : DBL_MAX;
 }
 
-/* The largest value an option will take, written out. */
+/* Returns the largest value an option will take, written out. */
 static const char *ceiling_text(const cli_option *opt, char *out, size_t size)
 {
     if (opt->type == OPT_DOUBLE) {
@@ -358,8 +351,8 @@ static int assign(const cli_option *opt, void *args, const char *value,
 /* Help                                                                      */
 /* ------------------------------------------------------------------------ */
 
-/* The names of every choice a set holds, comma separated, which is the spelling the
- * option itself takes. */
+/* Returns the names of every choice a set holds, comma separated, which is the spelling
+ * the option itself takes. */
 static void format_set(const cli_option *opt, int value, char *out, size_t size)
 {
     size_t used = 0;
@@ -439,8 +432,8 @@ static void format_default(const cli_option *opt, const void *defaults,
     }
 }
 
-/* How an option is written on its help line: the short form where it has one, the
- * long form always, and its placeholder. Both the width pass and the print read it
+/* Returns how an option is written on its help line: the short form where it has one,
+ * the long form always, and its placeholder. Both the width pass and the print read it
  * from here, so neither can measure one thing and write another. */
 static const char *option_form(const cli_option *opt, char *out, size_t len)
 {
@@ -479,9 +472,10 @@ static void print_option(FILE *out, const cli_option *opt, const void *defaults,
     fprintf(out, "%s\n", suffix);
 }
 
-/* Whether an earlier visible option shares this one's group. Found by scanning
- * rather than by assuming the table is sorted by group, so a row added anywhere
- * lands under the right heading and a group of only hidden rows prints none. */
+/* Returns whether an earlier visible option shares this one's group. Found by
+ * scanning the table, which is not assumed sorted by group, so a row added
+ * anywhere lands under the right heading and a group of only hidden rows prints
+ * none. */
 static bool group_seen_before(const cli_spec *spec, size_t index)
 {
     for (size_t i = 0; i < index; i++) {
@@ -494,7 +488,7 @@ static bool group_seen_before(const cli_spec *spec, size_t index)
     return false;
 }
 
-/* A placeholder, with an ellipsis where it stands for any number of arguments. */
+/* Returns a placeholder, with an ellipsis where it stands for any number of arguments. */
 static const char *positional_form(const cli_positional *pos, char *out, size_t len)
 {
     snprintf(out, len, "%s%s", pos->metavar, pos->variadic ? "..." : "");
@@ -528,8 +522,8 @@ static void print_usage_line(const cli_spec *spec, FILE *out)
     fputc('\n', out);
 }
 
-/* The widest invocation the help will print, so that nothing runs into its own
- * description. Hidden options are left out, never being printed. */
+/* Returns the widest invocation the help will print, so that nothing runs into its own
+ * description. Hidden options are left out and never printed. */
 static int help_column(const cli_spec *spec)
 {
     size_t widest = HELP_COLUMN;
@@ -779,8 +773,8 @@ static cli_status check_required_options(const cli_spec *spec, const bool *seen)
     return CLI_OK;
 }
 
-/* How many positional arguments the spec demands. A variadic one takes any number
- * but demands one where it is required. */
+/* Returns how many positional arguments the spec demands. A variadic one takes any
+ * number but demands one where it is required. */
 static int fewest_arguments(const cli_spec *spec)
 {
     int fewest = 0;

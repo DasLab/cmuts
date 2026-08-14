@@ -15,13 +15,12 @@
 
 static const char BASES[] = "ACGT";
 
-/* How much room an MD string is given: a few characters per event, plus room for the count it
- * closes with.
- *
- * Neither figure is what keeps the writing inside the buffer -- the cursor is held short of the
- * end at every step regardless -- so an underestimate costs a tag cut short and nothing worse.
- * MD_HEADROOM is the margin the loop keeps so that a tag cut short ends after a whole event
- * rather than partway through a number. */
+/* How much room an MD string is given: a few characters per event, plus room for the
+ * count it closes with.
+ * Neither figure is what keeps the writing inside the buffer -- the cursor is held
+ * short of the end at every step regardless -- so an underestimate costs a tag cut
+ * short and nothing worse. MD_HEADROOM is the margin the loop keeps so that a tag cut
+ * short ends after a whole event and not partway through a number. */
 #define MD_PER_EVENT 4
 #define MD_TAIL      32
 #define MD_HEADROOM  16
@@ -147,8 +146,9 @@ static size_t add_clip(sim_event *events, size_t n, size_t cap, long len, rng *r
     return n;
 }
 
-/* Whether an event falls at this position, spreading the remaining events uniformly over the
- * positions left so that no list of positions has to be drawn and sorted first. */
+/* Returns whether an event falls at this position, spreading the remaining events
+ * uniformly over the positions left so that no list of positions has to be drawn and
+ * sorted first. */
 static bool event_falls_here(long remaining, size_t positions_left, rng *r)
 {
     return remaining > 0 &&

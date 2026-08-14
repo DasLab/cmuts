@@ -75,8 +75,8 @@ progress *progress_start(const cm_bam_stream *stream)
     return bar;
 }
 
-/* How far along the bar a position is, held to 100. Decoding runs ahead of the records
- * handed on, so the reader can be past the span the bar was drawn across. */
+/* Returns how far along the bar a position is, held to 100. Decoding runs ahead of the
+ * records handed on, so the reader can be past the span the bar was drawn across. */
 static int percentage(const progress *bar, uint64_t position)
 {
     return position >= bar->span ? 100 : (int)(position * 100 / bar->span);

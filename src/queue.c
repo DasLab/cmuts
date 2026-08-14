@@ -105,7 +105,7 @@ size_t queue_push(queue *q, void *const *items, size_t n)
 
         pushed += fill(q, items + pushed, n - pushed);
 
-        /* One waiter rather than all of them: a fill adds at most a batch and a
+        /* One waiter and not all of them: a fill adds at most a batch and a
          * consumer takes at most a batch, the same configured value on both sides, so
          * one waiter drains what one fill added.
          *

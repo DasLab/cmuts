@@ -29,7 +29,7 @@ void      itempool_destroy(itempool *p);
  * how many were obtained. Fewer than asked for is not an error; it is what bounds the reads
  * resident in memory.
  *
- * Taken in groups for the same reason reads are: one at a time, the free list's lock is
- * acquired twice per read, which costs more than the processing it protects. */
+ * Taken in groups for the same reason reads are, so that the free list's lock is acquired
+ * once per group and not twice per read. */
 size_t itempool_take_many(itempool *p, void **items, size_t n);
 void   itempool_give_many(itempool *p, void **items, size_t n);

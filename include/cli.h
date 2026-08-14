@@ -1,9 +1,8 @@
-/* cli.h -- command line parsing, driven by a table of options.
+/* cli.h -- command line parsing
  *
  * A program describes its command line once, as a cli_spec, and everything else derives
  * from it: parsing, bounds checking, the usage line, grouped help, and a JSON description
- * for generating documentation and shell completions. Nothing here interprets what any
- * particular program's options mean.
+ * for generating documentation and shell completions.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -41,10 +40,10 @@ typedef struct {
     int         value;
 } cli_choice;
 
-/* What an option does besides storing a value. Those that print and exit are declared
- * rather than recognized by name, so they need no field of their own and any program may
- * have them. CLI_PRINT names a function to call, which is how a program prints something
- * specific to it without this header declaring what that is. */
+/* What an option does besides storing a value. Those that print and exit are declared, so
+ * they need no field of their own and any program may have them. CLI_PRINT names a function
+ * to call, which is how a program prints something specific to it without this header
+ * declaring what that is. */
 typedef enum {
     CLI_STORE,
     CLI_SHOW_HELP,
@@ -79,8 +78,8 @@ typedef struct {
     const char *help;
     size_t      offset;
     bool        required;
-    /* Takes every remaining argument rather than one, so it must come last. The array goes
-     * to offset and its length to count_offset. */
+    /* Takes every remaining argument, so it must come last. The array goes to offset and
+     * its length to count_offset. */
     bool        variadic;
     size_t      count_offset;
 } cli_positional;

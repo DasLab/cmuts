@@ -14,9 +14,9 @@ static bool is_clip(uint32_t op)
     return op == BAM_CSOFT_CLIP || op == BAM_CHARD_CLIP;
 }
 
-/* How far an operation moves the query offset, which only a soft clip does. A hard
- * clipped base is absent from the stored sequence, so the bases either side of it are
- * already adjacent. */
+/* Returns how far an operation moves the query offset, which only a soft clip does. A
+ * hard clipped base is absent from the stored sequence, so the bases either side of it
+ * are already adjacent. */
 static int32_t soft_clipped(uint32_t cigar)
 {
     return bam_cigar_op(cigar) == BAM_CSOFT_CLIP
@@ -79,8 +79,8 @@ aln_span aln_places(const cm_bam_record *read, aln_place *places)
             /* Reference passed over with no read base to pair against it. The place
              * before the skip keeps its start and takes the skip's end, so that it
              * accounts for the whole stretch the path crosses without the read moving.
-             * Consecutive skips extend the same place, there being one place per base
-             * and not one per operation. */
+             * Consecutive skips extend the same place, since there is one place per
+             * base and not one per operation. */
             reference          += (hts_pos_t)len;
             places[placed].last = reference;
         }

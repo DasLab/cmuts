@@ -11,8 +11,8 @@
 
 /* How far either side of the aligner's path the model may look.
  *
- * The band is drawn around the CIGAR rather than around a diagonal, so it bounds
- * departure from the reported alignment. The width needed follows the length of the gap
+ * The band is drawn around the CIGAR, so it bounds departure from the reported
+ * alignment. The width needed follows the length of the gap
  * and not that of the homopolymer run it sits in: 2 admits every placement of a one or
  * two base deletion, and wider scored no better on the two libraries tested.
  *
@@ -90,9 +90,9 @@ void          phmm_scratch_destroy(phmm_scratch *scratch);
 
 /* What one read contributes to each reference position it could have reached.
  *
- * A window rather than the whole reference, a read reaching a few hundred positions of a
- * reference that may be far longer. Values are fractional, spread over each placement the
- * band allowed, and must be added to a target rather than assigned.
+ * The window covers the positions one read reaches, which are a few hundred of a reference
+ * that may be far longer. Values are fractional, spread over each placement the band
+ * allowed, and are added to a target, never assigned.
  *
  * The window is sized from the band, which is not clamped, so it may extend past either
  * end of the reference. Those positions are present but never written to, and the caller
@@ -107,8 +107,8 @@ typedef struct {
 
 /* How a marginalization ended.
  *
- * Both failures indicate a bad parameter or a bug rather than a bad read, and neither is
- * fixed by trying the next alignment. A row summing to zero means a band with no width; a
+ * Both failures indicate a bad parameter or a bug, and not a bad read, so neither is fixed
+ * by trying the next alignment. A row summing to zero means a band with no width; a
  * row summing to something non-finite means a parameter that is not a probability; the two
  * passes disagreeing about which paths exist means an index error. */
 typedef enum {

@@ -168,8 +168,8 @@ void ctxpool_destroy(ctxpool *p)
 
 /* Takes a context from the pool, blocking while every one is live.
  *
- * The queue carries a void *, converted through a slot of its own rather than by
- * reading a refctx * as though it were one. Only void * and char * are guaranteed the
+ * The queue carries a void *, converted through a slot of its own and not by reading
+ * a refctx * as though it were one. Only void * and char * are guaranteed the
  * representation of every other object pointer, so the two may not be aliased. */
 refctx *ctxpool_take(ctxpool *p)
 {

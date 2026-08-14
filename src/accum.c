@@ -16,7 +16,7 @@
  * contribute to it whole. An insertion contributes only as far as --insertion-weight
  * makes it a modification, entering the span weighted exactly as it enters the
  * mutations: weighted into one and not the other, it would count as evidence against a
- * modification rather than no evidence either way. */
+ * modification, and not the absence of evidence. */
 const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS] = {
     [ACCUM_COVERAGE]  = { shape_per_base },
     [ACCUM_SPANNED]   = { shape_per_base },

@@ -39,7 +39,8 @@ refseq_source *refseq_open(const char *fasta_path, const cm_bam_stream *bams, in
                            const char **why);
 void           refseq_close(refseq_source *src);
 
-/* The sequence for the given reference index. tid must not go backwards, which holds for any
+/* Gives the sequence for the given reference index. tid must not go backwards, which
+ * holds for any
  * coordinate-sorted file. Returns NULL on mismatch or premature end of file, with the cause
  * available from refseq_error(). */
 const cm_fasta_record *refseq_advance(refseq_source *src, int32_t tid);

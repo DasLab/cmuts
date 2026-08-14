@@ -36,7 +36,7 @@ typedef struct h5writer h5writer;
 int h5writer_may_replace(const char *path, bool overwrite, bool *may_replace,
                          char *error, size_t error_len);
 
-/* Fails rather than replacing an existing file unless overwrite is set. */
+/* Creates the file, failing where one is already at the path unless overwrite is set. */
 h5writer *h5writer_create(const char *path, int32_t n_refs, size_t ref_cap,
                           bool overwrite);
 void      h5writer_close(h5writer *w);
@@ -54,8 +54,8 @@ int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
  * must hold out_values(id, ref_cap, ref_cap) of that type, every column being written. */
 int h5writer_row(h5writer *w, out_field_id id, int32_t tid, const void *values);
 
-/* Writes the whole of a field belonging to the run rather than to any one reference, and
- * so having no row. */
+/* Writes the whole of a field belonging to the run and not to any one reference, and so
+ * having no row. */
 int h5writer_total(h5writer *w, out_field_id id, size_t value);
 
 const char *h5writer_error(const h5writer *w);

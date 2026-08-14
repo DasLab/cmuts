@@ -34,8 +34,8 @@ enum { STATE_MATCH, STATE_INSERTION, STATE_DELETION, N_STATES };
 typedef double band_cell[N_STATES];
 
 /* One cell's base comparison, read by the forward pass, the backward pass and
- * the accumulation. Stored for the whole matrix rather than one row, since the
- * backward pass reads rows the forward pass has already gone past. */
+ * the accumulation. Stored for the whole matrix, since the backward pass reads
+ * rows the forward pass has already gone past. */
 typedef struct {
     double emission;
     double modification;
@@ -50,12 +50,11 @@ typedef struct {
 #define OTHER_BASES ((double)(NUC_BASES - 1))
 
 /* Forward times backward sums to one on every row. A departure past this
- * indicates an index error rather than rounding, and the read is discarded. */
+ * indicates an index error and not rounding, and the read is discarded. */
 #define NORMALIZATION_TOLERANCE 1e-6
 
 /* Rows are stored at the widest row's stride, so a row is located by
- * multiplication rather than through an offset table. Only the loops are
- * ragged. */
+ * multiplication. Only the loops are ragged. */
 struct phmm_scratch {
     aln_place *places;     /* one per placed read base, and one before them */
     double    *scale;      /* reciprocal of each forward row's total */
@@ -139,7 +138,7 @@ void phmm_build(phmm *model, const phmm_params *params,
     model->deletion_to_match      = 1.0 - params->extend_deletion;
 }
 
-/* The chance a read base agrees with the reference base it was templated from,
+/* Returns the chance a read base agrees with the reference base it was templated from,
  * and the chance it differs. A base can disagree two ways -- the template was
  * modified, or the base was misread -- and a quality score measures only the
  * second. Agreement plus three disagreements sums to one. */
@@ -155,7 +154,7 @@ static double disagreement_chance(double modification, double error)
          + modification * (1.0 - error / OTHER_BASES) / OTHER_BASES;
 }
 
-/* Given the base as read, the chance the template differed here. An agreeing base
+/* Gives the chance the template differed here, given the base as read. An agreeing base
  * may have been modified and misread back into agreement; a disagreeing one may
  * be an unmodified base misread, so a poorly read disagreement counts for less
  * than a clean one. */
@@ -174,8 +173,8 @@ static double phmm_modification(const phmm *model, bool agree, double error)
 /* One read base against the reference                                       */
 /* ------------------------------------------------------------------------ */
 
-/* The chance the base at the given query offset was misread. A record storing no
- * qualities weighs every base fully, leaving the modification rate to explain a
+/* Returns the chance the base at the given query offset was misread. A record storing
+ * no qualities weighs every base fully, leaving the modification rate to explain a
  * disagreement. */
 static double error_at(const context *ctx, int32_t query)
 {
@@ -184,7 +183,7 @@ static double error_at(const context *ctx, int32_t query)
          : 0.0;
 }
 
-/* The emission of an agreeing or disagreeing pairing, and how much of it is
+/* Gives the emission of an agreeing or disagreeing pairing, and how much of it is
  * attributable to a real difference in the template. */
 static cell_terms terms_from(const context *ctx, bool agree, double error)
 {
@@ -224,7 +223,7 @@ static row_terms row_terms_of(const context *ctx, size_t i)
     };
 }
 
-/* The comparison for a cell at reference prefix length j, which pairs the row's
+/* Returns the comparison for a cell at reference prefix length j, which pairs the row's
  * base with reference base j - 1. A position past either end of the reference has
  * no base to pair with, so its emission is zero; an ambiguous base is a real base
  * of unknown identity and takes the uninformative emission. */
@@ -257,15 +256,15 @@ static double confidence_at(const context *ctx, size_t i)
 /* The band                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* A forward row as stored, which is not the value it represents. See
+/* Returns a forward row as stored, which is not the value it represents. See
  * scaled_row. */
 static band_cell *row_of(const context *ctx, size_t i)
 {
     return ctx->scratch->forward + i * (size_t)ctx->widest;
 }
 
-/* The same row, const. A pointer to an array takes its own qualifier only from
- * C23, so the cast lives here and in read_backward_row_of rather than at every
+/* Returns the same row, const. A pointer to an array takes its own qualifier only from
+ * C23, so the cast lives here and in read_backward_row_of, and not at every
  * call site. */
 static const band_cell *read_row_of(const context *ctx, size_t i)
 {
@@ -294,7 +293,7 @@ static scaled_row scaled_row_of(const context *ctx, size_t i)
     };
 }
 
-/* The true value of one cell. */
+/* Returns the true value of one cell. */
 static double forward_at(const scaled_row *row, hts_pos_t k, int state)
 {
     return row->cell[k][state] * row->scale;
@@ -305,7 +304,7 @@ static cell_terms *terms_of(const context *ctx, size_t i)
     return ctx->scratch->terms + i * (size_t)ctx->widest;
 }
 
-/* The buffer holding row i, chosen by its parity. */
+/* Returns the buffer holding row i, chosen by its parity. */
 static band_cell *backward_row_of(const context *ctx, size_t i)
 {
     return ctx->scratch->backward + (i & 1) * (size_t)ctx->widest;
@@ -324,7 +323,7 @@ static hts_pos_t skip_at(const context *ctx, size_t i)
     return ctx->scratch->places[i].last - ctx->scratch->places[i].first;
 }
 
-/* Cells in row i: the whole stretch the CIGAR path crosses on it, plus a
+/* Returns the cells in row i: the whole stretch the CIGAR path crosses on it, plus a
  * half-width either side. A row with a deletion after it spans the whole skip
  * even at a band of 0, so the band only adds room to depart from the reported
  * alignment. */
@@ -333,28 +332,28 @@ static hts_pos_t width_at(const context *ctx, size_t i)
     return skip_at(ctx, i) + 2 * (hts_pos_t)ctx->half[i] + 1;
 }
 
-/* The reference prefix length a row's first cell stands for. */
+/* Returns the reference prefix length a row's first cell stands for. */
 static hts_pos_t origin_of(const context *ctx, size_t i)
 {
     return ctx->scratch->places[i].first - ctx->half[i];
 }
 
-/* The reference prefix length a cell of a row stands for. */
+/* Returns the reference prefix length a cell of a row stands for. */
 static hts_pos_t position_of(const context *ctx, size_t i, hts_pos_t k)
 {
     return origin_of(ctx, i) + k;
 }
 
-/* What to add to a cell index to reach the same position on another row. Rows may
- * widen or narrow, so the offset is the distance between their first cells. */
+/* Returns what to add to a cell index to reach the same position on another row. Rows
+ * may widen or narrow, so the offset is the distance between their first cells. */
 static hts_pos_t shift_between(const context *ctx, size_t from, size_t to)
 {
     return origin_of(ctx, to) - origin_of(ctx, from);
 }
 
-/* Whether k is a cell of a row of the given width. Rows differ in width, so an
- * index is meaningful only against its own row's. The width is a parameter rather
- * than looked up, being fixed while a row is walked. */
+/* Returns whether k is a cell of a row of the given width. Rows differ in width, so an
+ * index is meaningful only against its own row's. The width is a parameter,
+ * since it is fixed while a row is walked. */
 static bool within(hts_pos_t k, hts_pos_t width)
 {
     return k >= 0 && k < width;
@@ -418,7 +417,7 @@ static descent descent_into(const context *ctx, size_t i)
     };
 }
 
-/* A cell's two states that consume a read base, and so step from the row above. */
+/* Returns a cell's two states that consume a read base, and so step from the row above. */
 static double paired_from(const descent *step, const double *above,
                           double emission)
 {
@@ -433,8 +432,8 @@ static double inserted_from(const descent *step, const double *above)
          + step->insertion_to_insertion * above[STATE_INSERTION];
 }
 
-/* A cell's deletion state, stepped from the cell to its left. A deletion advances
- * along the reference without the read moving, so this is the only state that
+/* Returns a cell's deletion state, stepped from the cell to its left. A deletion
+ * advances along the reference without the read moving, so this is the only state that
  * depends on its own row. */
 static double deleted_from(const phmm *model, double left_match,
                            double left_deletion)
@@ -443,7 +442,7 @@ static double deleted_from(const phmm *model, double left_match,
          + model->deletion_to_deletion * left_deletion;
 }
 
-/* Whether row i may hold a deletion. The first and last rows may not: reference
+/* Returns whether row i may hold a deletion. The first and last rows may not: reference
  * passed over before the first read base or after the last has no recoverable
  * position. */
 static bool deletions_live(const context *ctx, size_t i)
@@ -468,13 +467,13 @@ static double forward_row(const context *ctx, size_t i)
     hts_pos_t        width = width_at(ctx, i);
     hts_pos_t        above_width = width_at(ctx, i - 1);
     bool             live  = deletions_live(ctx, i);
-    /* The cell to the left, held rather than re-read from the row just written:
-     * the deletion chain runs the width of the row, and a load waiting on the
-     * preceding store would lengthen every link of it. */
+    /* The cell to the left, held in a local: the deletion chain runs the width of
+     * the row, and a load waiting on the preceding store would lengthen every link
+     * of it. */
     double           left_match    = 0.0;
     double           left_deletion = 0.0;
     /* One running sum per state, giving three addition chains the width of the
-     * row rather than one chain three times as deep. */
+     * row in place of one chain three times as deep. */
     double           total_paired   = 0.0;
     double           total_inserted = 0.0;
     double           total_deleted  = 0.0;
@@ -526,7 +525,7 @@ static bool record_total(const context *ctx, size_t i, double total)
     return true;
 }
 
-/* The forward pass. The first row is filled directly, having no row above to step
+/* Runs the forward pass. The first row is filled directly, having no row above to step
  * from. */
 static bool forward(const context *ctx)
 {
@@ -656,7 +655,7 @@ static accumulation accumulation_of(const context *ctx, size_t i)
  * A pairing spans the position it pairs with, covers it in proportion to the
  * confidence in the base, and contributes the part of its posterior belonging to
  * a real difference in the template. A deletion spans every position it passes
- * over and covers none, no base having been read there; it counts as a
+ * over and covers none, since no base was read there; it counts as a
  * modification only where it opened, one adduct having stopped one reverse
  * transcriptase whatever length was then skipped. An insertion counts the same
  * way, at the position it precedes, and covers nothing.
@@ -665,16 +664,16 @@ static accumulation accumulation_of(const context *ctx, size_t i)
  * what its weight gives, the same quantity it lays as a mutation: how far an
  * inserted base bears on a reference position is exactly how far it is taken to
  * be a modification there. Spanning it unweighted would make a weight of zero
- * evidence against a modification rather than no evidence either way.
+ * into evidence against a modification, and not the absence of evidence.
  *
- * A deletion is laid at the end of its run rather than its start, reverse
- * transcription reading the template from the 3' end: the last base a deletion
+ * A deletion is laid at the end of its run and not its start, since reverse
+ * transcription reads the template from the 3' end: the last base a deletion
  * passes over is the first the enzyme met. Both are marginals of one joint over
  * runs, so the choice moves where a deletion is counted, not how much there is.
  * A deletion closes against the pairing on the row below, which is why that is
  * passed in; an insertion opens out of the pairing on the row above.
  *
- * The row's scaling is undone on the two states read here rather than across the
+ * The row's scaling is undone on the two states read here, and not across the
  * whole row as it was written. */
 static void accumulate_cell(accumulation *acc, hts_pos_t k,
                             const double *back, double pairing)
@@ -714,8 +713,8 @@ static void accumulate_end(const accumulation *acc)
 /* Backward                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* The last row of the backward pass, accumulated into the window as it is formed
- * so that a cell's values stay in registers rather than being read back.
+/* Fills the last row of the backward pass, accumulating into the window as it is formed
+ * so that a cell's values stay in registers and are not read back.
  *
  * The alignment ends on this row, having paired or inserted its final base
  * without passing over a reference base. There is no row below for a deletion to
@@ -805,8 +804,8 @@ static void backward_row(const context *ctx, size_t i)
     accumulate_end(&acc);
 }
 
-/* The first row of the backward pass, which is the alignment about to begin. Its
- * posterior gives where the read starts rather than what any base was compared
+/* Fills the first row of the backward pass, which is the alignment about to begin. Its
+ * posterior gives where the read starts and not what any base was compared
  * against, so it contributes nothing and is written only for normalized() to
  * check. No deletion opens before the read starts, so that state is zero
  * throughout. */
@@ -848,7 +847,7 @@ static void backward_first_row(const context *ctx)
     }
 }
 
-/* Whether the two passes agree, checked on one row. They must describe the same
+/* Returns whether the two passes agree, checked on one row. They must describe the same
  * set of paths, or their product is not a posterior; every row then sums to one. */
 static bool normalized(const context *ctx)
 {
@@ -865,7 +864,7 @@ static bool normalized(const context *ctx)
     return fabs(total - 1.0) < NORMALIZATION_TOLERANCE;
 }
 
-/* The backward pass. A read places at least one base, so there are always two rows
+/* Runs the backward pass. A read places at least one base, so there are always two rows
  * for the ends of it and the loop between them may be empty. */
 static bool backward(const context *ctx)
 {
@@ -1016,8 +1015,8 @@ static int grow_window(phmm_scratch *scratch, size_t window)
 /* One read                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* The widest row, which is the stride every row is stored at. At least one, so that
- * an absurd band still leaves an addressable matrix; its rows are then empty and
+/* Returns the widest row, which is the stride every row is stored at. At least one, so
+ * that an absurd band still leaves an addressable matrix; its rows are then empty and
  * the pass fails on the first. */
 static hts_pos_t widest_row(const context *ctx)
 {
@@ -1034,7 +1033,7 @@ static hts_pos_t widest_row(const context *ctx)
     return widest;
 }
 
-/* Every position any cell can reach, plus the one before the earliest, where a
+/* Returns every position any cell can reach, plus the one before the earliest, where a
  * row's first cell lays what it pairs. Rows may widen or narrow along the read,
  * so neither end belongs to a fixed row and both are searched for. */
 static extent window_of(const context *ctx)
@@ -1060,7 +1059,7 @@ static extent window_of(const context *ctx)
     };
 }
 
-/* The window is accumulated into, never assigned, so it must be cleared
+/* Clears the window. It is accumulated into and never assigned, so it must be cleared
  * between reads. */
 static void clear_window(const context *ctx)
 {

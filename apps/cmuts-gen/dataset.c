@@ -87,8 +87,8 @@ static void seed_stream(rng *r, size_t seed, size_t tid, stream purpose)
               ^ ((uint64_t)purpose * 0xa24baed4963ee407ULL));
 }
 
-/* A count drawn from a distribution, held to limit. A spec may be written with a negative
- * bound, and nothing is drawn fewer than zero times. */
+/* Returns a count drawn from a distribution, held to limit. A spec may be written with
+ * a negative bound, and nothing is drawn fewer than zero times. */
 static size_t draw_count(const distribution *d, rng *r, size_t limit)
 {
     long drawn = distribution_draw(d, r);
@@ -104,8 +104,8 @@ static size_t draw_count(const distribution *d, rng *r, size_t limit)
 /* References                                                                */
 /* ------------------------------------------------------------------------ */
 
-/* Every reference's length, drawn up front, the header having to declare them all before the
- * first record is written. */
+/* Returns every reference's length, drawn up front, the header having to declare them
+ * all before the first record is written. */
 static size_t *draw_reference_lengths(const dataset_config *cfg)
 {
     size_t *lengths = calloc(cfg->references, sizeof *lengths);
@@ -232,8 +232,8 @@ typedef struct {
     size_t next_read;         /* numbering, over the run as a whole */
 } writer;
 
-/* Room for the most reads a reference can receive, and never for none, an empty allocation
- * being indistinguishable from a failed one. */
+/* Gives the room needed for the most reads a reference can receive, and never none,
+ * since an empty allocation is indistinguishable from a failed one. */
 static size_t places_needed(const distribution *reads_per_ref)
 {
     long most = distribution_maximum(reads_per_ref);
@@ -311,9 +311,9 @@ static int write_read(writer *w, rng *r, int32_t tid, sim_placement where)
     return sam_write1(w->alignments, w->header, w->rec) < 0 ? -1 : 0;
 }
 
-/* Writes every read of one reference. The placements are eight bytes apiece and are drawn and
- * sorted before any record is built, so coordinate order costs the sort rather than holding
- * every record of the reference in memory. */
+/* Writes every read of one reference. The placements are eight bytes apiece and are
+ * drawn and sorted before any record is built, so coordinate order costs the sort and
+ * not the memory to hold every record of the reference. */
 static int write_reference_reads(writer *w, rng *r, int32_t tid, size_t reflen)
 {
     size_t reads = draw_count(&w->cfg->reads_per_ref, r, w->capacity);

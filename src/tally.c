@@ -38,9 +38,9 @@ static void add_at(const context *ctx, accum_field_id field, hts_pos_t pos,
  * applied, so inserted and soft-clipped bases count. A read longer than the range the
  * bins cover falls in none of them; the reads total gives how many those were.
  *
- * The bins begin at length 1, a read storing no sequence having been refused already, so
- * the guard against zero is against that filter changing rather than against anything
- * reachable from here. */
+ * The bins begin at length 1, since a read storing no sequence has been refused
+ * already, so the guard against zero is against that filter changing and not against
+ * anything reachable from here. */
 static void add_length(const context *ctx)
 {
     double *bins   = accum_data(ctx->target, ACCUM_LENGTHS);
@@ -62,9 +62,9 @@ static void add_window(const context *ctx, const phmm_window *window)
     }
 }
 
-/* A band of uniform width, the only shape used so far. Grown to the longest read seen
- * and filled once, the width being fixed before any read arrives. Returns NULL if it
- * cannot be grown, which ends the run. */
+/* Gives a band of uniform width, the only shape used so far. It is grown to the longest
+ * read seen and filled once, the width being fixed before any read arrives. Returns
+ * NULL if it cannot be grown, which ends the run. */
 static const int *uniform_band(tally_scratch *scratch, const cm_bam_record *read,
                                int band)
 {

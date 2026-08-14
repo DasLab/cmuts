@@ -48,8 +48,8 @@ struct cm_bam_reader {
 /* Position                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* How far into the file the reader has read, in compressed bytes. Each format keeps
- * the figure in a different place, and none of them keeps a record count. */
+/* Returns how far into the file the reader has read, in compressed bytes. Each format
+ * keeps the figure in a different place, and none of them keeps a record count. */
 static uint64_t raw_offset(const cm_bam_reader *reader)
 {
     const htsFile *file = reader->file;
@@ -58,7 +58,7 @@ static uint64_t raw_offset(const cm_bam_reader *reader)
         return (uint64_t)htell(cram_fd_get_fp(file->fp.cram));
     }
 
-    /* Tested rather than switched on the format, a bgzipped SAM also reading through
+    /* Tested and not switched on the format, since a bgzipped SAM also reads through
      * BGZF. A BGZF virtual offset packs two numbers: the compressed block's position
      * in the upper bits, and how far into the inflated block the reader has come in
      * the lower BGZF_OFFSET_BITS. Only the first bears on how much has been read. */
@@ -114,7 +114,7 @@ cm_bam_reader *cm_bam_open(const char *path, const char **why)
 
     reader->file = sam_open(path, "r");
     if (!reader->file) {
-        /* Single-threaded, this being reached before any thread is started.
+        /* Single-threaded, since this is reached before any thread is started.
          * NOLINTNEXTLINE(concurrency-mt-unsafe) */
         *why = strerror(errno);
         reader_free(reader);
@@ -237,9 +237,9 @@ const char *cm_bam_error(const cm_bam_reader *reader)
     return reader->error;
 }
 
-/* How far the reader has read, measured from the first alignment. An offset points at
- * the block being read rather than past it, so it stops short of the end once there is
- * nothing left to read; the span is reported instead. */
+/* Returns how far the reader has read, measured from the first alignment. An offset
+ * points at the block being read and not past it, so it stops short of the end once
+ * there is nothing left to read; the span is reported instead. */
 uint64_t cm_bam_position(const cm_bam_reader *reader)
 {
     uint64_t at;
@@ -282,7 +282,7 @@ static const char *next_line(const char *line)
     return (newline && newline[1]) ? newline + 1 : NULL;
 }
 
-/* Where a tab-separated field with the given prefix begins, within one line. */
+/* Returns where a tab-separated field with the given prefix begins, within one line. */
 static const char *find_tag(const char *line, const char *end, const char *tag)
 {
     size_t len = strlen(tag);
@@ -296,7 +296,7 @@ static const char *find_tag(const char *line, const char *end, const char *tag)
     return NULL;
 }
 
-/* Where the field a value belongs to ends. */
+/* Returns where the field a value belongs to ends. */
 static const char *field_end(const char *value, const char *end)
 {
     const char *tab = memchr(value, '\t', (size_t)(end - value));
@@ -338,9 +338,9 @@ int32_t cm_bam_nref(const cm_bam_reader *reader)
     return sam_hdr_nref(reader->header);
 }
 
-/* Whether the header declares SO:coordinate. Only the first line is examined, @HD being
- * the one line a sort order may appear on; a header carrying one elsewhere violates the
- * specification and is read as declaring none. */
+/* Returns whether the header declares SO:coordinate. Only the first line is examined,
+ * @HD being the one line a sort order may appear on; a header carrying one elsewhere
+ * violates the specification and is read as declaring none. */
 bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader)
 {
     const char *text = sam_hdr_str(reader->header);
@@ -369,7 +369,7 @@ bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader)
 /* Reference declarations                                                    */
 /* ------------------------------------------------------------------------ */
 
-/* The first @SQ line at or after the given one, or NULL where there is none. */
+/* Returns the first @SQ line at or after the given one, or NULL where there is none. */
 static const char *next_declaration(const char *line)
 {
     for (; line; line = next_line(line)) {
@@ -389,10 +389,11 @@ void cm_bam_sq_open(cm_bam_sq_cursor *cursor, const cm_bam_reader *reader)
     cursor->tid  = 0;
 }
 
-/* The M5 checksum declared for a reference, or NULL where the header declares none.
- * The lines appear in the order the references are numbered, so the cursor reaches one
- * by walking forward over those before it. It is left on the line it reached rather
- * than past it, so two requests for the same reference give the same answer. */
+/* Returns the M5 checksum declared for a reference, or NULL where the header declares
+ * none. The lines appear in the order the references are numbered, so the cursor
+ * reaches one by walking forward over those before it. It is left on the line it
+ * reached rather than past it, so two requests for the same reference give the same
+ * answer. */
 const char *cm_bam_sq_checksum(cm_bam_sq_cursor *cursor, int32_t tid, size_t *len)
 {
     const char *end;

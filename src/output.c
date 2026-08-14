@@ -148,8 +148,8 @@ static const char *stored_name(out_stored stored)
     return "unknown";
 }
 
-/* The value read back where the run wrote nothing, which is not the same as the type it
- * is stored in: zero for a count, NaN for a rate. */
+/* Names the value read back where the run wrote nothing, which is not the same as the
+ * type it is stored in: zero for a count, NaN for a rate. */
 static const char *absent_name(out_absent absent)
 {
     switch (absent) {
@@ -161,8 +161,8 @@ static const char *absent_name(out_absent absent)
     return "unknown";
 }
 
-/* A sentence as JSON, or null where a field has none. Escapes the characters that would
- * otherwise end the string early. */
+/* Returns a sentence as JSON, or null where a field has none. Escapes the characters
+ * that would otherwise end the string early. */
 static void print_detail(FILE *out, const char *detail)
 {
     if (!detail) {

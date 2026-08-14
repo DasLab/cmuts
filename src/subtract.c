@@ -159,11 +159,10 @@ static void ratio_f32(const float *treated, const float *untreated,
     }
 }
 
-/* The error of the ratio, treating the three runs as independent.
- *
+/* Returns the error of the ratio, treating the three runs as independent.
  * Not the relative-error form: that divides by the difference, which is zero at an
- * unreactive position, and squaring the control into a denominator underflows a float long
- * before the control does. */
+ * unreactive position, and squaring the control into a denominator underflows a float
+ * long before the control does. */
 static void ratio_error_f32(const float *const *rate, const float *const *error,
                             float *out, size_t n)
 {
@@ -312,9 +311,9 @@ static int write_field(subtraction *s, out_field_id id, int32_t tid, char *error
         return -1;
     }
 
-    /* Written whole rather than to the reference's own length: the columns past a
-     * reference are NaN in every input and stay NaN through the arithmetic, so the writer
-     * need not mark them. */
+    /* Written whole and not to the reference's own length: the columns past a reference
+     * are NaN in every input and stay NaN through the arithmetic, so the writer need
+     * not mark them. */
     if (h5writer_row(s->out, id, tid, s->result) < 0) {
         return fail_output(s, error, error_len);
     }

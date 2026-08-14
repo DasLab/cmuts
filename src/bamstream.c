@@ -37,7 +37,7 @@ struct cm_bam_stream {
     char          error[CM_ERROR_MAX];
 };
 
-/* A failure reports the file at fault, which is not otherwise clear. */
+/* Records a failure, naming the file at fault, which is not otherwise clear. */
 static int fail(cm_bam_stream *stream, const char *path, const char *what)
 {
     snprintf(stream->error, sizeof stream->error, "%s: %s", path, what);
@@ -79,8 +79,7 @@ static int open_source(cm_bam_stream *stream, source *src, const char *path,
 }
 
 /* Points every reader at one shared thread pool, so that the threads follow the file
- * being drained rather than each file holding a set that idles while the others are
- * read. */
+ * being drained, and no file holds a set that idles while the others are read. */
 static int share_threads(cm_bam_stream *stream, int threads)
 {
     if (threads < 1) {
@@ -190,7 +189,7 @@ static int64_t order_of(const source *src)
     return src->pending.tid == CM_BAM_NO_REF ? ORDER_UNMAPPED : src->pending.tid;
 }
 
-/* The first source at or after `from` still holding the given reference. */
+/* Returns the first source at or after `from` still holding the given reference. */
 static bool holder_of(const cm_bam_stream *stream, int64_t reference, size_t from,
                       size_t *out)
 {
@@ -204,8 +203,8 @@ static bool holder_of(const cm_bam_stream *stream, int64_t reference, size_t fro
     return false;
 }
 
-/* The source holding the lowest reference any of them has left. Ties go to the first,
- * so the files are drained in the order given on the command line. */
+/* Returns the source holding the lowest reference any of them has left. Ties go to the
+ * first, so the files are drained in the order given on the command line. */
 static bool lowest_holder(const cm_bam_stream *stream, size_t *out)
 {
     size_t lowest = 0;
@@ -291,7 +290,7 @@ uint64_t cm_bam_stream_position(const cm_bam_stream *stream)
     return total;
 }
 
-/* The summed span, or 0 where the size of any one file is unknown. */
+/* Returns the summed span, or 0 where the size of any one file is unknown. */
 uint64_t cm_bam_stream_span(const cm_bam_stream *stream)
 {
     uint64_t total = 0;

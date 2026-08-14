@@ -34,5 +34,5 @@ int cm_fasta_next(cm_fasta_reader *reader, cm_fasta_record *out);
 
 void cm_fasta_close(cm_fasta_reader *reader);
 
-/* Description of the reader's failure, or NULL if it has not failed. */
+/* Returns a description of the reader's failure, or NULL if it has not failed. */
 const char *cm_fasta_error(const cm_fasta_reader *reader);

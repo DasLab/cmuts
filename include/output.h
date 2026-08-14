@@ -40,7 +40,7 @@ typedef enum {
  * would claim an unread position was measured and unmodified.
  *
  * Columns past a reference's length are NaN regardless of this setting, being outside the
- * reference rather than unmeasured within it. */
+ * reference and not unmeasured within it. */
 typedef enum {
     OUT_ZERO,
     OUT_NAN,
@@ -74,15 +74,16 @@ extern const out_field OUT_FIELDS[OUT_N_FIELDS];
 /* The reference dimension, where a field has one, and the extents of its row. */
 #define OUT_RANK_MAX (1 + SHAPE_RANK_MAX)
 
-/* Values one field occupies for a reference of len bases, in a file whose longest
- * reference is cap. */
+/* Gives the values one field occupies for a reference of len bases, in a file whose
+ * longest reference is cap. */
 size_t out_values(out_field_id id, size_t len, size_t cap);
 
-/* The widest row of any field, which is what a buffer must hold to take a row of any of
- * them. */
+/* Gives the widest row of any field, which is what a buffer must hold to take a row of
+ * any of them. */
 size_t out_widest(size_t cap);
 
-/* Bytes one of a field's values occupies, and the most any field's value occupies. A
+/* Give the bytes one of a field's values occupies, and the most any field's value
+ * occupies. A
  * buffer taking a row of any field is as long as out_widest values of out_widest_bytes
  * each. */
 size_t out_stored_bytes(out_field_id id);
@@ -94,7 +95,7 @@ size_t out_widest_bytes(void);
  * its own reference measures. */
 int out_dims(out_field_id id, int32_t n_refs, size_t cap, size_t *dims);
 
-/* Dimensions one field's dataset has. */
+/* Gives the dimensions one field's dataset has. */
 int out_rank(out_field_id id);
 
 /* Writes the table above as JSON, for generating the documentation of the format from the

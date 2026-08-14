@@ -28,14 +28,14 @@ typedef enum {
 extern const nuc NUC_FROM_CHAR[256];
 extern const nuc NUC_FROM_READ[16];
 
-/* A base of a reference. Case is not significant, lower case in a FASTA marking a repeat
- * rather than a different base, and U reads as T. */
+/* Decodes a base of a reference. Case is not significant: lower case in a FASTA marks a
+ * repeat, and U reads as T. */
 static inline nuc nuc_from_char(char base)
 {
     return NUC_FROM_CHAR[(unsigned char)base];
 }
 
-/* A base of a read, by offset into the packed sequence of a cm_bam_record. */
+/* Decodes a base of a read, by offset into the packed sequence of a cm_bam_record. */
 static inline nuc nuc_from_read(const uint8_t *seq, int32_t offset)
 {
     return NUC_FROM_READ[bam_seqi(seq, offset)];
@@ -46,7 +46,7 @@ static inline bool nuc_is_base(nuc base)
     return base != NUC_N;
 }
 
-/* Index of a named base among NUC_BASES, for addressing a per-base array. */
+/* Gives the index of a named base among NUC_BASES, for addressing a per-base array. */
 static inline int nuc_index(nuc base)
 {
     return (int)base - (int)NUC_A;

@@ -43,7 +43,7 @@ static int fail_field(h5reader *r, out_field_id id, const char *what)
 /* Shape                                                                     */
 /* ------------------------------------------------------------------------ */
 
-/* A dataset's dimensions, failing where its rank is not the one expected. */
+/* Returns a dataset's dimensions, failing where its rank is not the one expected. */
 static int dataset_dims(hid_t dataset, int rank, hsize_t *dims)
 {
     hid_t space = H5Dget_space(dataset);
@@ -169,8 +169,8 @@ static h5reader *reader_alloc(void)
         return NULL;
     }
 
-    /* Report failures through h5reader_error rather than HDF5's own stack trace on
-     * stderr. */
+    /* Report failures through h5reader_error, with HDF5's own stack trace on stderr
+     * turned off. */
     H5Eset_auto2(H5E_DEFAULT, NULL, NULL);
 
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {

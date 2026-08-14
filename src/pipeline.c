@@ -62,7 +62,7 @@ typedef struct {
 } failure_flag;
 
 /* Records a failure, keeping the first offered and discarding the rest, so that
- * the run reports the failure that stopped it rather than the last one written. */
+ * the run reports the failure that stopped it and not the last one written. */
 static void failure_record(failure_flag *f, phmm_status status)
 {
     int unfailed = PHMM_OK;
@@ -128,9 +128,9 @@ static void worker_switch_shadow(worker *w, refctx *ctx)
     w->held = ctx;
 }
 
-/* One slot of a batch, as the workitem it is. Batches are void * because the queue
- * and the pool that fill them carry void *, so the conversion back is written here
- * rather than at each place a slot is read. */
+/* Returns one slot of a batch, as the workitem it is. Batches are void * because the
+ * queue and the pool that fill them carry void *, so the conversion back is written
+ * here and not at each place a slot is read. */
 static const workitem *item_at(void *const *slots, size_t i)
 {
     return slots[i];
@@ -322,9 +322,9 @@ static refctx *pipeline_open_reference(const pipeline *p, int32_t tid)
     return ctx;
 }
 
-/* Whether the reference matches what every header declares for it, taking no context
- * and writing no row. Every reference is checked, whether or not a read arrived on it
- * and whether or not its row needs writing: the FASTA must hold the sequences the
+/* Returns whether the reference matches what every header declares for it, taking no
+ * context and writing no row. Every reference is checked, whether or not a read arrived
+ * on it and whether or not its row needs writing: the FASTA must hold the sequences the
  * alignments were made against. */
 static bool pipeline_check_reference(const pipeline *p, int32_t tid)
 {
@@ -352,7 +352,7 @@ static bool loader_emit_empty(loader *l, int32_t tid)
 
 /* Takes every reference the reader has passed since the last one it stopped at.
  * Each is checked against the headers, and one needing a tail is opened as well,
- * which is what writes its row. */
+ * which writes its row. */
 static bool loader_account_through(loader *l, int32_t upto)
 {
     const pipeline *p = l->pipe;
@@ -394,8 +394,8 @@ static bool loader_on_reference(loader *l, int32_t tid)
     return l->reference != NULL;
 }
 
-/* One carrier for the read just taken. Carriers are drawn a batch at a time and
- * spent one by one, so the pool's lock is taken once per batch rather than once per
+/* Returns one carrier for the read just taken. Carriers are drawn a batch at a time and
+ * spent one by one, so the pool's lock is taken once per batch and not once per
  * read. */
 static workitem *loader_carrier(loader *l)
 {
@@ -661,9 +661,9 @@ static int pipeline_open_output(pipeline *p, const pipeline_config *cfg,
 }
 
 /* Starts the workers, reporting through started how many are running so that the
- * caller joins exactly those. Every allocation a worker needs is made here rather
- * than inside the thread, so that running out of memory is reported instead of
- * leaving a thread that exits at once and a loader waiting on it. */
+ * caller joins exactly those. Every allocation a worker needs is made here, so
+ * that running out of memory is reported and does not leave a thread that exits at
+ * once with a loader waiting on it. */
 static int worker_start_all(worker *workers, size_t n, const pipeline *p,
                             failure_flag *f, size_t *started,
                             char *error, size_t error_len)

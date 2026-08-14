@@ -12,12 +12,11 @@
 #include "sample.h"
 
 /* How a read is drawn from a reference and made to differ from it.
- *
- * Insertions and deletions are counted as events per read with their own length rather than
- * falling out of a per-base rate. A single rate produces many one and two base indels and
- * effectively never a long one, where real aligners emit both -- and it is the long insertion,
- * leaving a read far longer than the reference it aligns to, that an upper length bound exists
- * to remove. */
+ * Insertions and deletions are counted as events per read with their own length, and not as
+ * the result of a per-base rate. A single rate produces many one and two base indels and
+ * effectively never a long one, where real aligners emit both -- and it is the long
+ * insertion, leaving a read far longer than the reference it aligns to, that an upper
+ * length bound exists to remove. */
 typedef struct {
     distribution length;            /* reference span the read covers */
     double       mismatch_rate;     /* per aligned base */

@@ -39,8 +39,8 @@ static int fail(h5writer *w, const char *what)
 /* The path                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* Whether the path holds a file with something in it. An empty file is what mktemp
- * and shell redirection leave behind, and has nothing to lose. */
+/* Returns whether the path holds a file with something in it. An empty file is what
+ * mktemp and shell redirection leave behind, and has nothing to lose. */
 static bool holds_data(const char *path)
 {
     struct stat info;
@@ -75,9 +75,9 @@ int h5writer_may_replace(const char *path, bool overwrite, bool *may_replace,
 /* Creates the group at this path, or leaves the one already there.
  *
  * Untimed, as the file and the datasets are, or two runs over one input would differ by
- * the moment it was created. This is why the groups are made here rather than left to
- * H5Pset_create_intermediate_group, which creates them with default properties and so
- * stamps each with a creation time. */
+ * the moment it was created. The groups are made here for that reason:
+ * H5Pset_create_intermediate_group creates them with default properties and so stamps
+ * each with a creation time. */
 static int create_group(h5writer *w, const char *path)
 {
     htri_t found = H5Lexists(w->file, path, H5P_DEFAULT);
@@ -194,8 +194,8 @@ static h5writer *writer_alloc(int32_t n_refs, size_t ref_cap)
         return NULL;
     }
 
-    /* Report failures through h5writer_error rather than HDF5's own stack trace on
-     * stderr. */
+    /* Report failures through h5writer_error, with HDF5's own stack trace on stderr
+     * turned off. */
     H5Eset_auto2(H5E_DEFAULT, NULL, NULL);
 
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
@@ -348,9 +348,9 @@ static int write_part(h5writer *w, out_field_id id, int32_t tid, size_t from,
 /* Writes one field's row: the reference's own values, then the mark for the columns
  * past them.
  *
- * The tail is written with the row rather than swept up at the end. The two share a
- * chunk, so marking it now writes to a chunk already open where returning to it
- * later would mean inflating and deflating that chunk again. A reference as long as
+ * The tail is written with the row. The two share a chunk, so marking it now writes to
+ * a chunk already open, and returning to it later would mean inflating and deflating
+ * that chunk again. A reference as long as
  * the longest has no tail. */
 int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
                    const double *values)
@@ -402,10 +402,10 @@ int h5writer_row(h5writer *w, out_field_id id, int32_t tid, const void *values)
 /* Totals                                                                    */
 /* ------------------------------------------------------------------------ */
 
-/* Writes the whole of a field that belongs to the run rather than to a reference.
+/* Writes the whole of a field that belongs to the run and not to a reference.
  *
- * Transferred as an unsigned rather than through the double every row passes through, a
- * run total being counted whole and never accumulated. */
+ * Transferred as an unsigned and not through the double every row passes through, since
+ * a run total is counted whole and never accumulated. */
 int h5writer_total(h5writer *w, out_field_id id, size_t value)
 {
     uint64_t stored = value;

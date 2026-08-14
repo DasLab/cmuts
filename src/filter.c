@@ -40,8 +40,8 @@ static bool strand_accepted(const filter_config *filter, const cm_bam_record *re
     return (filter->strand & own) != 0;
 }
 
-/* Length is that of the stored sequence, so a hard-clipped read counts only the bases
- * the aligner kept. */
+/* Returns whether the read falls inside the length bounds. The length is that of the
+ * stored sequence, so a hard-clipped read counts only the bases the aligner kept. */
 static bool length_accepted(const filter_config *filter, const cm_bam_record *read)
 {
     if (filter->min_length != FILTER_LENGTH_UNBOUNDED && read->l_qseq < filter->min_length) {
@@ -55,16 +55,16 @@ static bool length_accepted(const filter_config *filter, const cm_bam_record *re
     return true;
 }
 
-/* Whether the record stores a sequence. SAM spells its absence as a SEQ and QUAL of
- * "*", leaving nothing to compare against the reference. */
+/* Returns whether the record stores a sequence. SAM spells its absence as a SEQ and
+ * QUAL of "*", leaving nothing to compare against the reference. */
 static bool sequence_present(const cm_bam_record *read)
 {
     return read->seq != NULL;
 }
 
-/* Whether the record places any of its read. It may place none three ways: no CIGAR at
- * all, a CIGAR made wholly of clips, or one consuming reference but no read. There is
- * then no position for the read to contribute to. */
+/* Returns whether the record places any of its read. It may place none three ways: no
+ * CIGAR at all, a CIGAR made wholly of clips, or one consuming reference but no read.
+ * There is then no position for the read to contribute to. */
 static bool placement_present(const cm_bam_record *read)
 {
     aln_span placed = aln_placed_span(read);
@@ -72,9 +72,9 @@ static bool placement_present(const cm_bam_record *read)
     return placed.end > placed.begin;
 }
 
-/* Whether the record is a primary alignment. A secondary one places a read already
- * counted at its primary, so accepting it would count one molecule twice. Supplementary
- * alignments carry distinct pieces of a split read and are not excluded. */
+/* Returns whether the record is a primary alignment. A secondary one places a read
+ * already counted at its primary, so accepting it would count one molecule twice.
+ * Supplementary alignments carry distinct pieces of a split read and are not excluded. */
 static bool is_primary(const cm_bam_record *read)
 {
     return (read->flag & BAM_FSECONDARY) == 0;

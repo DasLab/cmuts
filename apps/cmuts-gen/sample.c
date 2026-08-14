@@ -67,8 +67,8 @@ bool rng_chance(rng *r, double probability)
 /* Specifications                                                            */
 /* ------------------------------------------------------------------------ */
 
-/* The longest number a spec may write. A longer run of characters is rejected rather than
- * truncated, truncated digits parsing as a different number. */
+/* The longest number a spec may write. A longer run of characters is rejected and not
+ * truncated, since truncated digits parse as a different number. */
 #define NUMBER_MAX 32
 
 static int fail(char *error, size_t error_len, const char *text, const char *why)

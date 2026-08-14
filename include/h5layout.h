@@ -31,8 +31,8 @@ hid_t       h5layout_type(out_field_id id);
 hid_t       h5layout_memory_type(out_field_id id);
 const void *h5layout_fill(out_field_id id);
 
-/* A dataspace holding one row of the widest field, from which a span of any field's row is
- * then selected. */
+/* Gives a dataspace holding one row of the widest field, from which a span of any field's
+ * row is then selected. */
 hid_t h5layout_row_space(size_t cap);
 
 /* Selects n values of one reference's row of a field, starting at column from, in the file
@@ -44,7 +44,7 @@ hid_t h5layout_row_space(size_t cap);
 int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
                          int32_t tid, size_t from, size_t n);
 
-/* A creation property list with object timestamping turned off.
+/* Gives a creation property list with object timestamping turned off.
  *
  * HDF5 stamps every object header with the time it was written, so two runs over the same
  * input would produce files differing in bytes that carry no information about the result.
@@ -52,10 +52,12 @@ int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
  * creation properties, and that group is stamped like any other. */
 hid_t h5layout_untimed_plist(hid_t class_id);
 
-/* A dataset creation property list: chunked, filtered, and filled as the field requires. */
+/* Gives a dataset creation property list: chunked, filtered, and filled as the field
+ * requires. */
 hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank);
 
-/* A dataset access property list whose chunk cache holds several chunks of this shape. The
+/* Gives a dataset access property list whose chunk cache holds several chunks of this
+ * shape. The
  * writer and the reader both work through rows in roughly ascending order, so caching a few
  * chunks avoids inflating a chunk again for each row in it. */
 hid_t h5layout_access_plist(out_field_id id, const hsize_t *chunk, int rank);

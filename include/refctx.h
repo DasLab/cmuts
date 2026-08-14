@@ -16,7 +16,7 @@
 
 /* Everything a reference accumulates while its reads are in flight.
  *
- * Completion is tracked with a handle count rather than a done flag: the loader holds one
+ * Completion is tracked with a handle count: the loader holds one
  * while it is still dispatching, each read in transit holds one, and each worker holding
  * unmerged contributions in a shadow accumulator holds one. The reference is finished
  * exactly when the count falls to zero, which leaves no ordering question between the
@@ -56,8 +56,8 @@ void refctx_sequence(const refctx *ctx, cm_fasta_record *out);
  * left behind. */
 typedef struct ctxpool ctxpool;
 
-/* ref_cap is the longest reference in the file. Every context is sized to it so that any
- * two accumulators share a layout and may be merged. */
+/* Creates a pool of contexts. ref_cap is the longest reference in the file, and every
+ * context is sized to it so that any two accumulators share a layout and may be merged. */
 ctxpool *ctxpool_create(size_t capacity, size_t ref_cap);
 void     ctxpool_destroy(ctxpool *p);
 

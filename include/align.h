@@ -19,9 +19,9 @@ typedef struct {
     int32_t end;    /* one past the last */
 } aln_span;
 
-/* The placed span, empty where the alignment places nothing: a record carrying no CIGAR, one
- * whose every operation is a clip, or one consuming reference but no read. Costs a look
- * at either end, both stopping at the first operation that is not a clip. */
+/* Gives the placed span, empty where the alignment places nothing: a record carrying no
+ * CIGAR, one whose every operation is a clip, or one consuming reference but no read.
+ * Costs a look at either end, both stopping at the first operation that is not a clip. */
 aln_span aln_placed_span(const cm_bam_record *read);
 
 /* How far into the reference the CIGAR has reached at one point of the placed span: first
@@ -39,7 +39,7 @@ typedef struct {
 /* Fills places with one for each point of the placed span, and returns the span itself:
  * places[0] is where the read starts, and one follows for every base it places.
  *
- * Prefix lengths rather than coordinates, that being the indexing a dynamic program over two
- * sequences runs on, and leaving a deletion as a step along one of them rather than a hole in
- * the other. places must hold read->l_qseq + 1 values, which is always enough. */
+ * Places are indexed by prefix length, which is the indexing a dynamic program over two
+ * sequences runs on, and which leaves a deletion as a step along one of them. places must
+ * hold read->l_qseq + 1 values, which is always enough. */
 aln_span aln_places(const cm_bam_record *read, aln_place *places);

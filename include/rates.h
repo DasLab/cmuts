@@ -21,8 +21,8 @@ typedef struct {
 
 rate_config rate_defaults(void);
 
-/* The mutations at each of len positions over the evidence for them, and the standard error
- * of that rate, written into out.
+/* Write into out the mutations at each of len positions over the evidence for them, and
+ * the standard error of that rate.
  *
  * Both are NaN where the evidence falls short, and at the same positions, so one can be
  * read from the other.

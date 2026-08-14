@@ -10,16 +10,16 @@
 /* A score arrives as one byte, so every value a byte can hold has an entry. */
 #define PHRED_MAX 255
 
-/* A table is read-only once built, so one may be shared by every thread. Held by whoever
- * needs it rather than kept as a global. */
+/* A table is read-only once built, so one may be shared by every thread. It is held by
+ * whoever needs it. */
 typedef struct {
     double error[PHRED_MAX + 1];
 } phred;
 
 void phred_build(phred *table);
 
-/* The chance a base call is wrong, and the chance it is right. Read from the table rather than
- * computed, being needed for every base of every read. */
+/* Give the chance a base call is wrong, and the chance it is right. Both are read from
+ * the table, being needed for every base of every read. */
 static inline double phred_error(const phred *table, uint8_t quality)
 {
     return table->error[quality];

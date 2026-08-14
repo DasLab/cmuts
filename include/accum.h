@@ -36,7 +36,8 @@ typedef struct {
 
 extern const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS];
 
-/* Values one field occupies for a reference of len bases, in a run whose longest is cap.
+/* Gives the values one field occupies for a reference of len bases, in a run whose
+ * longest is cap.
  * Allocation, zeroing, merging, the output row and the dataset width all derive from
  * this, so a new kind of field is described here and nowhere else. */
 size_t accum_values(accum_field_id id, size_t len, size_t cap);
@@ -63,10 +64,10 @@ void accum_zero(accum *acc, size_t len);
  * scalar. Both accumulators must have the same capacity. */
 void accum_add(accum *dst, const accum *src, size_t len);
 
-/* Storage for one field: len values for SHAPE_PER_BASE, one for SHAPE_SCALAR.
+/* Give the storage for one field: len values for SHAPE_PER_BASE, one for SHAPE_SCALAR.
  *
- * Two forms rather than one taking a const accumulator and returning a writable pointer,
- * which would let anything holding a finished reference alter it. */
+ * A const accumulator yields a const pointer, so anything holding a finished reference
+ * cannot alter it. */
 static inline double *accum_data(accum *acc, accum_field_id id)
 {
     return acc->slot[id];

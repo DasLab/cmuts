@@ -8,11 +8,11 @@
 #include <stddef.h>
 
 /* A fixed-capacity queue, safe for many producers and many consumers. The capacity is what
- * bounds the pipeline's memory: a producer that outruns its consumers blocks rather than
- * growing the queue.
+ * bounds the pipeline's memory: a producer that outruns its consumers blocks, and the queue
+ * never grows.
  *
- * Items move in batches, so that a run of millions of records costs one lock acquisition per
- * batch rather than one per item. */
+ * Items move in batches, so that a run of millions of records costs one lock acquisition
+ * per batch and not one per item. */
 typedef struct queue queue;
 
 queue *queue_create(size_t capacity);

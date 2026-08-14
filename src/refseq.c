@@ -142,7 +142,7 @@ static const char *digest_of(digest *md5, const cm_fasta_record *record)
     return md5->value;
 }
 
-/* Whether the sequence matches the M5 the header declares for it.
+/* Returns whether the sequence matches the M5 the header declares for it.
  *
  * A name and a length describe a reference without identifying it; only M5, taken over
  * the bases, does. It is optional and frequently absent, so a reference declaring none

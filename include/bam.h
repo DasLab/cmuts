@@ -20,9 +20,8 @@
  * that must outlive the current iteration step.
  *
  * No filtering is applied, so unmapped reads reach the caller, carrying
- * tid == CM_BAM_NO_REF, pos == -1 and n_cigar == 0. Test flag against BAM_FUNMAP rather
- * than tid, a paired read being able to be unmapped and still carry its mate's
- * reference. */
+ * tid == CM_BAM_NO_REF, pos == -1 and n_cigar == 0. Test flag against BAM_FUNMAP and not
+ * tid: a paired read may be unmapped and still carry its mate's reference. */
 typedef struct {
     int32_t         tid;      /* reference index into the file header */
     hts_pos_t       pos;      /* 0-based leftmost coordinate on that reference */
@@ -60,10 +59,10 @@ int cm_bam_next(cm_bam_reader *reader, cm_bam_record *out);
 
 void cm_bam_close(cm_bam_reader *reader);
 
-/* Description of the reader's failure, or NULL if it has not failed. */
+/* Returns a description of the reader's failure, or NULL if it has not failed. */
 const char *cm_bam_error(const cm_bam_reader *reader);
 
-/* How far the reader has read, and how far it has to go, in compressed bytes of the
+/* Give how far the reader has read, and how far it has to go, in compressed bytes of the
  * alignments only. The header is excluded, being read in one go before any record and
  * able to account for most of a file.
  *
@@ -76,16 +75,16 @@ uint64_t cm_bam_span(const cm_bam_reader *reader);
 /* Draws the reader's decompression threads from a pool, parallelizing inflation only:
  * reading and record parsing stay sequential.
  *
- * A pool rather than threads of the reader's own, so that several readers may share one
- * and the threads follow whichever is being read from. The pool must outlive every reader
- * given it. */
+ * The pool is shared, so several readers may draw from one and its threads follow
+ * whichever is being read from. The pool must outlive every reader given it. */
 int cm_bam_use_pool(cm_bam_reader *reader, htsThreadPool *pool);
 
 /* ------------------------------------------------------------------------ */
 /* The record underlying a view                                              */
 /* ------------------------------------------------------------------------ */
 
-/* The htslib record behind the most recent cm_bam_next(), for callers that must retain a
+/* Gives the htslib record behind the most recent cm_bam_next(), for callers that must
+ * retain a
  * read past the next advance. Copy it with bam_copy1. */
 const bam1_t *cm_bam_raw(const cm_bam_reader *reader);
 
@@ -97,20 +96,22 @@ void cm_bam_record_view(const bam1_t *record, cm_bam_record *out);
 /* Header queries                                                            */
 /* ------------------------------------------------------------------------ */
 
-/* Name of the reference with the given index, or NULL if there is no such reference. The
+/* Gives the name of the reference with the given index, or NULL if there is no such
+ * reference. The
  * returned string is owned by the reader's header. */
 const char *cm_bam_refname(const cm_bam_reader *reader, int32_t tid);
 
-/* Length of the reference with the given index, or -1 if there is no such reference. */
+/* Gives the length of the reference with the given index, or -1 if there is no such
+ * reference. */
 hts_pos_t cm_bam_reflen(const cm_bam_reader *reader, int32_t tid);
 
-/* Length of the longest reference in the header. */
+/* Gives the length of the longest reference in the header. */
 hts_pos_t cm_bam_max_reflen(const cm_bam_reader *reader);
 
-/* Number of references declared in the header. */
+/* Gives the number of references declared in the header. */
 int32_t cm_bam_nref(const cm_bam_reader *reader);
 
-/* Whether the header declares SO:coordinate. Reference-grouped input is what lets a
+/* Returns whether the header declares SO:coordinate. Reference-grouped input is what lets a
  * reference be finished the moment the reader moves past it; without it, every reference
  * stays live to the end of the file. */
 bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader);
@@ -121,8 +122,8 @@ bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader);
 
 /* A forward-only walk over the header's @SQ lines.
  *
- * State of the walk rather than of the file, and so the caller's: two walks may run at
- * once, and the reader is unchanged by either. */
+ * The cursor holds the state of the walk and belongs to the caller, so two walks may run
+ * at once and the reader is unchanged by either. */
 typedef struct {
     const char *line;  /* the @SQ line describing tid, or NULL past the last */
     int32_t     tid;
@@ -130,11 +131,11 @@ typedef struct {
 
 void cm_bam_sq_open(cm_bam_sq_cursor *cursor, const cm_bam_reader *reader);
 
-/* The M5 checksum declared for a reference, its length in len, or NULL where the header
+/* Gives the M5 checksum declared for a reference, its length in len, or NULL where the
+ * header
  * declares none -- the common case, many aligners omitting it. The result points into the
  * header text and lives as long as the reader does.
  *
- * References must be requested in non-decreasing order, which is what the cursor exploits:
- * one walk of the text serves a whole run of them, where a call to htslib for each tag
- * would first parse the header into records. */
+ * References must be requested in non-decreasing order, so one walk of the text serves a
+ * whole run of them. */
 const char *cm_bam_sq_checksum(cm_bam_sq_cursor *cursor, int32_t tid, size_t *len);

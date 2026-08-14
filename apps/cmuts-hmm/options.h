@@ -11,9 +11,9 @@
 
 /* Everything the command line can set.
  *
- * Module configuration is held in nested structs rather than flattened, so that each module
- * keeps owning its own settings and this stays a container. New processing options get their
- * own struct here rather than more loose fields. */
+ * Module configuration is held in nested structs and not flattened, so that each module
+ * keeps owning its own settings and this stays a container. New processing options get
+ * their own struct here. */
 typedef struct {
     pipeline_config pipeline;
 } cli_args;

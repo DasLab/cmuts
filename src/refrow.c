@@ -47,10 +47,9 @@ void refrow_destroy(refrow *r)
 
 /* Gives one output field's values, computed into the scratch row where they are derived
  * and read in place where they are not, or NULL for a field with no row.
- *
- * The accumulated fields and the written ones do not correspond one to one, so every field
- * is listed here rather than defaulted: one added without a source of its own draws a
- * warning and is refused at the write. */
+ * The accumulated fields and the written ones do not correspond one to one, so every
+ * field is listed here and none is defaulted: one added without a source of its own
+ * draws a warning and is refused at the write. */
 static const double *values(refrow *r, out_field_id id, const accum *acc,
                             size_t len)
 {
