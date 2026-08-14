@@ -31,7 +31,7 @@ CMUTS_SUB = "cmuts-sub"
 PROGRAMS = (CMUTS_HMM, CMUTS_GEN, CMUTS_SUB)
 
 
-def located(name: str) -> Path | None:
+def locate(name: str) -> Path | None:
     """Finds a program on PATH, disregarding any copy from outside this
     repository.
 
@@ -50,7 +50,11 @@ def located(name: str) -> Path | None:
     return path if ROOT in path.parents else None
 
 
-STRAND_FLAGS = {"both": (), "forward": ("-F", "16"), "reverse": ("-f", "16")}
+STRAND_FLAGS = {
+    "forward,reverse": (),
+    "forward": ("-F", "16"),
+    "reverse": ("-f", "16"),
+}
 
 
 def _run(command, **kwargs):
@@ -91,7 +95,7 @@ class Dataset:
         return bam
 
 
-def counted(bams, fasta) -> Dataset:
+def measure_dataset(bams, fasta) -> Dataset:
     """A dataset whose totals are measured from the files, so that a caller
     cannot declare a total the files do not support.
 
@@ -118,10 +122,10 @@ def generate(directory, name: str, **parameters) -> Dataset:
 
     _run(command)
 
-    return counted((Path(f"{prefix}.bam"),), Path(f"{prefix}.fasta"))
+    return measure_dataset((Path(f"{prefix}.bam"),), Path(f"{prefix}.fasta"))
 
 
-def converted(data: Dataset, directory, fmt: str) -> Dataset:
+def convert_format(data: Dataset, directory, fmt: str) -> Dataset:
     """The same alignments in another format.
 
     CRAM stores sequence as differences from a reference, so it needs one to be
@@ -138,7 +142,7 @@ def converted(data: Dataset, directory, fmt: str) -> Dataset:
     return replace(data, bams=(output,))
 
 
-def dealt_out(data: Dataset, directory, parts: int) -> Dataset:
+def split_across_files(data: Dataset, directory, parts: int) -> Dataset:
     """The same alignments dealt between several files.
 
     Records keep their relative order, so every part is coordinate sorted and
@@ -160,7 +164,7 @@ def dealt_out(data: Dataset, directory, parts: int) -> Dataset:
     return replace(data, bams=tuple(written))
 
 
-def with_secondary(data: Dataset, directory, every: int):
+def mark_secondary(data: Dataset, directory, every: int):
     """The same alignments with a share of the mapped ones marked secondary.
 
     Only the flag changes, so the totals and the sort order carry over. Returns
@@ -192,14 +196,14 @@ def with_secondary(data: Dataset, directory, every: int):
 COMPLEMENT = str.maketrans("ACGT", "TGCA")
 
 
-def written(records, path):
+def write_fasta(records, path):
     """A FASTA holding the given sequences, by name, in the order given."""
     path.write_text("".join(f">{name}\n{seq}\n" for name, seq in records.items()))
 
     return path
 
 
-def substituted(data: Dataset, directory, only=None) -> Dataset:
+def replace_bases(data: Dataset, directory, only=None) -> Dataset:
     """The same alignments against a FASTA agreeing on every name and length
     and holding different bases.
 
@@ -211,7 +215,15 @@ def substituted(data: Dataset, directory, only=None) -> Dataset:
         for name, seq in sequences(data.fasta).items()
     }
 
-    return replace(data, fasta=written(records, Path(directory) / "substituted.fasta"))
+    return replace(data, fasta=write_fasta(records, Path(directory) / "substituted.fasta"))
+
+
+def rename_references(data: Dataset, directory) -> Dataset:
+    """The same alignments against a FASTA holding the same bases in the same
+    order under other names."""
+    records = {f"contig{name}": seq for name, seq in sequences(data.fasta).items()}
+
+    return replace(data, fasta=write_fasta(records, Path(directory) / "renamed.fasta"))
 
 
 def header_of(data: Dataset) -> str:
@@ -219,7 +231,7 @@ def header_of(data: Dataset) -> str:
     return _run(["samtools", "view", "-H", data.bam]).stdout
 
 
-def reheadered(data: Dataset, directory, transform) -> Dataset:
+def replace_header(data: Dataset, directory, transform) -> Dataset:
     """The same alignments behind a header the transform has rewritten.
 
     Only the header changes, so the totals carry over and any difference in
@@ -236,6 +248,33 @@ def reheadered(data: Dataset, directory, transform) -> Dataset:
     return replace(data, bams=(bam,))
 
 
+def replace_checksums(data: Dataset, directory, checksum) -> Dataset:
+    """Replaces the M5 in each @SQ line with the one checksum returns, and
+    removes it where checksum returns None.
+
+    checksum is passed the reference name and the M5 cmuts-gen wrote there.
+    cmuts-gen writes the right one for every reference, so a test alters what
+    is already in the header and computes nothing.
+    """
+    def field_of(fields, tag):
+        return next((f[len(tag):] for f in fields if f.startswith(tag)), None)
+
+    def replace_in_line(line):
+        fields = line.split("\t")
+        kept   = [f for f in fields if not f.startswith("M5:")]
+        m5     = checksum(field_of(fields, "SN:"), field_of(fields, "M5:"))
+
+        return "\t".join(kept + ([f"M5:{m5}"] if m5 is not None else []))
+
+    def transform(text):
+        return "".join(
+            (replace_in_line(line) if line.startswith("@SQ") else line) + "\n"
+            for line in text.splitlines()
+        )
+
+    return replace_header(data, directory, transform)
+
+
 # ---------------------------------------------------------------------------
 # Hand-built alignments
 # ---------------------------------------------------------------------------
@@ -249,7 +288,7 @@ MAPQ = 60
 BASE_QUALITY = "I"
 
 
-def placements(directory, name, reference, read, cigars) -> Dataset:
+def build_placements(directory, name, reference, read, cigars) -> Dataset:
     """The same read against the same reference under each CIGAR, one reference
     per CIGAR so that a single run scores them all.
 
@@ -349,7 +388,7 @@ def surviving(data: Dataset, min_mapq: int, strand: str) -> list:
 
 
 def samtools_kept(
-    data: Dataset, min_mapq: int = 0, strand: str = "both",
+    data: Dataset, min_mapq: int = 0, strand: str = "forward,reverse",
     min_length: int = 0, max_length: int = 0,
 ) -> int:
     """Reads surviving a set of criteria.
@@ -371,7 +410,7 @@ def samtools_kept(
 
 
 def samtools_length_histogram(
-    data: Dataset, min_mapq: int = 0, strand: str = "both",
+    data: Dataset, min_mapq: int = 0, strand: str = "forward,reverse",
 ) -> dict:
     """The stored length of every surviving read, counted per reference.
 

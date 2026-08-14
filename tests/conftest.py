@@ -14,11 +14,11 @@ import pytest
 pytest.register_assert_rewrite("support")
 
 from datasets import DATASETS  # noqa: E402
-from support import PROGRAMS, ROOT, generate, located  # noqa: E402
+from support import PROGRAMS, ROOT, generate, locate  # noqa: E402
 
 
 def pytest_configure(config):
-    missing = [name for name in PROGRAMS if located(name) is None]
+    missing = [name for name in PROGRAMS if locate(name) is None]
     if missing:
         pytest.exit(
             f"run make check, or put a build directory under {ROOT} first on PATH: "

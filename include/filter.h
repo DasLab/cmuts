@@ -9,15 +9,14 @@
 
 #include "bam.h"
 
-/* Which strand's alignments to keep.
+/* Which strands' alignments to keep, as the set of them: keeping both is asking for each.
  *
  * The test is on the alignment's own reverse bit, which for single-end reads is the strand
  * the read came from. It describes the read and not the fragment: for paired data, what
  * fragment belongs to depends on the library protocol and on which mate is being read. */
 typedef enum {
-    FILTER_STRAND_BOTH,
-    FILTER_STRAND_FORWARD,
-    FILTER_STRAND_REVERSE,
+    FILTER_STRAND_FORWARD = 1 << 0,
+    FILTER_STRAND_REVERSE = 1 << 1,
 } filter_strand;
 
 /* A length bound of this is not applied at all. It also serves as the identity for either
@@ -39,7 +38,7 @@ typedef enum {
 
 typedef struct {
     int min_mapq;    /* 0 to 254; alignments scoring below it are discarded */
-    int strand;      /* a filter_strand */
+    int strand;      /* filter_strand bits; a read on neither strand is discarded */
     int min_length;  /* FILTER_LENGTH_UNBOUNDED for no lower bound */
     int max_length;  /* FILTER_LENGTH_UNBOUNDED for no upper bound */
 } filter_config;

@@ -29,9 +29,13 @@ typedef enum {
     OPT_INT,
     OPT_DOUBLE,  /* bounds are still written as whole numbers */
     OPT_ENUM,    /* one of a named set of values; stores an int */
+    OPT_SET,     /* any number of a named set of values; stores them OR'd together, so
+                    each choice must name a bit of its own. A choice of zero is the empty
+                    subset and cannot be combined with any other. */
 } cli_type;
 
-/* One accepted value of an OPT_ENUM option. A choice list ends with a NULL name. */
+/* One accepted value of an OPT_ENUM or OPT_SET option. A choice list ends with a NULL
+ * name. */
 typedef struct {
     const char *name;
     int         value;
@@ -64,7 +68,7 @@ typedef struct {
     long              minimum;  /* bounds for the numeric types */
     long              maximum;  /* CLI_UNBOUNDED where only the floor binds */
     bool              hidden;   /* kept out of the help, still described by JSON */
-    const cli_choice *choices;  /* accepted values, for OPT_ENUM */
+    const cli_choice *choices;  /* accepted values, for OPT_ENUM and OPT_SET */
     cli_action        action;
     void            (*print)(FILE *out);  /* what CLI_PRINT calls */
 } cli_option;

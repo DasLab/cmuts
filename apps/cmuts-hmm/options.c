@@ -1,8 +1,5 @@
 /* options.c -- cmuts-hmm's command line, as one table.
  *
- * Rows use designated initializers, so that a field added to cli_option takes its default
- * rather than having to be spelled out in every row.
- *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
 
@@ -14,8 +11,15 @@
 #include "output.h"
 #include "phmm.h"
 
+static const cli_choice VERIFY_CHOICES[] = {
+    { "name",     REFSEQ_VERIFY_NAME     },
+    { "length",   REFSEQ_VERIFY_LENGTH   },
+    { "checksum", REFSEQ_VERIFY_CHECKSUM },
+    { "none",     0                      },
+    { NULL,       0                      },
+};
+
 static const cli_choice STRAND_CHOICES[] = {
-    { "both",    FILTER_STRAND_BOTH    },
     { "forward", FILTER_STRAND_FORWARD },
     { "reverse", FILTER_STRAND_REVERSE },
     { NULL,      0                     },
@@ -42,13 +46,21 @@ static const cli_option OPTIONS[] = {
         .help     = "write results to this file",
         .required = true,
     },
-
     {
         .group  = "Input and output",
         .name   = "overwrite",
         .type   = OPT_FLAG,
         .offset = offsetof(cli_args, pipeline.overwrite),
         .help   = "replace the output file if it already exists",
+    },
+    {
+        .group   = "Input and output",
+        .name    = "verify",
+        .type    = OPT_SET,
+        .offset  = offsetof(cli_args, pipeline.verify),
+        .metavar = "CHECKS",
+        .help    = "header fields to verify against the FASTA",
+        .choices = VERIFY_CHOICES,
     },
 
     {
@@ -88,10 +100,10 @@ static const cli_option OPTIONS[] = {
         .group   = "Filtering",
         .name    = "strand",
         .key     = 's',
-        .type    = OPT_ENUM,
+        .type    = OPT_SET,
         .offset  = offsetof(cli_args, pipeline.filter_config.strand),
-        .metavar = "STRAND",
-        .help    = "keep alignments on this strand",
+        .metavar = "STRANDS",
+        .help    = "keep alignments on these strands",
         .choices = STRAND_CHOICES,
     },
 

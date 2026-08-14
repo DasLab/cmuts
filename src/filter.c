@@ -11,7 +11,7 @@ filter_config filter_defaults(void)
 {
     return (filter_config){
         .min_mapq   = 20,
-        .strand     = FILTER_STRAND_BOTH,
+        .strand     = FILTER_STRAND_FORWARD | FILTER_STRAND_REVERSE,
         .min_length = FILTER_LENGTH_UNBOUNDED,
         .max_length = FILTER_LENGTH_UNBOUNDED,
     };
@@ -35,12 +35,9 @@ static bool mapping_quality_accepted(const filter_config *filter, const cm_bam_r
 static bool strand_accepted(const filter_config *filter, const cm_bam_record *read)
 {
     bool reverse = (read->flag & BAM_FREVERSE) != 0;
+    int  own     = reverse ? FILTER_STRAND_REVERSE : FILTER_STRAND_FORWARD;
 
-    switch (filter->strand) {
-        case FILTER_STRAND_FORWARD: return !reverse;
-        case FILTER_STRAND_REVERSE: return reverse;
-        default:                    return true;
-    }
+    return (filter->strand & own) != 0;
 }
 
 /* Length is that of the stored sequence, so a hard-clipped read counts only the bases

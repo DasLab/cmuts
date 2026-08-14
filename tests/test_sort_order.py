@@ -9,7 +9,7 @@ import subprocess
 import pytest
 
 from datasets import DATASETS
-from support import counted, header_of, reheadered, try_cmuts
+from support import header_of, measure_dataset, replace_header, try_cmuts
 
 # cmuts-hmm reads the sort order from the header alone, so each test declares
 # on what the header it was given holds.
@@ -32,7 +32,7 @@ def test_a_name_sorted_file_is_refused(datasets, falsifiable, tmp_path, name):
         subprocess.run(["samtools", "sort", "-n", str(data.bam)],
                        check=True, stdout=handle, stderr=subprocess.DEVNULL)
 
-    byname = counted((bam,), data.fasta)
+    byname = measure_dataset((bam,), data.fasta)
 
     falsifiable(header_of(byname) != header_of(data))
 
@@ -45,9 +45,10 @@ def test_a_name_sorted_file_is_refused(datasets, falsifiable, tmp_path, name):
 @pytest.mark.parametrize("name", sorted(DATASETS))
 def test_a_header_without_an_hd_line_is_refused(datasets, falsifiable, tmp_path, name):
     data = datasets(name)
-    stripped = reheadered(data, tmp_path,
-                          lambda text: "".join(line + "\n" for line in text.splitlines()
-                                               if not line.startswith("@HD")))
+    stripped = replace_header(
+        data, tmp_path,
+        lambda text: "".join(line + "\n" for line in text.splitlines()
+                             if not line.startswith("@HD")))
 
     falsifiable(header_of(stripped) != header_of(data))
 
@@ -61,8 +62,8 @@ def test_a_header_without_an_hd_line_is_refused(datasets, falsifiable, tmp_path,
 def test_a_sort_order_that_merely_starts_the_same_is_refused(datasets, falsifiable,
                                                              tmp_path, name):
     data = datasets(name)
-    altered = reheadered(data, tmp_path,
-                         lambda text: text.replace("SO:coordinate", "SO:coordinated"))
+    altered = replace_header(
+        data, tmp_path, lambda text: text.replace("SO:coordinate", "SO:coordinated"))
 
     falsifiable(header_of(altered) != header_of(data))
 
@@ -76,7 +77,7 @@ def test_a_sort_order_that_merely_starts_the_same_is_refused(datasets, falsifiab
 def test_other_tags_on_the_hd_line_do_not_hide_the_sort_order(datasets, falsifiable,
                                                               tmp_path, name):
     data = datasets(name)
-    altered = reheadered(
+    altered = replace_header(
         data, tmp_path,
         lambda text: text.replace("@HD\tVN:1.6\tSO:coordinate",
                                   "@HD\tVN:1.6\tSO:coordinate\tGO:none"),
@@ -91,8 +92,8 @@ def test_other_tags_on_the_hd_line_do_not_hide_the_sort_order(datasets, falsifia
 def test_an_hd_line_without_a_sort_order_is_refused(datasets, falsifiable, tmp_path,
                                                     name):
     data = datasets(name)
-    altered = reheadered(data, tmp_path,
-                         lambda text: text.replace("\tSO:coordinate", ""))
+    altered = replace_header(
+        data, tmp_path, lambda text: text.replace("\tSO:coordinate", ""))
 
     falsifiable(header_of(altered) != header_of(data))
 
@@ -112,7 +113,7 @@ def test_a_sort_order_on_a_line_that_is_not_hd_is_refused(datasets, falsifiable,
         lines[0] = lines[0].replace("@SQ\t", "@SQ\tSO:coordinate\t", 1)
         return "".join(line + "\n" for line in lines)
 
-    altered = reheadered(data, tmp_path, rewrite)
+    altered = replace_header(data, tmp_path, rewrite)
 
     falsifiable(header_of(altered) != header_of(data))
 

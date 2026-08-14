@@ -16,7 +16,8 @@ import pytest
 from datasets import DATASETS
 from filters import COMPOUND, criteria, describe_filters
 from support import (
-    assert_counts_agree, converted, outputs_agree, run_cmuts, substituted, try_cmuts,
+    assert_counts_agree, convert_format, outputs_agree, replace_bases, run_cmuts,
+    try_cmuts,
 )
 
 # The format the datasets are generated in, which the others are compared
@@ -49,7 +50,7 @@ def unreachable(path):
 def test_every_format_gives_the_same_answer(datasets, falsifiable, tmp_path, name, fmt,
                                             filters):
     native = datasets(name)
-    data = converted(native, tmp_path, fmt)
+    data = convert_format(native, tmp_path, fmt)
     summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))
 
     # Only a run that kept reads compares what the format stored.
@@ -67,7 +68,7 @@ def test_cram_decodes_against_the_reference_it_was_given(datasets, falsifiable,
     """Renames the reference recorded in the CRAM header aside, leaving cmuts-hmm
     no source for the bases but --fasta."""
     native = datasets(name)
-    data = converted(native, tmp_path, "cram")
+    data = convert_format(native, tmp_path, "cram")
 
     moved = tmp_path / "elsewhere.fasta"
     moved.write_bytes(data.fasta.read_bytes())
@@ -94,12 +95,12 @@ def test_a_cram_is_refused_against_bases_it_was_not_written_from(datasets, falsi
     so this asserts the refusal and not the reason given for it.
     """
     native = datasets(name)
-    data = converted(native, tmp_path, "cram")
+    data = convert_format(native, tmp_path, "cram")
 
     # htslib fails while decoding a record, so a file holding none never
     # reaches the refusal.
     falsifiable(native.mapped > 0)
 
-    attempt = try_cmuts(substituted(data, tmp_path), tmp_path / "out.h5")
+    attempt = try_cmuts(replace_bases(data, tmp_path), tmp_path / "out.h5")
 
     assert attempt.returncode != 0

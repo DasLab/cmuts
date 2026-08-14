@@ -28,6 +28,7 @@
 #define METAVAR_MAX    32  /* a placeholder, with any ellipsis */
 #define INVOCATION_MAX 64  /* both forms of an option, and its placeholder */
 #define CEILING_MAX    32  /* an option's largest value, written out */
+#define SET_LIST_MAX   64  /* the choices a set holds, comma separated */
 
 /* The note giving an option's default. A string default is written out in full,
  * so this is the one of these a row can outgrow, and the note is truncated where
@@ -146,21 +147,65 @@ static void print_choices(FILE *out, const cli_option *opt)
     }
 }
 
-static int parse_choice(const cli_option *opt, const char *text, const char *program,
-                        int *out)
+/* Takes the choice named by the first len characters, so that a word within a longer
+ * string is matched without a copy of it. */
+static int parse_choice_n(const cli_option *opt, const char *text, size_t len,
+                          const char *program, int *out)
 {
     for (const cli_choice *choice = opt->choices; choice->name; choice++) {
-        if (strcmp(choice->name, text) == 0) {
+        if (strncmp(choice->name, text, len) == 0 && choice->name[len] == '\0') {
             *out = choice->value;
             return 0;
         }
     }
 
-    fprintf(stderr, "%s: --%s: \"%s\" is not one of ", program, opt->name, text);
+    fprintf(stderr, "%s: --%s: \"%.*s\" is not one of ", program, opt->name, (int)len,
+            text);
     print_choices(stderr, opt);
     fputc('\n', stderr);
 
     return -1;
+}
+
+static int parse_choice(const cli_option *opt, const char *text, const char *program,
+                        int *out)
+{
+    return parse_choice_n(opt, text, strlen(text), program, out);
+}
+
+/* Every choice a comma-separated list names, OR'd together.
+ *
+ * The empty subset is a choice worth zero. Asking for it alongside another is a
+ * contradiction rather than a preference between the two, so it is refused instead of
+ * resolved. */
+static int parse_set(const cli_option *opt, const char *text, const char *program,
+                     int *out)
+{
+    int  chosen = 0;
+    bool empty  = false;
+
+    for (const char *token = text; token; ) {
+        const char *comma = strchr(token, ',');
+        size_t      len   = comma ? (size_t)(comma - token) : strlen(token);
+        int         choice;
+
+        if (parse_choice_n(opt, token, len, program, &choice) < 0) {
+            return -1;
+        }
+
+        empty  |= choice == 0;
+        chosen |= choice;
+        token   = comma ? comma + 1 : NULL;
+    }
+
+    if (empty && chosen != 0) {
+        fprintf(stderr, "%s: --%s: \"%s\" asks for nothing alongside something\n",
+                program, opt->name, text);
+        return -1;
+    }
+
+    *out = chosen;
+    return 0;
 }
 
 /* The largest whole number an option will take. One with no ceiling of its own is
@@ -276,6 +321,13 @@ static int assign(const cli_option *opt, void *args, const char *value,
             *(int *)field = choice;
             return 0;
 
+        case OPT_SET:
+            if (parse_set(opt, value, program, &choice) < 0) {
+                return -1;
+            }
+            *(int *)field = choice;
+            return 0;
+
         case OPT_FLAG:
             *(bool *)field = true;
             return 0;
@@ -305,6 +357,33 @@ static int assign(const cli_option *opt, void *args, const char *value,
 /* ------------------------------------------------------------------------ */
 /* Help                                                                      */
 /* ------------------------------------------------------------------------ */
+
+/* The names of every choice a set holds, comma separated, which is the spelling the
+ * option itself takes. */
+static void format_set(const cli_option *opt, int value, char *out, size_t size)
+{
+    size_t used = 0;
+
+    out[0] = '\0';
+
+    for (const cli_choice *choice = opt->choices; choice->name; choice++) {
+        bool held = choice->value ? (value & choice->value) == choice->value
+                                  : value == 0;
+        int  n;
+
+        if (!held) {
+            continue;
+        }
+
+        n = snprintf(out + used, size - used, "%s%s", used ? "," : "", choice->name);
+
+        if (n < 0 || (size_t)n >= size - used) {
+            return;
+        }
+
+        used += (size_t)n;
+    }
+}
 
 /* Renders the note giving an option's default, read from the spec's defaults so
  * that the help cannot advertise a value the program does not use. */
@@ -348,6 +427,13 @@ static void format_default(const cli_option *opt, const void *defaults,
                 }
             }
             break;
+        case OPT_SET: {
+            char names[SET_LIST_MAX];
+
+            format_set(opt, *(const int *)field, names, sizeof names);
+            snprintf(out, size, " (default %s)", names);
+            break;
+        }
         default:
             break;
     }
@@ -550,6 +636,7 @@ static const char *type_name(cli_type type)
         case OPT_INT:    return "int";
         case OPT_DOUBLE: return "double";
         case OPT_ENUM:   return "enum";
+        case OPT_SET:    return "set";
     }
 
     return "unknown";
@@ -594,6 +681,13 @@ static void print_json_default(FILE *out, const cli_option *opt, const void *def
                 }
             }
             break;
+        case OPT_SET: {
+            char names[SET_LIST_MAX];
+
+            format_set(opt, *(const int *)field, names, sizeof names);
+            print_json_string(out, names);
+            break;
+        }
     }
 }
 

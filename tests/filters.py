@@ -22,7 +22,7 @@ FILTERS = [
 ]
 
 # Criteria are given in full at every call, so no default is relied on.
-UNFILTERED = {"min_mapq": 0, "strand": "both", "min_length": 0, "max_length": 0}
+UNFILTERED = {"min_mapq": 0, "strand": "forward,reverse", "min_length": 0, "max_length": 0}
 
 
 def criteria(filters):

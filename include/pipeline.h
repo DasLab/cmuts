@@ -10,6 +10,7 @@
 
 #include "filter.h"
 #include "rates.h"
+#include "refseq.h"
 #include "tally.h"
 
 typedef struct {
@@ -20,6 +21,7 @@ typedef struct {
     const char        *fasta_path;
     const char        *output_path;
     bool               overwrite;
+    int                verify;  /* refseq_check bits the FASTA is held to */
     rate_config        rate_config;
     filter_config      filter_config;
     tally_config       tally_config;

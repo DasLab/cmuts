@@ -10,7 +10,7 @@ import h5py
 import numpy as np
 import pytest
 
-from support import arrays_of, placements, run_cmuts
+from support import arrays_of, build_placements, run_cmuts
 
 KINDS = ("D", "I")
 GAPS = (1, 2, 3)
@@ -104,7 +104,7 @@ def scored(kind: str, gap: int, read: str) -> int:
 def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
     kind, gap, run = case
     reference, read, cigars = homopolymer(kind, gap, run)
-    data = placements(tmp_path, "ambiguous", reference, read, cigars)
+    data = build_placements(tmp_path, "ambiguous", reference, read, cigars)
 
     run_cmuts(data, tmp_path / "banded.h5", band=gap, **WEIGHTED)
     written = written_rows(tmp_path / "banded.h5", len(cigars))
@@ -129,7 +129,7 @@ def test_a_band_narrower_than_the_gap_leaves_the_placements_apart(tmp_path, case
     placements even when nothing has been marginalized."""
     kind, gap, run = case
     reference, read, cigars = homopolymer(kind, gap, run)
-    data = placements(tmp_path, "ambiguous", reference, read, cigars)
+    data = build_placements(tmp_path, "ambiguous", reference, read, cigars)
 
     run_cmuts(data, tmp_path / "narrow.h5", band=gap - 1, **WEIGHTED)
 

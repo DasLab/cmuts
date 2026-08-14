@@ -11,7 +11,7 @@ from support import (
     records,
     run_cmuts,
     samtools_kept,
-    with_secondary,
+    mark_secondary,
 )
 
 
@@ -65,7 +65,7 @@ EVERY_THIRD = 3
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
 def test_secondary_alignments_are_refused(datasets, falsifiable, tmp_path, name):
-    data, marked = with_secondary(datasets(name), tmp_path, every=EVERY_THIRD)
+    data, marked = mark_secondary(datasets(name), tmp_path, every=EVERY_THIRD)
 
     falsifiable(marked > 0)
 

@@ -560,6 +560,7 @@ pipeline_config pipeline_defaults(void)
 {
     return (pipeline_config){
         .rate_config    = rate_defaults(),
+        .verify         = REFSEQ_VERIFY_ALL,
         .workers        = 4,
         .decode_threads = 4,
         .queue_capacity = 4096,
@@ -600,7 +601,7 @@ static int pipeline_open_inputs(pipeline *p, const pipeline_config *cfg,
         return -1;
     }
 
-    p->refs = refseq_open(cfg->fasta_path, p->bam, &why);
+    p->refs = refseq_open(cfg->fasta_path, p->bam, cfg->verify, &why);
     if (!p->refs) {
         snprintf(error, error_len, "%s: %s", cfg->fasta_path, why);
         return -1;

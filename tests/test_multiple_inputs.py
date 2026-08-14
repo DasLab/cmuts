@@ -13,7 +13,7 @@ import pytest
 
 from datasets import DATASETS
 from support import (
-    counted_fields, dealt_out, header_of, outputs_agree, reheadered, run_cmuts,
+    counted_fields, header_of, outputs_agree, replace_header, run_cmuts, split_across_files,
     try_cmuts,
 )
 
@@ -38,7 +38,7 @@ def test_a_split_file_counts_the_same_as_the_whole(datasets, falsifiable, tmp_pa
                                                    name, parts):
     data = datasets(name)
     whole = run_cmuts(data, tmp_path / "whole.h5")
-    split = run_cmuts(dealt_out(data, tmp_path, parts), tmp_path / "split.h5")
+    split = run_cmuts(split_across_files(data, tmp_path, parts), tmp_path / "split.h5")
 
     falsifiable(whole.kept > 0)
 
@@ -50,7 +50,7 @@ def test_a_split_file_counts_the_same_as_the_whole(datasets, falsifiable, tmp_pa
 def test_the_order_of_the_input_files_does_not_matter(datasets, falsifiable, tmp_path,
                                                       name):
     data = datasets(name)
-    split = dealt_out(data, tmp_path, 4)
+    split = split_across_files(data, tmp_path, 4)
 
     forwards = run_cmuts(split, tmp_path / "forwards.h5")
     run_cmuts(replace(split, bams=tuple(reversed(split.bams))), tmp_path / "backwards.h5")
@@ -95,8 +95,8 @@ def test_the_same_file_twice_counts_everything_twice(datasets, falsifiable, tmp_
 def test_a_file_declaring_different_references_is_refused(datasets, falsifiable,
                                                           tmp_path, name):
     data = datasets(name)
-    renamed = reheadered(data, tmp_path,
-                         lambda text: text.replace("SN:ref0000", "SN:other000"))
+    renamed = replace_header(
+        data, tmp_path, lambda text: text.replace("SN:ref0000", "SN:other000"))
 
     # The two files declare different references only where the dataset has a
     # reference the rename matched.
@@ -112,8 +112,8 @@ def test_a_file_declaring_different_references_is_refused(datasets, falsifiable,
 @pytest.mark.parametrize("name", sorted(DATASETS))
 def test_an_unsorted_file_is_reported_by_path(datasets, falsifiable, tmp_path, name):
     data = datasets(name)
-    unsorted = reheadered(data, tmp_path,
-                          lambda text: text.replace("SO:coordinate", "SO:unknown"))
+    unsorted = replace_header(
+        data, tmp_path, lambda text: text.replace("SO:coordinate", "SO:unknown"))
 
     falsifiable(header_of(unsorted) != header_of(data))
 

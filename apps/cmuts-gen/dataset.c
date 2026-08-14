@@ -18,6 +18,8 @@
 #include <htslib/kstring.h>
 #include <htslib/sam.h>
 
+#include "checksum.h"
+
 /* Bases per line of a FASTA record. */
 #define FASTA_LINE 60
 
@@ -139,10 +141,38 @@ static size_t longest_reference(const size_t *lengths, size_t n)
     return longest;
 }
 
+/* Declares the M5 of one reference, taken over the bases the FASTA will hold.
+ *
+ * The sequence follows from the seed and the index, so it is drawn here and drawn again
+ * where it is written. Holding every reference until the header is complete would cost the
+ * whole reference set in memory for the sake of a digest apiece. */
+static bool declare_checksum(kstring_t *text, const dataset_config *cfg, size_t tid,
+                             size_t len, char *sequence)
+{
+    char hex[CHECKSUM_LEN + 1];
+    rng  r;
+
+    seed_stream(&r, cfg->seed, tid, STREAM_CONTENT);
+    sim_sequence(sequence, len, &r);
+
+    if (!checksum_sequence(sequence, len, hex)) {
+        return false;
+    }
+
+    ksprintf(text, "\tM5:%s", hex);
+
+    return true;
+}
+
 static sam_hdr_t *build_header(const dataset_config *cfg, const size_t *lengths)
 {
-    kstring_t  text = KS_INITIALIZE;
-    sam_hdr_t *hdr;
+    kstring_t  text     = KS_INITIALIZE;
+    char      *sequence = malloc(longest_reference(lengths, cfg->references) + 1);
+    sam_hdr_t *hdr      = NULL;
+
+    if (!sequence) {
+        return NULL;
+    }
 
     ksprintf(&text, "@HD\tVN:1.6\tSO:coordinate\n");
 
@@ -150,10 +180,19 @@ static sam_hdr_t *build_header(const dataset_config *cfg, const size_t *lengths)
         char name[NAME_LEN];
 
         reference_name(name, sizeof name, tid);
-        ksprintf(&text, "@SQ\tSN:%s\tLN:%zu\n", name, lengths[tid]);
+        ksprintf(&text, "@SQ\tSN:%s\tLN:%zu", name, lengths[tid]);
+
+        if (!declare_checksum(&text, cfg, tid, lengths[tid], sequence)) {
+            goto done;
+        }
+
+        kputc('\n', &text);
     }
 
     hdr = sam_hdr_parse(text.l, text.s);
+
+done:
+    free(sequence);
     free(text.s);
 
     return hdr;

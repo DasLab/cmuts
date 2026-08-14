@@ -19,6 +19,7 @@ struct refseq_source {
     cm_fasta_record      record;        /* the record for ordinal loaded - 1 */
     int32_t              loaded;        /* number of records consumed so far */
     cm_bam_sq_cursor    *declarations;  /* each file's @SQ lines, in step */
+    int                  verify;        /* the comparisons an advance makes */
     char                 error[CM_ERROR_MAX];
 };
 
@@ -32,7 +33,7 @@ static const char *path_of(const refseq_source *src, size_t file)
     return cm_bam_stream_path(src->bams, file);
 }
 
-refseq_source *refseq_open(const char *fasta_path, const cm_bam_stream *bams,
+refseq_source *refseq_open(const char *fasta_path, const cm_bam_stream *bams, int verify,
                            const char **why)
 {
     size_t         files = cm_bam_stream_count(bams);
@@ -43,8 +44,9 @@ refseq_source *refseq_open(const char *fasta_path, const cm_bam_stream *bams,
         return NULL;
     }
 
-    src->bams  = bams;
-    src->fasta = cm_fasta_open(fasta_path, why);
+    src->bams   = bams;
+    src->verify = verify;
+    src->fasta  = cm_fasta_open(fasta_path, why);
 
     if (!src->fasta) {
         refseq_close(src);
@@ -83,6 +85,10 @@ void refseq_close(refseq_source *src)
 
 static bool name_matches(refseq_source *src, size_t file, int32_t tid)
 {
+    if (!(src->verify & REFSEQ_VERIFY_NAME)) {
+        return true;
+    }
+
     const char *expected = cm_bam_refname(header_of(src, file), tid);
 
     if (expected && strcmp(src->record.name, expected) == 0) {
@@ -99,6 +105,10 @@ static bool name_matches(refseq_source *src, size_t file, int32_t tid)
 
 static bool length_matches(refseq_source *src, size_t file, int32_t tid)
 {
+    if (!(src->verify & REFSEQ_VERIFY_LENGTH)) {
+        return true;
+    }
+
     hts_pos_t expected = cm_bam_reflen(header_of(src, file), tid);
 
     if ((hts_pos_t)src->record.len == expected) {
@@ -141,6 +151,10 @@ static const char *digest_of(digest *md5, const cm_fasta_record *record)
  * reporting a check that was never made. */
 static bool checksum_matches(refseq_source *src, size_t file, int32_t tid, digest *md5)
 {
+    if (!(src->verify & REFSEQ_VERIFY_CHECKSUM)) {
+        return true;
+    }
+
     size_t      declared_len = 0;
     const char *declared     = cm_bam_sq_checksum(&src->declarations[file], tid,
                                                   &declared_len);

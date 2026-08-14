@@ -1,14 +1,38 @@
 """The generator itself, so that a bad fixture is reported as a bad fixture
 rather than as a failing filter."""
 
+import hashlib
 import subprocess
 
 import pytest
 
 from datasets import DATASETS
 from support import (
-    generate, md_and_nm_tags, recomputed_md_and_nm_tags, records,
+    generate, md_and_nm_tags, recomputed_md_and_nm_tags, records, sequences,
 )
+
+
+def _sq_fields(data) -> list:
+    """The fields of each @SQ line, by tag."""
+    return [
+        dict(field.split(":", 1) for field in line.split("\t")[1:])
+        for line in records(data.bam, "-H") if line.startswith("@SQ")
+    ]
+
+
+@pytest.mark.parametrize("name", sorted(DATASETS))
+def test_checksums_match_hashlib(datasets, falsifiable, name):
+    """hashlib takes the digests here, so agreement checks cmuts-gen against
+    something other than the code cmuts-hmm checks them with."""
+    data = datasets(name)
+    written = {fields["SN"]: fields["M5"] for fields in _sq_fields(data)}
+
+    falsifiable(len(written) > 0)
+
+    assert written == {
+        reference: hashlib.md5(seq.upper().encode()).hexdigest()
+        for reference, seq in sequences(data.fasta).items()
+    }
 
 
 @pytest.mark.parametrize("name", sorted(DATASETS))
@@ -50,13 +74,7 @@ def test_coordinate_sorted_without_sorting(datasets, falsifiable, name):
 @pytest.mark.parametrize("name", sorted(DATASETS))
 def test_header_lengths_match_the_reference(datasets, falsifiable, name):
     data = datasets(name)
-    declared = {}
-
-    for line in records(data.bam, "-H"):
-        if not line.startswith("@SQ"):
-            continue
-        fields = dict(field.split(":", 1) for field in line.split("\t")[1:])
-        declared[fields["SN"]] = int(fields["LN"])
+    declared = {fields["SN"]: int(fields["LN"]) for fields in _sq_fields(data)}
 
     falsifiable(len(declared) > 0)
 
