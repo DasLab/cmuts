@@ -384,9 +384,10 @@ static int write_unmapped_reads(writer *w)
 
 int dataset_write(const dataset_config *cfg, char *error, size_t error_len)
 {
-    writer  w       = { 0 };
-    size_t *lengths = draw_reference_lengths(cfg);
-    int     status  = -1;
+    writer       w       = { 0 };
+    const size_t n       = cfg->references;
+    size_t      *lengths = draw_reference_lengths(cfg);
+    int          status  = -1;
 
     if (!lengths) {
         snprintf(error, error_len, "out of memory");
@@ -403,7 +404,7 @@ int dataset_write(const dataset_config *cfg, char *error, size_t error_len)
         goto done;
     }
 
-    for (size_t tid = 0; tid < cfg->references; tid++) {
+    for (size_t tid = 0; tid < n; tid++) {
         if (write_reference(&w, tid, lengths[tid]) < 0) {
             snprintf(error, error_len, "unable to write an alignment");
             goto done;
