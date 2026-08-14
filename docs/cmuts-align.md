@@ -1,6 +1,17 @@
 # cmuts-align
 
-`cmuts-align` aligns reads to a reference with [minimap2](https://github.com/lh3/minimap2) and converts this to a coordinate-sorted BAM suitable for `cmuts-hmm` using [samtools](https://github.com/samtools/samtools). It needs both `minimap2` and `samtools` on the path.
+## Purpose
+
+Aligning raw sequencing data against the reference library.
+
+## Requires
+
+- One or more FASTQ files containing the sequenced reads
+- The FASTA library
+
+As well as both `minimap2` and `samtools` on the path.
+
+## Usage
 
 One invocation handles one sample. Pass a single FASTQ file for single-end reads,
 

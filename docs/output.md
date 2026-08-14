@@ -5,42 +5,49 @@ cmuts writes HDF5 files with a consistent schema, containing output reactivity v
 ## Output Datasets
 
 <!-- BEGIN GENERATED cmuts-hmm FIELDS -->
+{.field}
 ### `coverage`
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `zero`
 
 The number of reads in which this base was present, weighted by PHRED scores.
 
+{.field}
 ### `reactivity`
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
 
 The mutation rate at this base, weighted by PHRED scores and in accordance with the HMM parameters.
 
+{.field}
 ### `error`
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
 
 Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors.
 
+{.field}
 ### `reads/lengths`
 
 **Shape** `(n, 2l)` · **Type** `uint64` · **Fill** `zero`
 
 The number of reads passing all filters, binned by length.
 
+{.field}
 ### `reads/counted`
 
 **Shape** `(n,)` · **Type** `uint64` · **Fill** `zero`
 
 The number of reads passing all filters.
 
+{.field}
 ### `reads/rejected`
 
 **Shape** `(n,)` · **Type** `uint64` · **Fill** `zero`
 
 The number of reads rejected by at least one filter.
 
+{.field}
 ### `reads/unmapped`
 
 **Shape** `()` · **Type** `uint64` · **Fill** `zero`

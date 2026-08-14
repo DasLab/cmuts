@@ -1,5 +1,14 @@
 # cmuts-hmm
 
+## Purpose
+
+Computing reactivity rates from alignment files via the pair-HMM.
+
+## Requires
+
+- One or more coordinate-sorted alignment files. SAM, BAM, and CRAM formats are all supported
+- The FASTA library
+
 ## Error Checking
 
 `cmuts-hmm` verifies each FASTA sequence against the alignment header: its name and its length, and, where the header declares an MD5 checksum, the bases themselves. Any mismatch ends the run early. This behavior is configurable via the `--verify` flag.

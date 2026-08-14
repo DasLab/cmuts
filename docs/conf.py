@@ -15,8 +15,10 @@ extensions = [
     "sphinx_inline_tabs",
 ]
 
-# For the ::: fences the install tabs are written with.
-myst_enable_extensions = ["colon_fence"]
+# colon_fence is for the ::: fences the install tabs are written with.
+# attrs_block is for the {.class} written above a block, which MyST attaches to
+# that block, or to the section where the block is a heading.
+myst_enable_extensions = ["colon_fence", "attrs_block"]
 
 html_theme = "furo"
 html_static_path = ["_static"]

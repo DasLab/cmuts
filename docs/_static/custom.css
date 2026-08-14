@@ -6,14 +6,15 @@ table.align-default {
 }
 
 /* One dataset of an output, set off from the next by a rule down its side.
-   Each heading opens a section, so these are the fields themselves. */
-#output-datasets > section {
+   The class is written above the block in the markdown, which MyST attaches to
+   the block itself, or to the section where that block is a heading. */
+.field {
   border-left: 0.15rem solid var(--color-background-border);
   padding-left: 1rem;
   margin: 1.4rem 0;
 }
 
-#output-datasets > section > h3 {
+.field > h3 {
   margin-top: 0;
 }
 

@@ -24,6 +24,11 @@ EXTENTS = {"per base": "l", "per length": "2l", "scalar": None}
 # spell it. What it means differs by field, and the output page covers it.
 ABSENT = {"nan": "NaN", "zero": "zero"}
 
+# The class each field's heading carries, which the stylesheet draws a rule
+# beside. MyST attaches it to the section the heading opens, so it needs the
+# attrs_block extension that docs/conf.py enables.
+FIELD_CLASS = "{.field}"
+
 
 def table(headings: list, rows: list) -> str:
     """A markdown table. A cell holding a pipe would end its column early, so
@@ -87,15 +92,14 @@ def fields(program: str) -> str:
     with no description gets a heading anyway, so that the block covers every
     dataset before the prose is written.
 
-    The heading is also what the stylesheet draws a rule beside: each one
-    opens a section of its own in the rendered page, so the block needs no
-    markup around it.
+    Each heading opens a section of its own in the rendered page and carries
+    the class the stylesheet draws a rule beside.
     """
     written = []
 
     for field in described(program, "--dump-layout")["fields"]:
         absent = ABSENT.get(field["absent"], field["absent"])
-        written += [f"### `{field['name']}`", "",
+        written += [FIELD_CLASS, f"### `{field['name']}`", "",
                     f"**Shape** `{shape(field)}` · **Type** `{field['type']}` · "
                     f"**Fill** `{absent}`", ""]
 

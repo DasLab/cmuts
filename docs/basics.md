@@ -1,23 +1,51 @@
 # Basics
 
-Running cmuts requires one or more coordinate-sorted alignment files (SAM, BAM, or CRAM) and the reference FASTA to which they were aligned. For a full list of the arguments each command takes, please read their respective pages.
+The cmuts pipeline comprises three independent programs:
+
+{.field}
+[`cmuts-align`](cmuts-align.md)\
+**Purpose:** Aligning raw sequencing data against the reference library\
+**Requires:** One or more FASTQ files, the FASTA library
+
+{.field}
+[`cmuts-hmm`](cmuts-hmm.md)\
+**Purpose:** Computing reactivity rates from alignment files via the pair-HMM\
+**Requires:** One or more coordinate-sorted alignment (SAM, BAM, or CRAM) files, the FASTA library
+
+{.field}
+[`cmuts-sub`](cmuts-sub.md)\
+**Purpose:** Background subtraction of reactivity rates\
+**Requires:** Treated and untreated reactivity rates, in cmuts-compatible HDF5 files
+
+This page goes over basic, end-to-end usage of these programs on standard data. For a full list of the arguments each command takes, please read their respective pages.
 
 ## Standard Usage
 
-The basic way to use cmuts on a standard MaP-seq dataset involves passing the treated and untreated samples through the HMM in order to get per-experiment reactivities,
+The canonical use case of the cmuts pipeline is to generate reactivity profiles from a MaP-seq experiment, where the cDNA of treated and untreated RNA has been sequenced.
+
+The first step is to align the reads against the reference library.
+
+```sh
+cmuts-align -f references.fasta -x sr -o treated.bam treated.fastq.gz
+cmuts-align -f references.fasta -x sr -o untreated.bam untreated.fastq.gz
+```
+
+`-x` names the platform the reads were sequenced with, and is required. See the [cmuts-align](cmuts-align.md) page for the presets it accepts and the rest of its options.
+
+Then, pass the alignments to the HMM in order to compute reactivity rates.
 
 ```sh
 cmuts-hmm -f references.fasta -o treated.h5 treated.bam
 cmuts-hmm -f references.fasta -o untreated.h5 untreated.bam
 ```
 
-and then performing background subtraction.
+The final step is background subtraction.
 
 ```sh
 cmuts-sub -o combined.h5 treated.h5 untreated.h5
 ```
 
-All HDF5 files have the same format, where `n` is the number of references and `l` the length of the longest of them.
+All HDF5 files in cmuts have the same format, where `n` is the number of references and `l` the length of the longest of them.
 
 <!-- BEGIN GENERATED cmuts-hmm LAYOUT -->
 | Dataset | Shape | Type | Fill |
@@ -33,21 +61,32 @@ All HDF5 files have the same format, where `n` is the number of references and `
 
 See the [output](output.md) page for more detail on what each dataset contains.
 
+## Pre-Aligned Data
+
+Skip running `cmuts-align`. Ensure your data is sorted, which can be done with `samtools sort`.
+
 ## Split Alignments
 
-If reads are split across lanes, then multiple alignment files can be passed to the HMM, where they are treated as if they were one large alignment file.
+Multiple alignment files can be passed to the HMM, where they are treated as if they were one large alignment file.
 
 ```sh
 cmuts-hmm -f references.fasta -o counts.h5 lane1.bam lane2.bam lane3.bam
 ```
 
-## Denatured Controls
+## Denatured Control
 
-To account for a denatured control, first use the HMM to get its mutation rates alongside the treated and untreated experiments, and then pass it to the `-d` flag of `cmuts-sub`.
+To account for a denatured control, first use the HMM to get its mutation rates alongside the treated and untreated experiments,
 
 ```sh
-cmuts-hmm -f references.fasta -o treated.h5 treated.bam
-cmuts-hmm -f references.fasta -o untreated.h5 untreated.bam
 cmuts-hmm -f references.fasta -o denatured.h5 denatured.bam
+```
+
+and then pass it to the `-d` flag of `cmuts-sub`.
+
+```sh
 cmuts-sub -o combined.h5 -d denatured.h5 treated.h5 untreated.h5
 ```
+
+## No Control
+
+With no control, skip background subtraction and use the output of `cmuts-hmm` directly.
