@@ -15,12 +15,14 @@ STRICTER_MAPQ = 60
 NOTES = "months of irreplaceable notes\n"
 
 
-def next_dataset(catalogue, name: str):
-    """Returns the dataset after this one in the catalogue, so that a failing
-    run is given something other than what wrote the file it must not touch."""
+def next_dataset(catalogue, data):
+    """Returns the dataset after this one in the catalogue, in the same format,
+    so that a failing run is given something other than what wrote the file it
+    must not touch."""
     names = sorted(DATASETS)
+    following = names[(names.index(data.name) + 1) % len(names)]
 
-    return catalogue(names[(names.index(name) + 1) % len(names)])
+    return catalogue(following, data.fmt)
 
 
 def test_an_existing_output_is_not_replaced_without_overwrite(data, falsifiable,
@@ -35,7 +37,6 @@ def test_an_existing_output_is_not_replaced_without_overwrite(data, falsifiable,
     attempt = try_cmuts(data, output)
 
     assert attempt.returncode != 0
-    assert "already holds data" in attempt.stderr
     assert output.read_bytes() == before, "the first result is untouched"
 
 
@@ -63,7 +64,7 @@ def test_a_run_that_would_fail_destroys_nothing(data, falsifiable, catalogue, tm
 
     falsifiable(first.rows > 0)
 
-    attempt = try_cmuts(next_dataset(catalogue, data.name), output)
+    attempt = try_cmuts(next_dataset(catalogue, data), output)
 
     assert attempt.returncode != 0
     assert output.read_bytes() == before

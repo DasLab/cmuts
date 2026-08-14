@@ -26,6 +26,20 @@ from programs import run_generator, samtools, samtools_into
 SECONDARY_BIT = 0x100
 UNMAPPED_BIT = 0x4
 
+BAM = "bam"
+SAM = "sam"
+CRAM = "cram"
+
+# The format cmuts-gen writes, which the others are converted from.
+NATIVE = BAM
+
+FORMATS = (BAM, SAM, CRAM)
+
+# The formats that store a read's sequence in the file. A CRAM stores it as
+# differences from a reference, so it cannot be decoded against any other
+# sequence and a test giving it one measures htslib.
+SELF_CONTAINED = (BAM, SAM)
+
 
 @dataclass(frozen=True)
 class Dataset:
@@ -33,7 +47,8 @@ class Dataset:
     filter can change.
 
     The alignments may be spread over several files, which cmuts-hmm reads as
-    one, so the totals are of them all.
+    one, so the totals are of them all. Every file is in the format fmt names,
+    which a transform preserves.
     """
 
     name: str
@@ -42,6 +57,7 @@ class Dataset:
     mapped: int
     unmapped: int
     touched: int
+    fmt: str = NATIVE
 
     @property
     def bam(self) -> Path:
@@ -80,9 +96,17 @@ def generate(directory, name: str, **parameters) -> Dataset:
 # ---------------------------------------------------------------------------
 
 
-def _to_bam(sam: Path, bam: Path) -> Path:
-    samtools("view", "-b", "-o", bam, sam)
-    return bam
+def _rewrite(source: Path, output: Path, fmt: str, fasta: Path) -> Path:
+    """Writes an alignment file out in the named format.
+
+    CRAM stores a sequence as its differences from a reference, so writing one
+    requires a reference as well as reading one does.
+    """
+    flags = ("-T", str(fasta)) if fmt == CRAM else ()
+
+    samtools("view", "-h", "-O", fmt.upper(), *flags, "-o", output, source)
+
+    return output
 
 
 def _write_sam(path: Path, header: str, lines) -> Path:
@@ -90,21 +114,29 @@ def _write_sam(path: Path, header: str, lines) -> Path:
     return path
 
 
-def convert_format(data: Dataset, directory, fmt: str) -> Dataset:
-    """Converts the alignments to another format.
+def _rebuild(data: Dataset, directory, stem: str, header: str, lines) -> Path:
+    """Writes records out in the format the dataset is stored in, so that a
+    transform leaves the format it was given.
 
-    CRAM stores a sequence as its differences from a reference, so writing one
-    requires a reference as well as reading one does.
+    Records are written as SAM first, that being the format they are held in
+    here. A dataset stored as SAM is finished at that point.
     """
-    if fmt == "bam":
+    sam = _write_sam(Path(directory) / f"{stem}.sam", header, lines)
+
+    if data.fmt == SAM:
+        return sam
+
+    return _rewrite(sam, Path(directory) / f"{stem}.{data.fmt}", data.fmt, data.fasta)
+
+
+def convert_format(data: Dataset, directory, fmt: str) -> Dataset:
+    """Converts the alignments to another format."""
+    if fmt == data.fmt:
         return data
 
-    output = Path(directory) / f"converted.{fmt}"
-    flags = ("-T", str(data.fasta)) if fmt == "cram" else ()
+    output = _rewrite(data.bam, Path(directory) / f"{data.name}.{fmt}", fmt, data.fasta)
 
-    samtools("view", "-h", "-O", fmt.upper(), *flags, "-o", output, data.bam)
-
-    return replace(data, bams=(output,))
+    return replace(data, bams=(output,), fmt=fmt)
 
 
 def split_across_files(data: Dataset, directory, parts: int) -> Dataset:
@@ -115,11 +147,9 @@ def split_across_files(data: Dataset, directory, parts: int) -> Dataset:
     """
     header = header_text(data.bam)
     lines = record_lines(data.bam)
-    written = []
 
-    for i in range(parts):
-        sam = _write_sam(Path(directory) / f"part{i}.sam", header, lines[i::parts])
-        written.append(_to_bam(sam, Path(directory) / f"part{i}.bam"))
+    written = [_rebuild(data, directory, f"part{i}", header, lines[i::parts])
+               for i in range(parts)]
 
     return replace(data, bams=tuple(written))
 
@@ -150,9 +180,9 @@ def mark_secondary(data: Dataset, directory, every: int):
 
         lines.append(line)
 
-    sam = _write_sam(Path(directory) / "secondary.sam", header_text(data.bam), lines)
+    rebuilt = _rebuild(data, directory, "secondary", header_text(data.bam), lines)
 
-    return replace(data, bams=(_to_bam(sam, Path(directory) / "secondary.bam"),)), marked
+    return replace(data, bams=(rebuilt,)), marked
 
 
 # ---------------------------------------------------------------------------
@@ -203,14 +233,22 @@ def replace_header(data: Dataset, directory, transform) -> Dataset:
 
     Only the header changes, so the totals carry over and any difference in
     what cmuts-hmm does follows from the header contents.
+
+    samtools reheader reads a BAM or a CRAM. A SAM is rewritten here instead,
+    which leaves the records untouched in the same way.
     """
-    header = Path(directory) / "header.sam"
-    header.write_text(transform(header_text(data.bam)))
+    header = transform(header_text(data.bam))
 
-    bam = samtools_into(Path(directory) / "reheadered.bam",
-                        "reheader", header, data.bam)
+    if data.fmt == SAM:
+        rewritten = _write_sam(Path(directory) / "reheadered.sam",
+                               header, record_lines(data.bam))
+    else:
+        source = Path(directory) / "header.sam"
+        source.write_text(header)
+        rewritten = samtools_into(Path(directory) / f"reheadered.{data.fmt}",
+                                  "reheader", source, data.bam)
 
-    return replace(data, bams=(bam,))
+    return replace(data, bams=(rewritten,))
 
 
 def _field_of(fields: list, tag: str):

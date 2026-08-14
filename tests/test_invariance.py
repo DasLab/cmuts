@@ -23,12 +23,14 @@ def baseline(tmp_path_factory):
     made = {}
 
     def get(data):
-        if data.name not in made:
-            output = directory / f"{data.name}.h5"
-            run_cmuts(data, output)
-            made[data.name] = output
+        key = (data.name, data.fmt)
 
-        return made[data.name]
+        if key not in made:
+            output = directory / f"{data.name}.{data.fmt}.h5"
+            run_cmuts(data, output)
+            made[key] = output
+
+        return made[key]
 
     return get
 

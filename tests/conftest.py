@@ -16,7 +16,7 @@ import pytest
 # is told to before the module is first imported.
 pytest.register_assert_rewrite("oracle")
 
-from alignments import generate  # noqa: E402
+from alignments import FORMATS, NATIVE, convert_format, generate  # noqa: E402
 from datasets import DATASETS  # noqa: E402
 from programs import PROGRAMS, ROOT, locate  # noqa: E402
 
@@ -36,24 +36,37 @@ def pytest_configure(config):
 
 @pytest.fixture(scope="session")
 def catalogue(tmp_path_factory):
-    """Returns a function that looks a dataset up by name, generating it on
-    first use."""
+    """Returns a function that looks a dataset up by name and format,
+    generating and converting it on first use."""
     directory = tmp_path_factory.mktemp("datasets")
     built = {}
 
-    def get(name):
-        if name not in built:
-            built[name] = generate(directory, name, **DATASETS[name])
-        return built[name]
+    def get(name, fmt):
+        if (name, fmt) not in built:
+            native = built.setdefault(
+                (name, NATIVE), generate(directory, name, **DATASETS[name]))
+            built[(name, fmt)] = convert_format(native, directory, fmt)
+
+        return built[(name, fmt)]
 
     return get
 
 
+@pytest.fixture(params=FORMATS)
+def fmt(request):
+    """One format htslib reads. A contract holds whatever format the alignments
+    arrive in, so every test over the catalogue is run against each.
+
+    A test overrides this fixture when it requires specific formats.
+    """
+    return request.param
+
+
 @pytest.fixture(params=sorted(DATASETS))
-def data(request, catalogue):
-    """One dataset of the catalogue. A test taking this fixture runs over every
-    dataset in turn."""
-    return catalogue(request.param)
+def data(request, catalogue, fmt):
+    """One dataset of the catalogue, in one format. A test taking this fixture
+    runs over every combination of the two."""
+    return catalogue(request.param, fmt)
 
 
 # Whether each test had anything to assert over, keyed by test and not by

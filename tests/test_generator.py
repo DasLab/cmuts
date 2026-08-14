@@ -3,7 +3,9 @@ not as a failing filter."""
 
 import hashlib
 
-from alignments import generate
+import pytest
+
+from alignments import NATIVE, generate
 from oracle import (
     MAPPED_FLAG,
     header_lines,
@@ -16,6 +18,13 @@ from oracle import (
     sequences,
 )
 from programs import samtools
+
+
+@pytest.fixture(params=[NATIVE])
+def fmt(request):
+    """cmuts-gen writes one format, so its output is read in the format it
+    wrote. A conversion here would test samtools."""
+    return request.param
 
 
 def _sq_fields(data) -> list:
