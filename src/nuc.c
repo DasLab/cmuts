@@ -21,16 +21,3 @@ const nuc NUC_FROM_READ[16] = {
     [4] = NUC_G,
     [8] = NUC_T,
 };
-
-char nuc_to_char(nuc base)
-{
-    static const char LETTER[NUC_COUNT] = {
-        [NUC_N] = 'N',
-        [NUC_A] = 'A',
-        [NUC_C] = 'C',
-        [NUC_G] = 'G',
-        [NUC_T] = 'T',
-    };
-
-    return base < NUC_COUNT ? LETTER[base] : 'N';
-}

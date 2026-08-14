@@ -51,5 +51,3 @@ static inline int nuc_index(nuc base)
 {
     return (int)base - (int)NUC_A;
 }
-
-char nuc_to_char(nuc base);

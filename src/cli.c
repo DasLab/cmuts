@@ -10,6 +10,7 @@
 
 #include "cli.h"
 
+#include <errno.h>
 #include <float.h>
 #include <getopt.h>
 #include <limits.h>
@@ -255,14 +256,20 @@ static int parse_number(const cli_option *opt, const char *text, const char *pro
                         long *out)
 {
     char *end = NULL;
-    long  n   = strtol(text, &end, 10);
+    long  n;
+
+    errno = 0;
+    n     = strtol(text, &end, 10);
 
     if (*text == '\0' || *end != '\0') {
         fprintf(stderr, "%s: --%s: \"%s\" is not a number\n", program, opt->name, text);
         return -1;
     }
 
-    if (n < opt->minimum || n > integer_ceiling(opt)) {
+    /* strtol saturates at LONG_MIN or LONG_MAX on a value too wide for a long, which
+     * an unbounded ceiling would otherwise accept. The saturated value carries the
+     * direction it overflowed in. */
+    if (errno == ERANGE || n < opt->minimum || n > integer_ceiling(opt)) {
         report_out_of_range(opt, text, program, n < opt->minimum);
         return -1;
     }
