@@ -1,6 +1,9 @@
-"""Shared fixtures and vacuity checks.
+"""Shared fixtures and the check for vacuous tests.
 
-Datasets are generated once per session and cached by name. Tests which parametrize over datasets must make use of the falsifiable fixture to ensure at least one dataset would detect an issue in the contract the test checks for. A test vacuous on every dataset fails the run rather than silently passing.
+Datasets are generated once per session and cached by name. A test that runs
+over the catalogue must call the falsifiable fixture to state whether the
+dataset it was given can detect a violation of the contract under test. A test
+that is vacuous on every dataset fails the run.
 """
 
 import shutil
@@ -9,12 +12,13 @@ from collections import defaultdict
 import numpy as np
 import pytest
 
-# support carries assertions of its own, and pytest rewrites them only where it
+# oracle contains assertions of its own, and pytest rewrites them only where it
 # is told to before the module is first imported.
-pytest.register_assert_rewrite("support")
+pytest.register_assert_rewrite("oracle")
 
+from alignments import generate  # noqa: E402
 from datasets import DATASETS  # noqa: E402
-from support import PROGRAMS, ROOT, generate, locate  # noqa: E402
+from programs import PROGRAMS, ROOT, locate  # noqa: E402
 
 
 def pytest_configure(config):
@@ -31,8 +35,9 @@ def pytest_configure(config):
 
 
 @pytest.fixture(scope="session")
-def datasets(tmp_path_factory):
-    """Looks a dataset up by name, building it the first time it is asked for."""
+def catalogue(tmp_path_factory):
+    """Returns a function that looks a dataset up by name, generating it on
+    first use."""
     directory = tmp_path_factory.mktemp("datasets")
     built = {}
 
@@ -42,6 +47,13 @@ def datasets(tmp_path_factory):
         return built[name]
 
     return get
+
+
+@pytest.fixture(params=sorted(DATASETS))
+def data(request, catalogue):
+    """One dataset of the catalogue. A test taking this fixture runs over every
+    dataset in turn."""
+    return catalogue(request.param)
 
 
 # Whether each test had anything to assert over, keyed by test and not by
@@ -54,14 +66,11 @@ def _named(node) -> str:
     return node.originalname or node.name
 
 
-def _dataset_under_test(node):
-    """Returns the dataset a test was called with, or None where it ran over
-    none. A test runs over a dataset when its name parameter is one in the
-    catalogue."""
+def _runs_over_a_dataset(node) -> bool:
+    """Returns whether the test was called with a dataset of the catalogue."""
     callspec = getattr(node, "callspec", None)
-    name = callspec.params.get("name") if callspec else None
 
-    return name if name in DATASETS else None
+    return bool(callspec) and callspec.params.get("data") in DATASETS
 
 
 @pytest.fixture(autouse=True)
@@ -72,7 +81,7 @@ def _declaration(request):
     falsifiable fails the run in the same way as one that declares False on
     every dataset.
     """
-    if _dataset_under_test(request.node) is None:
+    if not _runs_over_a_dataset(request.node):
         yield
         return
 
@@ -90,8 +99,8 @@ def falsifiable(request):
     """Records whether the test has anything to assert over on this dataset.
 
     Takes the place of asserting that the case appears in the data. In
-    `falsifiable(len(missing) > 0)` the cases are the references no read
-    reached; where a dataset holds none, the test is vacuous on it.
+    `falsifiable(len(missing) > 0)` the cases are the references that no read
+    aligned to; a dataset holding none leaves the test vacuous.
     """
     name = _named(request.node)
 
@@ -104,7 +113,7 @@ def falsifiable(request):
     return record
 
 
-def _vacuous_everywhere():
+def _vacuous_everywhere() -> list:
     """Returns the tests that were vacuous on every dataset."""
     return sorted(
         name for name, declared in _DECLARED.items()
@@ -122,6 +131,6 @@ def pytest_terminal_summary(terminalreporter):
 
 
 def pytest_sessionfinish(session, exitstatus):
-    # Failures take precedence over vacuity
+    # A failure is reported ahead of any vacuity.
     if exitstatus == 0 and _vacuous_everywhere():
         session.exitstatus = 1

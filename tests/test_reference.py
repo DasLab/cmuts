@@ -3,28 +3,30 @@
 A name and a length describe a reference without identifying it: another
 sequence of the same name and length passes every check that looks only at
 shape, and its reads are then scored against the wrong bases. An @SQ M5
-checksum is taken over the bases themselves, for the references whose aligner
-wrote one.
+checksum is computed over the bases themselves.
 """
 
 from dataclasses import replace
 
-import pytest
-
-from datasets import DATASETS
-from support import (
-    outputs_agree, rename_references, replace_bases, replace_checksums, run_cmuts,
-    sequences, try_cmuts, write_fasta,
+from alignments import (
+    rename_references,
+    replace_bases,
+    replace_checksums,
+    write_fasta,
 )
+from oracle import sequences
+from outputs import outputs_agree
+from programs import run_cmuts, try_cmuts
 
 
 def has_references(data) -> bool:
-    """Whether the FASTA holds a reference to take a checksum over."""
+    """Returns whether the FASTA holds a reference to take a checksum over."""
     return len(sequences(data.fasta)) > 0
 
 
-def sample_references(data):
-    """The first reference the FASTA holds, the last, and one between."""
+def sample_references(data) -> list:
+    """Returns the first reference of the FASTA, the last, and one in
+    between."""
     names = sorted(sequences(data.fasta))
 
     return [names[0], names[len(names) // 2], names[-1]] if names else []
@@ -35,14 +37,10 @@ def sample_references(data):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_matching_checksum_changes_nothing_counted(datasets, falsifiable, tmp_path,
-                                                     name):
+def test_a_matching_checksum_changes_nothing_counted(data, falsifiable, tmp_path):
     """cmuts-gen writes a matching checksum into every header, so every run in
-    the suite already asserts that one is accepted. What is left to state is
-    that checking it decides nothing about the result."""
-    data = datasets(name)
-
+    the suite already asserts that a matching one is accepted. This test
+    asserts that checking it leaves the result unchanged."""
     falsifiable(has_references(data))
 
     checked = run_cmuts(data, tmp_path / "checked.h5")
@@ -52,10 +50,7 @@ def test_a_matching_checksum_changes_nothing_counted(datasets, falsifiable, tmp_
     assert outputs_agree(tmp_path / "checked.h5", tmp_path / "unchecked.h5")
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_substituted_reference_is_refused(datasets, falsifiable, tmp_path, name):
-    data = datasets(name)
-
+def test_a_substituted_reference_is_refused(data, falsifiable, tmp_path):
     falsifiable(has_references(data))
 
     attempt = try_cmuts(replace_bases(data, tmp_path), tmp_path / "out.h5")
@@ -64,12 +59,9 @@ def test_a_substituted_reference_is_refused(datasets, falsifiable, tmp_path, nam
     assert "not the sequence the alignments were made against" in attempt.stderr
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_reference_without_a_checksum_is_not_checked(datasets, falsifiable, tmp_path,
-                                                       name):
+def test_a_reference_without_a_checksum_is_not_checked(data, falsifiable, tmp_path):
     """Runs to the end against bases the alignments were not made from, and
-    scores them: the result a checksum exists to refuse."""
-    data = datasets(name)
+    scores them: the result a checksum exists to prevent."""
     wrong, right = tmp_path / "wrong.h5", tmp_path / "right.h5"
     stripped = replace_checksums(data, tmp_path, lambda reference, m5: None)
 
@@ -77,8 +69,8 @@ def test_a_reference_without_a_checksum_is_not_checked(datasets, falsifiable, tm
 
     kept = run_cmuts(data, right).kept
 
-    # Where every read was rejected the two runs count nothing either way, so
-    # the bases they counted it over cannot be told apart.
+    # Where every read was rejected, the two runs count nothing either way, so
+    # the bases they would have counted over cannot be told apart.
     falsifiable(kept > 0)
 
     if kept:
@@ -86,10 +78,8 @@ def test_a_reference_without_a_checksum_is_not_checked(datasets, falsifiable, tm
             "the substituted bases are not the ones that were scored"
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_the_checksum_checked_is_the_one_for_that_reference(datasets, falsifiable,
-                                                            tmp_path, name):
-    data = datasets(name)
+def test_the_checksum_checked_is_the_one_for_that_reference(data, falsifiable,
+                                                            tmp_path):
     reached = sample_references(data)
 
     falsifiable(len(reached) > 0)
@@ -102,10 +92,7 @@ def test_the_checksum_checked_is_the_one_for_that_reference(datasets, falsifiabl
         assert f'"{reference}"' in attempt.stderr
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_checksum_on_a_single_reference_is_still_checked(datasets, falsifiable,
-                                                           tmp_path, name):
-    data = datasets(name)
+def test_a_checksum_on_a_single_reference_is_still_checked(data, falsifiable, tmp_path):
     last = sample_references(data)[-1:]
 
     falsifiable(len(last) > 0)
@@ -125,13 +112,9 @@ def test_a_checksum_on_a_single_reference_is_still_checked(datasets, falsifiable
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_names_go_unchecked_where_they_are_left_out(datasets, falsifiable, tmp_path,
-                                                    name):
-    """A FASTA renamed after the alignments were made is the reason to leave the
-    name out, so the counts must come to what the original names give."""
-    data = datasets(name)
-
+def test_names_go_unchecked_where_they_are_left_out(data, falsifiable, tmp_path):
+    """A FASTA renamed after the alignments were made is the reason to leave
+    the name out, so the counts must come to what the original names give."""
     falsifiable(has_references(data))
 
     against_names = rename_references(data, tmp_path)
@@ -145,11 +128,7 @@ def test_names_go_unchecked_where_they_are_left_out(datasets, falsifiable, tmp_p
     assert outputs_agree(tmp_path / "renamed.h5", tmp_path / "plain.h5")
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_checksum_goes_unchecked_where_it_is_left_out(datasets, falsifiable,
-                                                        tmp_path, name):
-    data = datasets(name)
-
+def test_a_checksum_goes_unchecked_where_it_is_left_out(data, falsifiable, tmp_path):
     falsifiable(has_references(data))
 
     wrong = replace_bases(data, tmp_path)
@@ -157,12 +136,9 @@ def test_a_checksum_goes_unchecked_where_it_is_left_out(datasets, falsifiable,
     assert try_cmuts(wrong, tmp_path / "out.h5", verify="name,length").returncode == 0
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_verifying_none_takes_the_fasta_on_trust(datasets, falsifiable, tmp_path, name):
+def test_verifying_none_takes_the_fasta_on_trust(data, falsifiable, tmp_path):
     """The FASTA disagrees on every count a check could make: cmuts-gen wrote
     the checksums over the bases it held before either was changed."""
-    data = datasets(name)
-
     falsifiable(has_references(data))
 
     wrong = replace_bases(rename_references(data, tmp_path), tmp_path)
@@ -171,15 +147,12 @@ def test_verifying_none_takes_the_fasta_on_trust(datasets, falsifiable, tmp_path
 
 
 # ---------------------------------------------------------------------------
-# Reading the field it is written in
+# Reading the field the checksum is written in
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_checksum_is_read_whatever_its_case(datasets, falsifiable, tmp_path, name):
+def test_a_checksum_is_read_whatever_its_case(data, falsifiable, tmp_path):
     """The SAM spec fixes M5 as hexadecimal without fixing its case."""
-    data = datasets(name)
-
     falsifiable(has_references(data))
 
     shouting = replace_checksums(data, tmp_path, lambda reference, m5: m5.upper())
@@ -187,12 +160,9 @@ def test_a_checksum_is_read_whatever_its_case(datasets, falsifiable, tmp_path, n
     assert try_cmuts(shouting, tmp_path / "out.h5").returncode == 0
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_soft_masked_reference_hashes_as_an_upper_case_one(datasets, falsifiable,
-                                                             tmp_path, name):
+def test_a_soft_masked_reference_hashes_as_an_upper_case_one(data, falsifiable,
+                                                             tmp_path):
     """The SAM spec defines M5 over the sequence uppercased."""
-    data = datasets(name)
-
     falsifiable(has_references(data))
 
     masked = replace(data, fasta=write_fasta(
@@ -202,11 +172,7 @@ def test_a_soft_masked_reference_hashes_as_an_upper_case_one(datasets, falsifiab
     assert try_cmuts(masked, tmp_path / "out.h5").returncode == 0
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_checksum_is_read_only_to_the_end_of_its_field(datasets, falsifiable,
-                                                         tmp_path, name):
-    data = datasets(name)
-
+def test_a_checksum_is_read_only_to_the_end_of_its_field(data, falsifiable, tmp_path):
     falsifiable(has_references(data))
 
     trailing = replace_checksums(data, tmp_path,
@@ -215,10 +181,7 @@ def test_a_checksum_is_read_only_to_the_end_of_its_field(datasets, falsifiable,
     assert try_cmuts(trailing, tmp_path / "out.h5").returncode == 0
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_checksum_that_is_not_an_md5_is_refused(datasets, falsifiable, tmp_path, name):
-    data = datasets(name)
-
+def test_a_checksum_that_is_not_an_md5_is_refused(data, falsifiable, tmp_path):
     falsifiable(has_references(data))
 
     truncated = replace_checksums(data, tmp_path, lambda reference, m5: m5[:8])

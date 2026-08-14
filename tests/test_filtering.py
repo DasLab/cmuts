@@ -2,24 +2,20 @@
 
 import pytest
 
-from datasets import DATASETS
+from alignments import mark_secondary
 from filters import FILTERS, UNFILTERED, criteria, describe_filters
-from support import (
-    MAPQ_COLUMN,
+from oracle import (
+    NOT_COUNTED_FLAGS,
     UNAVAILABLE_MAPQ,
     assert_counts_agree,
     records,
-    run_cmuts,
     samtools_kept,
-    mark_secondary,
 )
+from programs import run_cmuts
 
 
 @pytest.mark.parametrize("filters", FILTERS, ids=describe_filters)
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_read_counts_match_samtools(datasets, falsifiable, tmp_path, name, filters):
-    data = datasets(name)
-
+def test_read_counts_match_samtools(data, falsifiable, tmp_path, filters):
     falsifiable(data.mapped > 0)
 
     summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))
@@ -27,28 +23,22 @@ def test_read_counts_match_samtools(datasets, falsifiable, tmp_path, name, filte
     assert_counts_agree(summary, data, criteria(filters))
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_an_unavailable_mapping_quality_is_refused(datasets, falsifiable, tmp_path, name):
-    """Counted from the records here rather than taken from samtools_kept,
-    which is told of the same divergence and would agree with a filter that
-    never applied it."""
-    data = datasets(name)
-    mapped = records(data.bam, "-F", "0x104")
-    unavailable = [line for line in mapped
-                   if int(line.split("\t")[MAPQ_COLUMN]) == UNAVAILABLE_MAPQ]
+def test_an_unavailable_mapping_quality_is_refused(data, falsifiable, tmp_path):
+    """Counts the affected reads from the records directly. samtools_kept
+    applies the same divergence, so it would agree with a filter that never
+    applied it."""
+    counted = records(data.bam, *NOT_COUNTED_FLAGS)
+    unavailable = [record for record in counted if record.mapq == UNAVAILABLE_MAPQ]
 
     falsifiable(len(unavailable) > 0)
 
     summary = run_cmuts(data, tmp_path / "out.h5", **UNFILTERED)
 
-    assert summary.kept == len(mapped) - len(unavailable), \
+    assert summary.kept == len(counted) - len(unavailable), \
         "a read of unavailable mapping quality survived a threshold of zero"
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_rejecting_everything_leaves_a_valid_file(datasets, falsifiable, tmp_path, name):
-    data = datasets(name)
-
+def test_rejecting_everything_leaves_a_valid_file(data, falsifiable, tmp_path):
     falsifiable(data.mapped > 0)
 
     summary = run_cmuts(data, tmp_path / "out.h5", min_length=9000)
@@ -63,19 +53,18 @@ def test_rejecting_everything_leaves_a_valid_file(datasets, falsifiable, tmp_pat
 EVERY_THIRD = 3
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_secondary_alignments_are_refused(datasets, falsifiable, tmp_path, name):
-    data, marked = mark_secondary(datasets(name), tmp_path, every=EVERY_THIRD)
+def test_secondary_alignments_are_refused(data, falsifiable, tmp_path):
+    marked_data, marked = mark_secondary(data, tmp_path, every=EVERY_THIRD)
 
     falsifiable(marked > 0)
 
-    summary = run_cmuts(data, tmp_path / "out.h5", **UNFILTERED)
+    summary = run_cmuts(marked_data, tmp_path / "out.h5", **UNFILTERED)
 
-    assert summary.kept == samtools_kept(data, **UNFILTERED), "agreement with samtools"
+    assert summary.kept == samtools_kept(marked_data, **UNFILTERED), \
+        "agreement with samtools"
 
-    # They are refused rather than overlooked, so they show up as rejected.
-    # Others may be refused alongside them, which is why the count is a bound
-    # and not the total: a read of unavailable mapping quality is refused for
-    # a reason of its own.
+    # A marked read is rejected and not skipped, so it reaches the rejected
+    # total. Other reads may be rejected alongside it, so the count of marked
+    # reads is a lower bound and not the total.
     assert summary.rejected >= marked, "a marked read was not refused"
-    assert summary.kept + summary.rejected == data.mapped, "reads accounted for"
+    assert summary.kept + summary.rejected == marked_data.mapped, "reads accounted for"

@@ -1,37 +1,39 @@
-"""Results depend on the input, not on how the work was divided."""
+"""The result depends on the input and not on how the work was divided.
+
+Each test compares two runs for equality, so a dataset that produces no rate at
+all is still a valid case. A run that kept no reads is not, both runs then
+writing empty arrays, so each test declares on what its own run kept.
+"""
 
 import pytest
 
-from datasets import DATASETS
-from support import outputs_agree, run_cmuts
+from outputs import outputs_agree
+from programs import run_cmuts
 
-# Nothing here reads a value, only whether two runs wrote the same ones, so a
-# dataset holding no rate at all still shows whether the division of work
-# changed what was counted. A dataset from which nothing was counted shows
-# neither, so each test declares on what its own run kept.
+# The divisions of work a run is tried under.
+DECODE_THREADS = [0, 1, 8]
+BATCH_SIZES = [1, 7, 4096]
 
 
 @pytest.fixture(scope="module")
-def unvaried(datasets, tmp_path_factory):
-    """The result each variation is compared against, run once per dataset."""
-    directory = tmp_path_factory.mktemp("unvaried")
+def baseline(tmp_path_factory):
+    """Returns a function giving the result each variation is compared against,
+    run once per dataset."""
+    directory = tmp_path_factory.mktemp("baseline")
     made = {}
 
-    def get(name):
-        if name not in made:
-            output = directory / f"{name}.h5"
-            run_cmuts(datasets(name), output, workers=4)
-            made[name] = output
+    def get(data):
+        if data.name not in made:
+            output = directory / f"{data.name}.h5"
+            run_cmuts(data, output)
+            made[data.name] = output
 
-        return made[name]
+        return made[data.name]
 
     return get
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_worker_count_does_not_change_the_result(datasets, falsifiable, tmp_path, name):
-    data = datasets(name)
-
+def test_worker_count_does_not_change_the_result(data, falsifiable, tmp_path):
     one = run_cmuts(data, tmp_path / "one.h5", workers=1, min_mapq=10)
     run_cmuts(data, tmp_path / "many.h5", workers=16, min_mapq=10)
 
@@ -40,46 +42,39 @@ def test_worker_count_does_not_change_the_result(datasets, falsifiable, tmp_path
     assert outputs_agree(tmp_path / "one.h5", tmp_path / "many.h5")
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-@pytest.mark.parametrize("threads", [0, 1, 8])
-def test_decode_threads_do_not_change_the_result(datasets, falsifiable, unvaried,
-                                                 tmp_path, name, threads):
-    varied = run_cmuts(datasets(name), tmp_path / "threaded.h5",
-                       workers=4, decode_threads=threads)
+@pytest.mark.parametrize("threads", DECODE_THREADS)
+def test_decode_threads_do_not_change_the_result(data, falsifiable, baseline, tmp_path,
+                                                 threads):
+    varied = run_cmuts(data, tmp_path / "threaded.h5", decode_threads=threads)
 
     falsifiable(varied.kept > 0)
 
-    assert outputs_agree(unvaried(name), tmp_path / "threaded.h5")
+    assert outputs_agree(baseline(data), tmp_path / "threaded.h5")
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-@pytest.mark.parametrize("batch", [1, 7, 4096])
-def test_batch_size_does_not_change_the_result(datasets, falsifiable, unvaried,
-                                               tmp_path, name, batch):
-    varied = run_cmuts(datasets(name), tmp_path / "sized.h5", workers=4, batch=batch)
-
-    falsifiable(varied.kept > 0)
-
-    assert outputs_agree(unvaried(name), tmp_path / "sized.h5")
-
-
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_queue_of_one_does_not_change_the_result(datasets, falsifiable, unvaried,
-                                                   tmp_path, name):
-    varied = run_cmuts(datasets(name), tmp_path / "starved.h5",
-                       workers=4, queue_capacity=1, batch=1)
+@pytest.mark.parametrize("batch", BATCH_SIZES)
+def test_batch_size_does_not_change_the_result(data, falsifiable, baseline, tmp_path,
+                                               batch):
+    varied = run_cmuts(data, tmp_path / "sized.h5", batch=batch)
 
     falsifiable(varied.kept > 0)
 
-    assert outputs_agree(unvaried(name), tmp_path / "starved.h5")
+    assert outputs_agree(baseline(data), tmp_path / "sized.h5")
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_one_reference_in_flight_does_not_change_the_result(datasets, falsifiable,
-                                                            unvaried, tmp_path, name):
-    varied = run_cmuts(datasets(name), tmp_path / "single-file.h5",
-                       workers=4, live_refs=1)
+def test_a_queue_of_one_does_not_change_the_result(data, falsifiable, baseline,
+                                                   tmp_path):
+    varied = run_cmuts(data, tmp_path / "starved.h5", queue_capacity=1, batch=1)
 
     falsifiable(varied.kept > 0)
 
-    assert outputs_agree(unvaried(name), tmp_path / "single-file.h5")
+    assert outputs_agree(baseline(data), tmp_path / "starved.h5")
+
+
+def test_one_reference_in_flight_does_not_change_the_result(data, falsifiable, baseline,
+                                                            tmp_path):
+    varied = run_cmuts(data, tmp_path / "single-file.h5", live_refs=1)
+
+    falsifiable(varied.kept > 0)
+
+    assert outputs_agree(baseline(data), tmp_path / "single-file.h5")

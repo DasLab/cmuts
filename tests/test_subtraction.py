@@ -1,55 +1,61 @@
 """Taking an untreated background off a treated run.
 
 The result depends on the values in the input files and on nothing else, so the
-inputs are written by hand rather than counted from an alignment. outputs.py
+inputs are written by hand and not counted from an alignment. outputs.py
 describes the layout the two programs share.
 """
 
 from __future__ import annotations
 
 import itertools
-import subprocess
 
 import numpy as np
 import pytest
 
 from outputs import (
+    ALL_FIELDS,
     BY_NAME,
+    COUNTED,
+    COVERAGE,
+    ERROR,
     FIELDS,
-    FLOATING,
-    RUN_TOTAL,
-    combined,
+    FLOAT_FIELDS,
+    REACTIVITY,
+    UNMAPPED,
+    delete_field,
     field_of,
     layout_of,
-    rewidened,
+    set_field_width,
     shape,
-    without,
     write_output,
 )
-from datasets import DATASETS
-from support import CMUTS_SUB, run_cmuts, run_subtract, try_subtract
+from programs import CMUTS_SUB, attempt, run_cmuts, run_subtract, try_subtract
+from subtraction import expected
 
 # Small enough to write out by hand and to read in a failure, and ragged enough
 # that a row, a histogram and a scalar are all of different widths.
 N_REFS = 4
 CAP = 6
 
-# Every dataset the arithmetic applies to, run totals included.
-COMBINED = [field.name for field in FIELDS] + [RUN_TOTAL]
+# A count past what a float32 holds exactly, so a value that comes back whole
+# was not narrowed to the type the rates use.
+LARGE_COUNT = np.uint64(2) ** 40 + 1
+
+NOTES = "months of irreplaceable notes\n"
 
 
 @pytest.fixture(params=["plain", "chunked"])
 def storage(request):
-    """The two ways an input may be stored. cmuts-hmm writes chunked, shuffled and
-    deflated, and the result must be the same either way, so every test that
-    reads values runs against both."""
+    """The two ways an input may be stored. cmuts-hmm writes chunked, shuffled
+    and deflated, and the result must be the same either way, so every test
+    that reads values runs against both."""
     return request.param
 
 
 @pytest.fixture
 def build(tmp_path, storage):
-    """Writes an input, returning its path. Each is named separately, so one
-    test may build several."""
+    """Returns a function that writes an input file. Each file is named
+    separately, so one test may build several."""
     written = itertools.count()
 
     def make(values=None, *, n_refs=N_REFS, cap=CAP, unmapped=0):
@@ -64,16 +70,16 @@ def build(tmp_path, storage):
 
 @pytest.fixture
 def subtract(tmp_path):
-    """Runs the subtraction into a path of its own."""
+    """Returns a function that runs the subtraction into a path of its own."""
     def run(treated, untreated, **options):
         return run_subtract(treated, untreated, tmp_path / "difference.h5", **options)
 
     return run
 
 
-def spread(field, n_refs=N_REFS, cap=CAP, seed=0):
-    """Values filling one field, differing from column to column and from row
-    to row, so that a rule applied along the wrong axis does not agree by
+def random_values(field, n_refs=N_REFS, cap=CAP, seed=0):
+    """Builds values for one field that differ from column to column and from
+    row to row, so that a rule applied along the wrong axis does not agree by
     accident."""
     rng = np.random.default_rng(seed)
     wanted = shape(BY_NAME[field], n_refs, cap)
@@ -84,11 +90,26 @@ def spread(field, n_refs=N_REFS, cap=CAP, seed=0):
     return rng.random(size=wanted).astype(np.float32)
 
 
-def everything(seed, n_refs=N_REFS, cap=CAP):
-    """A value for every field at once, so that a test of one field runs on a
-    file whose other fields are not zero."""
-    return {field.name: spread(field.name, n_refs, cap, seed=seed + i)
+def random_fields(seed, n_refs=N_REFS, cap=CAP) -> dict:
+    """Builds values for every field at once, so that a test of one field runs
+    on a file whose other fields are not zero."""
+    return {field.name: random_values(field.name, n_refs, cap, seed=seed + i)
             for i, field in enumerate(FIELDS)}
+
+
+def missing_in_each_input(rows: int, columns: int):
+    """Builds a pair of arrays that are NaN in the treated input only, in the
+    untreated input only, and in both."""
+    known = np.float32(0.5)
+
+    left = np.full((rows, columns), known, dtype=np.float32)
+    right = np.full((rows, columns), known, dtype=np.float32)
+
+    left[1, :] = np.nan
+    right[2, :] = np.nan
+    left[3, :] = right[3, :] = np.nan
+
+    return left, right
 
 
 # ---------------------------------------------------------------------------
@@ -96,22 +117,20 @@ def everything(seed, n_refs=N_REFS, cap=CAP):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_the_layout_written_here_is_the_one_cmuts_hmm_writes(datasets, falsifiable,
-                                                             tmp_path, name):
+def test_the_layout_written_here_is_the_one_cmuts_hmm_writes(data, falsifiable,
+                                                             tmp_path):
     """Checks the description in outputs.py against a real cmuts-hmm run.
 
-    Compares names, types and widths and never a value, which keeps the
-    reactivity calculation out of the comparison.
+    Compares names, types and widths, which keeps the reactivity calculation
+    out of the comparison.
     """
-    data = datasets(name)
     counted = tmp_path / "counted.h5"
     run_cmuts(data, counted)
     real = layout_of(counted)
 
-    assert set(real) == {field.name for field in FIELDS} | {RUN_TOTAL}
+    assert set(real) == set(ALL_FIELDS)
 
-    n_refs, cap = real["coverage"][0]
+    n_refs, cap = real[COVERAGE][0]
 
     # The widths compared below come from the rows, one per reference.
     falsifiable(n_refs > 0)
@@ -122,7 +141,7 @@ def test_the_layout_written_here_is_the_one_cmuts_hmm_writes(datasets, falsifiab
         assert found == shape(field, n_refs, cap), field.name
         assert dtype == np.dtype(field.dtype), field.name
 
-    assert real[RUN_TOTAL][0] == (), "a run total belongs to no reference"
+    assert real[UNMAPPED][0] == (), "a run total belongs to no reference"
 
 
 # ---------------------------------------------------------------------------
@@ -130,97 +149,87 @@ def test_the_layout_written_here_is_the_one_cmuts_hmm_writes(datasets, falsifiab
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", COMBINED)
+@pytest.mark.parametrize("name", ALL_FIELDS)
 def test_each_field_follows_its_rule(build, subtract, name):
-    treated = build(everything(seed=1), unmapped=17)
-    untreated = build(everything(seed=50), unmapped=3)
+    treated = build(random_fields(seed=1), unmapped=17)
+    untreated = build(random_fields(seed=50), unmapped=3)
 
     output = subtract(treated, untreated)
 
     assert np.array_equal(
-        field_of(output, name), combined(name, treated, untreated),
+        field_of(output, name), expected(name, treated, untreated),
     ), name
 
 
 def test_a_background_above_the_signal_leaves_a_negative_reactivity(build, subtract):
-    treated = build({"reactivity": 0.25})
-    untreated = build({"reactivity": 0.75})
+    treated = build({REACTIVITY: 0.25})
+    untreated = build({REACTIVITY: 0.75})
 
-    difference = field_of(subtract(treated, untreated), "reactivity")
+    difference = field_of(subtract(treated, untreated), REACTIVITY)
 
     assert np.all(difference == np.float32(-0.5))
 
 
 def test_clipping_holds_the_difference_at_zero(build, subtract):
-    treated = build({"reactivity": 0.25})
-    untreated = build({"reactivity": 0.75})
+    treated = build({REACTIVITY: 0.25})
+    untreated = build({REACTIVITY: 0.75})
 
-    assert np.all(field_of(subtract(treated, untreated, clip=True), "reactivity") == 0)
+    output = subtract(treated, untreated, clip=True)
+
+    assert np.all(field_of(output, REACTIVITY) == 0)
 
 
 def test_clipping_leaves_a_difference_above_zero_alone(build, tmp_path):
-    treated, untreated = build(everything(seed=13)), build(everything(seed=14))
+    treated, untreated = build(random_fields(seed=13)), build(random_fields(seed=14))
 
     plain = run_subtract(treated, untreated, tmp_path / "plain.h5")
     clipped = run_subtract(treated, untreated, tmp_path / "clipped.h5", clip=True)
 
-    unclipped = field_of(plain, "reactivity")
+    unclipped = field_of(plain, REACTIVITY)
 
     assert (unclipped < 0).any(), "nothing was negative, so nothing was tested"
-    assert np.array_equal(field_of(clipped, "reactivity"), np.maximum(unclipped, 0))
+    assert np.array_equal(field_of(clipped, REACTIVITY), np.maximum(unclipped, 0))
 
 
 def test_clipping_does_not_raise_a_missing_value_to_zero(build, subtract):
-    known, missing = np.float32(0.25), np.float32(np.nan)
+    left, right = missing_in_each_input(N_REFS, CAP)
 
-    left = np.full((N_REFS, CAP), known, dtype=np.float32)
-    right = np.full((N_REFS, CAP), known, dtype=np.float32)
-
-    left[1, :] = missing
-    right[2, :] = missing
-    left[3, :] = right[3, :] = missing
-
-    output = subtract(build({"reactivity": left}), build({"reactivity": right}),
-                      clip=True)
-    result = field_of(output, "reactivity")
+    output = subtract(build({REACTIVITY: left}), build({REACTIVITY: right}), clip=True)
+    result = field_of(output, REACTIVITY)
 
     assert np.array_equal(np.isnan(result), np.isnan(left) | np.isnan(right))
 
 
 def test_clipping_reaches_no_field_but_the_reactivity(build, tmp_path):
-    treated = build(everything(seed=15), unmapped=11)
-    untreated = build(everything(seed=16), unmapped=4)
+    treated = build(random_fields(seed=15), unmapped=11)
+    untreated = build(random_fields(seed=16), unmapped=4)
 
     plain = run_subtract(treated, untreated, tmp_path / "plain.h5")
     clipped = run_subtract(treated, untreated, tmp_path / "clipped.h5", clip=True)
 
-    for name in set(COMBINED) - {"reactivity"}:
+    for name in set(ALL_FIELDS) - {REACTIVITY}:
         assert np.array_equal(field_of(clipped, name), field_of(plain, name)), name
 
 
 def test_an_error_is_never_reduced_by_subtracting(build, subtract):
-    treated = build({"error": spread("error", seed=7)})
-    untreated = build({"error": spread("error", seed=8)})
+    treated = build({ERROR: random_values(ERROR, seed=7)})
+    untreated = build({ERROR: random_values(ERROR, seed=8)})
 
     output = subtract(treated, untreated)
 
-    assert np.all(field_of(output, "error") >= field_of(treated, "error"))
-    assert np.all(field_of(output, "error") >= field_of(untreated, "error"))
+    assert np.all(field_of(output, ERROR) >= field_of(treated, ERROR))
+    assert np.all(field_of(output, ERROR) >= field_of(untreated, ERROR))
 
 
 def test_counts_stay_whole_and_exact(build, subtract):
-    """A count of 2**40 is past what a float32 holds exactly, so coming back
-    whole confirms it was not narrowed to the type the rates use."""
-    large = np.uint64(2) ** 40 + 1
-
-    treated = build({"reads/counted": large}, unmapped=large)
-    untreated = build({"reads/counted": 1}, unmapped=1)
+    treated = build({COUNTED: LARGE_COUNT}, unmapped=LARGE_COUNT)
+    untreated = build({COUNTED: 1}, unmapped=1)
 
     output = subtract(treated, untreated)
 
-    assert np.all(field_of(output, "reads/counted") == large + 1)
-    assert field_of(output, RUN_TOTAL) == large + 1
-    assert field_of(output, "reads/counted").dtype == np.dtype("u8")
+    assert np.all(field_of(output, COUNTED) == LARGE_COUNT + 1)
+    assert field_of(output, UNMAPPED) == LARGE_COUNT + 1
+    assert field_of(output, COUNTED).dtype == np.dtype("u8")
 
 
 # ---------------------------------------------------------------------------
@@ -228,139 +237,136 @@ def test_counts_stay_whole_and_exact(build, subtract):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", COMBINED)
+@pytest.mark.parametrize("name", ALL_FIELDS)
 def test_each_field_follows_its_rule_against_a_control(build, subtract, name):
     """The error is compared to a tolerance because it rounds eight times over
     a division and a root; every other rule rounds once and is exact."""
-    treated = build(everything(seed=31), unmapped=17)
-    untreated = build(everything(seed=32), unmapped=3)
-    denatured = build(everything(seed=33), unmapped=5)
+    treated = build(random_fields(seed=31), unmapped=17)
+    untreated = build(random_fields(seed=32), unmapped=3)
+    denatured = build(random_fields(seed=33), unmapped=5)
 
     output = subtract(treated, untreated, denatured=denatured)
 
     result = field_of(output, name)
-    wanted = combined(name, treated, untreated, denatured)
+    wanted = expected(name, treated, untreated, denatured)
 
-    if name == "error":
+    if name == ERROR:
         assert np.allclose(result, wanted, rtol=1e-6, equal_nan=True), name
     else:
         assert np.array_equal(result, wanted), name
 
 
 def test_a_control_divides_the_difference(build, subtract):
-    treated = build({"reactivity": 0.75})
-    untreated = build({"reactivity": 0.25})
-    denatured = build({"reactivity": 0.5})
+    treated = build({REACTIVITY: 0.75})
+    untreated = build({REACTIVITY: 0.25})
+    denatured = build({REACTIVITY: 0.5})
 
     output = subtract(treated, untreated, denatured=denatured)
 
-    assert np.all(field_of(output, "reactivity") == np.float32(1.0))
+    assert np.all(field_of(output, REACTIVITY) == np.float32(1.0))
 
 
-def test_a_control_that_measured_nothing_leaves_no_reactivity(build, subtract):
-    treated = build({"reactivity": 0.75})
-    untreated = build({"reactivity": 0.25})
-    denatured = build({"reactivity": 0.0})
+def test_a_control_of_zero_leaves_no_reactivity(build, subtract):
+    treated = build({REACTIVITY: 0.75})
+    untreated = build({REACTIVITY: 0.25})
+    denatured = build({REACTIVITY: 0.0})
 
     output = subtract(treated, untreated, denatured=denatured)
 
-    assert np.isnan(field_of(output, "reactivity")).all()
-    assert np.isnan(field_of(output, "error")).all()
+    assert np.isnan(field_of(output, REACTIVITY)).all()
+    assert np.isnan(field_of(output, ERROR)).all()
 
 
 def test_a_control_of_nan_leaves_no_reactivity(build, subtract):
-    known, missing = np.float32(0.5), np.float32(np.nan)
+    control = np.full((N_REFS, CAP), np.float32(0.5), dtype=np.float32)
+    control[2, :] = np.nan
 
-    control = np.full((N_REFS, CAP), known, dtype=np.float32)
-    control[2, :] = missing
-
-    output = subtract(build({"reactivity": 0.75}), build({"reactivity": 0.25}),
-                      denatured=build({"reactivity": control}))
-    result = field_of(output, "reactivity")
+    output = subtract(build({REACTIVITY: 0.75}), build({REACTIVITY: 0.25}),
+                      denatured=build({REACTIVITY: control}))
+    result = field_of(output, REACTIVITY)
 
     assert np.isnan(result[2]).all()
     assert not np.isnan(result[0]).any()
 
 
 def test_a_control_of_ones_leaves_the_difference_alone(build, tmp_path):
-    treated, untreated = build(everything(seed=34)), build(everything(seed=35))
-    ones = build({"reactivity": 1.0})
+    treated, untreated = build(random_fields(seed=34)), build(random_fields(seed=35))
+    ones = build({REACTIVITY: 1.0})
 
     plain = run_subtract(treated, untreated, tmp_path / "plain.h5")
     controlled = run_subtract(treated, untreated, tmp_path / "controlled.h5",
                               denatured=ones)
 
-    assert np.array_equal(field_of(controlled, "reactivity"),
-                          field_of(plain, "reactivity"))
+    assert np.array_equal(field_of(controlled, REACTIVITY),
+                          field_of(plain, REACTIVITY))
 
 
-def test_a_control_can_only_widen_the_error(build, subtract, tmp_path):
-    treated, untreated = build(everything(seed=36)), build(everything(seed=37))
-    ones = build({"reactivity": 1.0, "error": spread("error", seed=38)})
+def test_a_control_can_only_widen_the_error(build, tmp_path):
+    treated, untreated = build(random_fields(seed=36)), build(random_fields(seed=37))
+    ones = build({REACTIVITY: 1.0, ERROR: random_values(ERROR, seed=38)})
 
     plain = run_subtract(treated, untreated, tmp_path / "plain.h5")
     controlled = run_subtract(treated, untreated, tmp_path / "controlled.h5",
                               denatured=ones)
 
-    assert np.all(field_of(controlled, "error") >= field_of(plain, "error"))
+    assert np.all(field_of(controlled, ERROR) >= field_of(plain, ERROR))
 
 
 def test_a_control_is_counted_in_the_totals(build, subtract):
-    treated = build({"reads/counted": 3}, unmapped=11)
-    untreated = build({"reads/counted": 5}, unmapped=13)
-    denatured = build({"reads/counted": 7}, unmapped=17)
+    treated = build({COUNTED: 3}, unmapped=11)
+    untreated = build({COUNTED: 5}, unmapped=13)
+    denatured = build({COUNTED: 7}, unmapped=17)
 
     output = subtract(treated, untreated, denatured=denatured)
 
-    assert np.all(field_of(output, "reads/counted") == 15)
-    assert field_of(output, RUN_TOTAL) == 41
+    assert np.all(field_of(output, COUNTED) == 15)
+    assert field_of(output, UNMAPPED) == 41
 
 
 def test_clipping_holds_a_ratio_at_zero(build, subtract):
-    treated = build({"reactivity": 0.25})
-    untreated = build({"reactivity": 0.75})
-    denatured = build({"reactivity": 0.5})
+    treated = build({REACTIVITY: 0.25})
+    untreated = build({REACTIVITY: 0.75})
+    denatured = build({REACTIVITY: 0.5})
 
     output = subtract(treated, untreated, denatured=denatured, clip=True)
 
-    assert np.all(field_of(output, "reactivity") == 0)
+    assert np.all(field_of(output, REACTIVITY) == 0)
 
 
-@pytest.mark.parametrize("wrong", ["references", "wide"])
+# The ways a control can disagree with the inputs, and the word each is
+# reported with.
+DISAGREEING_CONTROLS = {
+    "references": lambda build: build(n_refs=N_REFS + 1),
+    "wide": lambda build: build(cap=CAP + 1),
+}
+
+
+@pytest.mark.parametrize("wrong", sorted(DISAGREEING_CONTROLS))
 def test_a_control_disagreeing_with_the_inputs_is_refused(build, tmp_path, wrong):
-    control = {"references": lambda: build(n_refs=N_REFS + 1),
-               "wide": lambda: build(cap=CAP + 1)}[wrong]()
+    control = DISAGREEING_CONTROLS[wrong](build)
 
-    attempt = try_subtract(build(), build(), tmp_path / "out.h5",
-                           denatured=control)
+    failed = try_subtract(build(), build(), tmp_path / "out.h5", denatured=control)
 
-    assert attempt.returncode != 0
-    assert wrong in attempt.stderr
+    assert failed.returncode != 0
+    assert wrong in failed.stderr
 
 
 def test_a_control_missing_a_dataset_is_refused(build, tmp_path):
-    attempt = try_subtract(build(), build(), tmp_path / "out.h5",
-                           denatured=without(build(), "error"))
+    failed = try_subtract(build(), build(), tmp_path / "out.h5",
+                          denatured=delete_field(build(), ERROR))
 
-    assert attempt.returncode != 0
-    assert "error" in attempt.stderr
+    assert failed.returncode != 0
+    assert ERROR in failed.stderr
 
 
 # ---------------------------------------------------------------------------
-# What was never measured
+# Values that were never measured
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", FLOATING)
+@pytest.mark.parametrize("name", FLOAT_FIELDS)
 def test_a_value_either_input_lacks_is_missing_from_the_output(build, subtract, name):
-    known, missing = np.float32(0.5), np.float32(np.nan)
-
-    left = np.full((N_REFS, CAP), known, dtype=np.float32)
-    right = np.full((N_REFS, CAP), known, dtype=np.float32)
-
-    left[1, :] = missing                    # missing in the treated run only
-    right[2, :] = missing                   # missing in the background only
-    left[3, :] = right[3, :] = missing      # missing in both
+    left, right = missing_in_each_input(N_REFS, CAP)
 
     output = subtract(build({name: left}), build({name: right}))
     result = field_of(output, name)
@@ -376,8 +382,8 @@ def test_the_columns_past_a_reference_stay_nan(build, subtract):
     for row, length in enumerate(lengths):
         rows[row, length:] = np.nan
 
-    output = subtract(build({"coverage": rows}), build({"coverage": rows}))
-    result = field_of(output, "coverage")
+    output = subtract(build({COVERAGE: rows}), build({COVERAGE: rows}))
+    result = field_of(output, COVERAGE)
 
     for row, length in enumerate(lengths):
         assert not np.isnan(result[row, :length]).any(), f"row {row} within"
@@ -390,18 +396,18 @@ def test_the_columns_past_a_reference_stay_nan(build, subtract):
 
 
 def test_the_output_is_shaped_and_typed_like_its_inputs(build, subtract):
-    treated, untreated = build(everything(seed=2)), build(everything(seed=9))
+    treated, untreated = build(random_fields(seed=2)), build(random_fields(seed=9))
 
     assert layout_of(subtract(treated, untreated)) == layout_of(treated)
 
 
 def test_a_file_against_itself_leaves_a_reactivity_of_zero(build, subtract):
-    values = everything(seed=3)
-    values["reactivity"][2, 3] = np.nan
+    values = random_fields(seed=3)
+    values[REACTIVITY][2, 3] = np.nan
 
     treated = build(values)
-    result = field_of(subtract(treated, treated), "reactivity")
-    known = ~np.isnan(field_of(treated, "reactivity"))
+    result = field_of(subtract(treated, treated), REACTIVITY)
+    known = ~np.isnan(field_of(treated, REACTIVITY))
 
     assert known.any(), "nothing was known, so nothing was tested"
     assert np.all(result[known] == 0)
@@ -409,30 +415,30 @@ def test_a_file_against_itself_leaves_a_reactivity_of_zero(build, subtract):
 
 
 def test_swapping_the_two_inputs_negates_only_the_reactivity(build, subtract, tmp_path):
-    treated, untreated = build(everything(seed=4)), build(everything(seed=40))
+    treated, untreated = build(random_fields(seed=4)), build(random_fields(seed=40))
 
     forward = subtract(treated, untreated)
     backward = run_subtract(untreated, treated, tmp_path / "backward.h5")
 
-    assert np.array_equal(field_of(backward, "reactivity"),
-                          -field_of(forward, "reactivity"))
+    assert np.array_equal(field_of(backward, REACTIVITY),
+                          -field_of(forward, REACTIVITY))
 
-    for name in set(COMBINED) - {"reactivity"}:
+    for name in set(ALL_FIELDS) - {REACTIVITY}:
         assert np.array_equal(field_of(backward, name), field_of(forward, name)), name
 
 
 def test_a_background_of_zeros_leaves_the_treated_run_unchanged(build, subtract):
-    treated = build(everything(seed=5))
-    nothing = build({"reactivity": 0.0, "error": 0.0})
+    treated = build(random_fields(seed=5))
+    nothing = build({REACTIVITY: 0.0, ERROR: 0.0})
 
     output = subtract(treated, nothing)
 
-    for name in COMBINED:
+    for name in ALL_FIELDS:
         assert np.array_equal(field_of(output, name), field_of(treated, name)), name
 
 
 def test_two_runs_agree_byte_for_byte(build, tmp_path):
-    treated, untreated = build(everything(seed=6)), build(everything(seed=60))
+    treated, untreated = build(random_fields(seed=6)), build(random_fields(seed=60))
 
     first = run_subtract(treated, untreated, tmp_path / "first.h5")
     second = run_subtract(treated, untreated, tmp_path / "second.h5")
@@ -444,13 +450,13 @@ def test_two_runs_agree_byte_for_byte(build, tmp_path):
 def test_each_field_follows_its_rule_at_any_shape(build, subtract, n_refs, cap):
     shaped = dict(n_refs=n_refs, cap=cap)
 
-    treated = build(everything(seed=11, **shaped), unmapped=17, **shaped)
-    untreated = build(everything(seed=21, **shaped), unmapped=3, **shaped)
+    treated = build(random_fields(seed=11, **shaped), unmapped=17, **shaped)
+    untreated = build(random_fields(seed=21, **shaped), unmapped=3, **shaped)
     output = subtract(treated, untreated)
 
-    for name in COMBINED:
+    for name in ALL_FIELDS:
         assert np.array_equal(
-            field_of(output, name), combined(name, treated, untreated),
+            field_of(output, name), expected(name, treated, untreated),
         ), name
 
 
@@ -460,53 +466,53 @@ def test_each_field_follows_its_rule_at_any_shape(build, subtract, n_refs, cap):
 
 
 def test_inputs_of_different_reference_counts_are_refused(build, tmp_path):
-    attempt = try_subtract(build(n_refs=4), build(n_refs=5), tmp_path / "out.h5")
+    failed = try_subtract(build(n_refs=4), build(n_refs=5), tmp_path / "out.h5")
 
-    assert attempt.returncode != 0
-    assert "references" in attempt.stderr
+    assert failed.returncode != 0
+    assert "references" in failed.stderr
 
 
 def test_inputs_of_different_widths_are_refused(build, tmp_path):
-    attempt = try_subtract(build(cap=6), build(cap=7), tmp_path / "out.h5")
+    failed = try_subtract(build(cap=6), build(cap=7), tmp_path / "out.h5")
 
-    assert attempt.returncode != 0
-    assert "wide" in attempt.stderr
+    assert failed.returncode != 0
+    assert "wide" in failed.stderr
 
 
 def test_a_file_holding_no_references_is_refused(tmp_path):
     empty = write_output(tmp_path / "empty.h5", n_refs=0, cap=CAP)
 
-    attempt = try_subtract(empty, empty, tmp_path / "out.h5")
+    failed = try_subtract(empty, empty, tmp_path / "out.h5")
 
-    assert attempt.returncode != 0
-    assert "no references" in attempt.stderr
+    assert failed.returncode != 0
+    assert "no references" in failed.stderr
 
 
 def test_something_that_is_not_hdf5_is_refused(build, tmp_path):
     notes = tmp_path / "notes.txt"
-    notes.write_text("months of irreplaceable notes\n")
+    notes.write_text(NOTES)
 
-    attempt = try_subtract(notes, build(), tmp_path / "out.h5")
+    failed = try_subtract(notes, build(), tmp_path / "out.h5")
 
-    assert attempt.returncode != 0
-    assert notes.read_text() == "months of irreplaceable notes\n"
+    assert failed.returncode != 0
+    assert notes.read_text() == NOTES
 
 
-@pytest.mark.parametrize("missing", COMBINED)
+@pytest.mark.parametrize("missing", ALL_FIELDS)
 def test_an_input_missing_any_dataset_is_refused(build, tmp_path, missing):
-    attempt = try_subtract(without(build(), missing), build(), tmp_path / "out.h5")
+    failed = try_subtract(delete_field(build(), missing), build(), tmp_path / "out.h5")
 
-    assert attempt.returncode != 0
-    assert missing.rsplit("/", 1)[-1] in attempt.stderr
+    assert failed.returncode != 0
+    assert missing.rsplit("/", 1)[-1] in failed.stderr
 
 
 def test_an_input_whose_datasets_disagree_is_refused(build, tmp_path):
-    broken = rewidened(build(), "error", CAP + 3)
+    broken = set_field_width(build(), ERROR, CAP + 3)
 
-    attempt = try_subtract(broken, build(), tmp_path / "out.h5")
+    failed = try_subtract(broken, build(), tmp_path / "out.h5")
 
-    assert attempt.returncode != 0
-    assert "error" in attempt.stderr
+    assert failed.returncode != 0
+    assert ERROR in failed.stderr
 
 
 # ---------------------------------------------------------------------------
@@ -519,44 +525,51 @@ def test_an_existing_output_is_not_replaced_without_overwrite(build, subtract):
     output = subtract(treated, untreated)
     before = output.read_bytes()
 
-    attempt = try_subtract(treated, untreated, output)
+    failed = try_subtract(treated, untreated, output)
 
-    assert attempt.returncode != 0
-    assert "already holds data" in attempt.stderr
+    assert failed.returncode != 0
+    assert "already holds data" in failed.stderr
     assert output.read_bytes() == before, "the first result is untouched"
 
 
 def test_overwrite_replaces_an_existing_output(build, subtract):
     """The two runs are given different inputs, so that the values left at the
     path identify which of them wrote it."""
-    output = subtract(build({"reactivity": 0.25}), build({"reactivity": 0.0}))
+    output = subtract(build({REACTIVITY: 0.25}), build({REACTIVITY: 0.0}))
 
-    treated, untreated = build({"reactivity": 0.75}), build({"reactivity": 0.25})
+    treated, untreated = build({REACTIVITY: 0.75}), build({REACTIVITY: 0.25})
     run_subtract(treated, untreated, output, overwrite=True)
 
-    assert np.all(field_of(output, "reactivity") == np.float32(0.5))
+    assert np.all(field_of(output, REACTIVITY) == np.float32(0.5))
 
 
-@pytest.mark.parametrize("wrong", ["shape", "missing dataset", "not hdf5"])
+def _not_hdf5(tmp_path):
+    notes = tmp_path / "notes.txt"
+    notes.write_text(NOTES)
+
+    return notes
+
+
+# The ways an input can be refused, each built from the build fixture and the
+# temporary directory.
+BAD_INPUTS = {
+    "shape": lambda build, tmp_path: build(n_refs=N_REFS + 1),
+    "missing dataset": lambda build, tmp_path: delete_field(build(), UNMAPPED),
+    "not hdf5": lambda build, tmp_path: _not_hdf5(tmp_path),
+}
+
+
+@pytest.mark.parametrize("wrong", sorted(BAD_INPUTS))
 def test_a_run_that_refuses_its_inputs_leaves_the_output_intact(build, subtract,
                                                                 tmp_path, wrong):
     output = subtract(build(), build())
     before = output.read_bytes()
 
-    def not_hdf5():
-        notes = tmp_path / "notes.txt"
-        notes.write_text("notes")
-        return notes
+    bad = BAD_INPUTS[wrong](build, tmp_path)
 
-    bad = {
-        "shape": lambda: build(n_refs=N_REFS + 1),
-        "missing dataset": lambda: without(build(), RUN_TOTAL),
-        "not hdf5": not_hdf5,
-    }[wrong]()
+    failed = try_subtract(bad, build(), output, overwrite=True)
 
-    attempt = try_subtract(bad, build(), output, overwrite=True)
-
-    assert attempt.returncode != 0
+    assert failed.returncode != 0
     assert output.read_bytes() == before
 
 
@@ -566,10 +579,7 @@ def test_a_run_that_refuses_its_inputs_leaves_the_output_intact(build, subtract,
 
 
 def test_both_inputs_are_required(build, tmp_path):
-    given = subprocess.run(
-        [CMUTS_SUB, "-o", str(tmp_path / "out.h5"), str(build())],
-        capture_output=True, text=True,
-    )
+    given = attempt([CMUTS_SUB, "-o", tmp_path / "out.h5", build()])
 
     assert given.returncode == 2
     assert "expected" in given.stderr
@@ -581,11 +591,9 @@ def test_both_inputs_are_required(build, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_it_reads_what_cmuts_hmm_writes(datasets, falsifiable, tmp_path, name):
-    """Asserts nothing about any value, only that the run succeeds and leaves
-    a file shaped like its inputs."""
-    data = datasets(name)
+def test_cmuts_sub_reads_what_cmuts_hmm_writes(data, falsifiable, tmp_path):
+    """Asserts that the run succeeds and leaves a file shaped like its
+    inputs."""
     treated = tmp_path / "treated.h5"
     untreated = tmp_path / "untreated.h5"
 

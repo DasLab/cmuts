@@ -1,30 +1,39 @@
-"""The generator itself, so that a bad fixture is reported as a bad fixture
-rather than as a failing filter."""
+"""The generator itself, so that a bad fixture is reported as a bad fixture and
+not as a failing filter."""
 
 import hashlib
-import subprocess
 
-import pytest
-
-from datasets import DATASETS
-from support import (
-    generate, md_and_nm_tags, recomputed_md_and_nm_tags, records, sequences,
+from alignments import generate
+from oracle import (
+    MAPPED_FLAG,
+    header_lines,
+    md_and_nm_tags,
+    record_lines,
+    records,
+    recomputed_md_and_nm_tags,
+    reference_lengths,
+    reference_span,
+    sequences,
 )
+from programs import samtools
 
 
 def _sq_fields(data) -> list:
-    """The fields of each @SQ line, by tag."""
+    """Returns the fields of each @SQ line, keyed by tag."""
     return [
         dict(field.split(":", 1) for field in line.split("\t")[1:])
-        for line in records(data.bam, "-H") if line.startswith("@SQ")
+        for line in header_lines(data.bam, "@SQ")
     ]
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_checksums_match_hashlib(datasets, falsifiable, name):
-    """hashlib takes the digests here, so agreement checks cmuts-gen against
+def _alignment_count(data) -> int:
+    """Returns how many records the file holds, mapped or not."""
+    return data.mapped + data.unmapped
+
+
+def test_checksums_match_hashlib(data, falsifiable):
+    """hashlib computes the digests here, so agreement checks cmuts-gen against
     something other than the code cmuts-hmm checks them with."""
-    data = datasets(name)
     written = {fields["SN"]: fields["M5"] for fields in _sq_fields(data)}
 
     falsifiable(len(written) > 0)
@@ -35,11 +44,9 @@ def test_checksums_match_hashlib(datasets, falsifiable, name):
     }
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_md_and_nm_match_samtools(datasets, falsifiable, tmp_path, name):
-    """samtools recomputes both from nothing but the alignment and the reference, so
+def test_md_and_nm_match_samtools(data, falsifiable, tmp_path):
+    """samtools recomputes both from the alignment and the reference alone, so
     agreement checks the generator against something other than itself."""
-    data = datasets(name)
     tags = md_and_nm_tags(data.bam)
 
     falsifiable(len(tags) > 0)
@@ -47,46 +54,24 @@ def test_md_and_nm_match_samtools(datasets, falsifiable, tmp_path, name):
     assert tags == recomputed_md_and_nm_tags(data, tmp_path)
 
 
-def _alignments_in(data) -> int:
-    """How many records the file holds, placed on a reference or not."""
-    return data.mapped + data.unmapped
+def test_alignments_are_well_formed(data, falsifiable):
+    falsifiable(_alignment_count(data) > 0)
+
+    samtools("quickcheck", data.bam)
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_alignments_are_well_formed(datasets, falsifiable, name):
-    data = datasets(name)
+def test_coordinate_sorted_without_sorting(data, falsifiable):
+    falsifiable(_alignment_count(data) > 0)
 
-    falsifiable(_alignments_in(data) > 0)
-
-    subprocess.run(["samtools", "quickcheck", str(data.bam)], check=True)
+    samtools("index", data.bam)
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_coordinate_sorted_without_sorting(datasets, falsifiable, name):
-    data = datasets(name)
-
-    falsifiable(_alignments_in(data) > 0)
-
-    subprocess.run(["samtools", "index", str(data.bam)],
-                   check=True, capture_output=True)
-
-
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_header_lengths_match_the_reference(datasets, falsifiable, name):
-    data = datasets(name)
+def test_header_lengths_match_the_reference(data, falsifiable):
     declared = {fields["SN"]: int(fields["LN"]) for fields in _sq_fields(data)}
 
     falsifiable(len(declared) > 0)
 
-    actual, name = {}, None
-    for line in data.fasta.read_text().splitlines():
-        if line.startswith(">"):
-            name = line[1:].split()[0]
-            actual[name] = 0
-        else:
-            actual[name] += len(line)
-
-    assert declared == actual
+    assert declared == reference_lengths(data.fasta)
 
 
 def test_the_same_seed_gives_the_same_data(tmp_path):
@@ -94,55 +79,33 @@ def test_the_same_seed_gives_the_same_data(tmp_path):
     second = generate(tmp_path, "b", seed=555, references=12, reads_per_ref=8)
 
     assert first.fasta.read_bytes() == second.fasta.read_bytes()
-    assert records(first.bam) == records(second.bam)
+    assert record_lines(first.bam) == record_lines(second.bam)
 
 
 def test_a_different_seed_gives_different_data(tmp_path):
     first = generate(tmp_path, "c", seed=555, references=12, reads_per_ref=8)
     second = generate(tmp_path, "d", seed=556, references=12, reads_per_ref=8)
 
-    assert records(first.bam) != records(second.bam)
+    assert record_lines(first.bam) != record_lines(second.bam)
 
 
-def _divergences(data):
-    """Reads whose stored sequence is longer than the reference span they
-    align to, and reads whose is shorter.
-
-    An insertion or a soft-clipped end stores bases that meet no reference
-    position; a deletion meets positions no stored base covers.
-    """
-    longer = shorter = 0
-
-    for line in records(data.bam, "-F", "4"):
-        fields = line.split("\t")
-        stored = len(fields[9])
-        span = _reference_span(fields[5])
-
-        longer += stored > span
-        shorter += stored < span
-
-    return longer, shorter
+def _reads_longer_than_their_span(data) -> int:
+    """Returns how many reads store more bases than the reference span they
+    align to, which an insertion or a soft-clipped end produces."""
+    return sum(1 for record in records(data.bam, *MAPPED_FLAG)
+               if len(record.sequence) > reference_span(record.cigar))
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_read_can_store_more_than_the_span_it_aligns_to(datasets, falsifiable, name):
-    falsifiable(_divergences(datasets(name))[0] > 0)
+def _reads_shorter_than_their_span(data) -> int:
+    """Returns how many reads store fewer bases than the reference span they
+    align to, which a deletion produces."""
+    return sum(1 for record in records(data.bam, *MAPPED_FLAG)
+               if len(record.sequence) < reference_span(record.cigar))
 
 
-@pytest.mark.parametrize("name", sorted(DATASETS))
-def test_a_read_can_store_less_than_the_span_it_aligns_to(datasets, falsifiable, name):
-    falsifiable(_divergences(datasets(name))[1] > 0)
+def test_a_read_can_store_more_than_the_span_it_aligns_to(data, falsifiable):
+    falsifiable(_reads_longer_than_their_span(data) > 0)
 
 
-def _reference_span(cigar):
-    span, digits = 0, ""
-
-    for character in cigar:
-        if character.isdigit():
-            digits += character
-        else:
-            if character in "MDN=X":
-                span += int(digits)
-            digits = ""
-
-    return span
+def test_a_read_can_store_less_than_the_span_it_aligns_to(data, falsifiable):
+    falsifiable(_reads_shorter_than_their_span(data) > 0)
