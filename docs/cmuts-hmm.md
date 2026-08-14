@@ -9,6 +9,16 @@ Computing reactivity rates from alignment files via the pair-HMM.
 - One or more coordinate-sorted alignment files. SAM, BAM, and CRAM formats are all supported
 - The FASTA library
 
+## Model Parameters
+
+The pair HMM is configured by five internal parameters. `--dump-params` writes them in the form `--params` reads.
+
+```sh
+cmuts-hmm --dump-params > params.txt
+```
+
+You may specify a subset of the parameters to modify only them.
+
 ## Error Checking
 
 `cmuts-hmm` verifies each FASTA sequence against the alignment header: its name and its length, and, where the header declares an MD5 checksum, the bases themselves. Any mismatch ends the run early. This behavior is configurable via the `--verify` flag.
@@ -46,6 +56,7 @@ Computing reactivity rates from alignment files via the pair-HMM.
 | --- | --- |
 | `--band N` | reference positions the marginal may look either side of the CIGAR (default 2) |
 | `--min-depth D` | evidence a position needs before its rate is written (default 1) |
+| `--params FILE` | read the pair HMM's rates from this file (default: built in) |
 | `--substitution-weight W` | what a substitution counts towards the mutation total (0 to 1; default 1) |
 | `--deletion-weight W` | what a deletion counts towards the mutation total (0 to 1; default 1) |
 | `--insertion-weight W` | what an insertion counts towards the mutation total (0 to 1; default 0) |
@@ -66,4 +77,5 @@ Computing reactivity rates from alignment files via the pair-HMM.
 | --- | --- |
 | `-h, --help` | show this help and exit |
 | `-V, --version` | show the version and exit |
+| `--dump-params` | write the rates in the form --params reads and exit |
 <!-- END GENERATED cmuts-hmm OPTIONS -->

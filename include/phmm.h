@@ -7,6 +7,7 @@
 
 #include "bam.h"
 #include "fasta.h"
+#include "params.h"
 #include "phred.h"
 
 /* How far either side of the aligner's path the model may look.
@@ -22,19 +23,6 @@
  * There is no upper bound. Cost per read is linear in the band, and an unreasonable one
  * ends the run by exhausting memory. */
 #define PHMM_DEFAULT_BAND 2
-
-/* The model's rates. The defaults are provisional: the right order of magnitude for
- * reverse transcription of a chemically modified template, but not measured. */
-typedef struct {
-    double open_deletion;     /* chance an aligned position begins one */
-    double open_insertion;
-    double extend_deletion;   /* geometric, so 1 - 1 / mean length */
-    double extend_insertion;
-    double modification;      /* chance a base differs from the reference for
-                                 some reason other than a misread */
-} phmm_params;
-
-phmm_params phmm_defaults(void);
 
 /* The kinds of event the mutation channel counts. */
 typedef enum {

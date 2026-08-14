@@ -16,6 +16,9 @@
  * their own struct here. */
 typedef struct {
     pipeline_config pipeline;
+    /* Read into pipeline.tally_config.params before the run. NULL leaves the built-in
+     * rates standing. */
+    const char     *params_path;
 } cli_args;
 
 cli_args cmuts_hmm_defaults(void);

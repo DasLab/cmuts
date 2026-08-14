@@ -16,6 +16,7 @@ typedef struct {
     int          band;     /* reference positions the marginal may look either side of the
                               CIGAR; 0 pins it to the path as written */
     phmm_weights weights;  /* what an event of each kind counts for */
+    phmm_params  params;   /* the rates the model runs on */
 } tally_config;
 
 tally_config tally_defaults(void);

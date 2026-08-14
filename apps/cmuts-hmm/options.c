@@ -9,6 +9,7 @@
 
 #include "filter.h"
 #include "output.h"
+#include "params.h"
 #include "phmm.h"
 
 static const cli_choice VERIFY_CHOICES[] = {
@@ -129,6 +130,16 @@ static const cli_option OPTIONS[] = {
     },
 
     {
+        .group       = "Counting",
+        .name        = "params",
+        .type        = OPT_STRING,
+        .offset      = offsetof(cli_args, params_path),
+        .metavar     = "FILE",
+        .help        = "read the pair HMM's rates from this file",
+        .unset_label = "built in",
+    },
+
+    {
         .group   = "Counting",
         .name    = "substitution-weight",
         .type    = OPT_DOUBLE,
@@ -234,6 +245,14 @@ static const cli_option OPTIONS[] = {
         .help   = "describe every argument as JSON and exit",
         .hidden = true,
         .action = CLI_DUMP_OPTIONS,
+    },
+    {
+        .group  = "Information",
+        .name   = "dump-params",
+        .type   = OPT_FLAG,
+        .help   = "write the rates in the form --params reads and exit",
+        .action = CLI_PRINT,
+        .print  = params_dump_defaults,
     },
     {
         .group  = "Information",

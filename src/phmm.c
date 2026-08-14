@@ -101,17 +101,6 @@ typedef struct {
 /* The model                                                                 */
 /* ------------------------------------------------------------------------ */
 
-phmm_params phmm_defaults(void)
-{
-    return (phmm_params){
-        .open_deletion    = 1e-3,
-        .open_insertion   = 2e-4,
-        .extend_deletion  = 0.35,
-        .extend_insertion = 0.35,
-        .modification     = 5e-3,
-    };
-}
-
 phmm_weights phmm_default_weights(void)
 {
     return (phmm_weights){

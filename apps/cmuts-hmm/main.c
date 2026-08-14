@@ -11,6 +11,7 @@
 #include "error.h"
 #include "filter.h"
 #include "options.h"
+#include "params.h"
 #include "pipeline.h"
 
 int main(int argc, char **argv)
@@ -34,6 +35,15 @@ int main(int argc, char **argv)
      * and a constraint between two options cannot be written in the table. */
     if (!filter_satisfiable(&args.pipeline.filter_config)) {
         fprintf(stderr, "%s: --max-length is below --min-length\n", spec.program);
+        return 2;
+    }
+
+    /* The file names the rates it changes, so what is read stands over the defaults the
+     * spec filled in. */
+    if (args.params_path &&
+        params_read(args.params_path, &args.pipeline.tally_config.params,
+                    error, sizeof error) < 0) {
+        fprintf(stderr, "%s: %s\n", spec.program, error);
         return 2;
     }
 
