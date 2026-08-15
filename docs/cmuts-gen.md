@@ -53,4 +53,12 @@
 | --- | --- |
 | `-h, --help` | show this help and exit |
 | `-V, --version` | show the version and exit |
+
+### Advanced
+
+Accepted, and left out of `--help`.
+
+| Option | Description |
+| --- | --- |
+| `--dump-options` | describe every argument as JSON and exit |
 <!-- END GENERATED cmuts-gen OPTIONS -->

@@ -161,9 +161,19 @@ def note(option: dict) -> str:
     return f" ({'; '.join(notes)})" if notes else ""
 
 
+def option_rows(options: list) -> list:
+    """The rows a table of options holds."""
+    return [[f"`{invocation(option)}`", option["help"] + note(option)]
+            for option in options]
+
+
 def options(program: str) -> str:
     """Every argument a program takes, under the headings the help groups them
-    by. Hidden options exist for this script to read and are left out."""
+    by.
+
+    An option the help leaves out goes under Advanced, so that a page describes
+    everything the program accepts and the help stays short.
+    """
     spoken = described(program, "--dump-options")
     written = []
 
@@ -172,12 +182,17 @@ def options(program: str) -> str:
                 for p in spoken["positionals"]]
         written += ["### Arguments", "", table(["Argument", "Description"], rows), ""]
 
-    shown = [option for option in spoken["options"] if not option["hidden"]]
+    shown  = [option for option in spoken["options"] if not option["hidden"]]
+    hidden = [option for option in spoken["options"] if option["hidden"]]
 
     for group in dict.fromkeys(option["group"] for option in shown):
-        rows = [[f"`{invocation(option)}`", option["help"] + note(option)]
-                for option in shown if option["group"] == group]
+        rows = option_rows([option for option in shown if option["group"] == group])
         written += [f"### {group}", "", table(["Option", "Description"], rows), ""]
+
+    if hidden:
+        written += ["### Advanced", "",
+                    "Accepted, and left out of `--help`.", "",
+                    table(["Option", "Description"], option_rows(hidden)), ""]
 
     return "\n".join(written).rstrip()
 

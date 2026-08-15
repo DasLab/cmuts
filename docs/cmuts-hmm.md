@@ -75,4 +75,16 @@ You may specify a subset of the parameters to modify only them.
 | `-h, --help` | show this help and exit |
 | `-V, --version` | show the version and exit |
 | `--dump-params` | write the rates in the form --params reads and exit |
+
+### Advanced
+
+Accepted, and left out of `--help`.
+
+| Option | Description |
+| --- | --- |
+| `--queue-capacity N` | reads in transit at once (default 4096) |
+| `--batch N` | reads transferred per queue operation (default 64) |
+| `--live-refs N` | references in flight (default 64) |
+| `--dump-options` | describe every argument as JSON and exit |
+| `--dump-layout` | describe the output format as JSON and exit |
 <!-- END GENERATED cmuts-hmm OPTIONS -->

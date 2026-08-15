@@ -49,4 +49,12 @@ High coverage in the output dataset does not imply high-quality data, since it i
 | --- | --- |
 | `-h, --help` | show this help and exit |
 | `-V, --version` | show the version and exit |
+
+### Advanced
+
+Accepted, and left out of `--help`.
+
+| Option | Description |
+| --- | --- |
+| `--dump-options` | describe every argument as JSON and exit |
 <!-- END GENERATED cmuts-sub OPTIONS -->
