@@ -200,6 +200,7 @@ static const cli_option OPTIONS[] = {
         .help    = "reads in transit at once",
         .minimum = 1,
         .maximum = CLI_UNBOUNDED,
+        .hidden  = true,
     },
     {
         .group   = "Performance",
@@ -210,6 +211,7 @@ static const cli_option OPTIONS[] = {
         .help    = "reads transferred per queue operation",
         .minimum = 1,
         .maximum = CLI_UNBOUNDED,
+        .hidden  = true,
     },
     {
         .group   = "Performance",
@@ -220,6 +222,7 @@ static const cli_option OPTIONS[] = {
         .help    = "references in flight",
         .minimum = 1,
         .maximum = CLI_UNBOUNDED,
+        .hidden  = true,
     },
 
     {
