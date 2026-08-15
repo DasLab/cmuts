@@ -17,7 +17,8 @@ CMUTS_HMM = "cmuts-hmm"
 CMUTS_GEN = "cmuts-gen"
 CMUTS_SUB = "cmuts-sub"
 CMUTS_DIV = "cmuts-div"
-PROGRAMS = (CMUTS_HMM, CMUTS_GEN, CMUTS_SUB, CMUTS_DIV)
+CMUTS_NORM = "cmuts-norm"
+PROGRAMS = (CMUTS_HMM, CMUTS_GEN, CMUTS_SUB, CMUTS_DIV, CMUTS_NORM)
 
 
 def locate(name: str) -> Path | None:
@@ -144,6 +145,29 @@ def run_divide(rates, control, output, **options):
 def try_divide(rates, control, output, **options):
     """Divides by a control whether or not the run succeeds."""
     return attempt(_divide_command(rates, control, output, options))
+
+
+def _normalize_command(inputs, outputs, options: dict) -> list:
+    """Builds a run over any number of inputs, each paired with its own output
+    by a repeat of --output."""
+    paired = []
+
+    for output in outputs:
+        paired += ["-o", output]
+
+    return [CMUTS_NORM, *paired, *_options(options), *inputs]
+
+
+def run_normalize(inputs, outputs, **options):
+    """Normalizes every input against one scale, returning the paths written."""
+    execute(_normalize_command(inputs, outputs, options))
+
+    return outputs
+
+
+def try_normalize(inputs, outputs, **options):
+    """Normalizes whether or not the run succeeds."""
+    return attempt(_normalize_command(inputs, outputs, options))
 
 
 def run_generator(prefix, parameters: dict):

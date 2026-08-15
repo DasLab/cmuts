@@ -14,6 +14,7 @@
 #include <float.h>
 #include <getopt.h>
 #include <limits.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -298,6 +299,24 @@ static int parse_double(const cli_option *opt, const char *text, const char *pro
     return 0;
 }
 
+/* Adds one value to a repeatable option's array, refusing the value that would overrun
+ * it. */
+static int append(const cli_option *opt, void *args, const char *value,
+                  const char *program)
+{
+    const char **into  = (const char **)((char *)args + opt->offset);
+    size_t      *count = (size_t *)((char *)args + opt->count_offset);
+
+    if (*count == opt->capacity) {
+        fprintf(stderr, "%s: --%s: at most %zu may be given\n", program, opt->name,
+                opt->capacity);
+        return -1;
+    }
+
+    into[(*count)++] = value;
+    return 0;
+}
+
 static int assign(const cli_option *opt, void *args, const char *value,
                   const char *program)
 {
@@ -305,6 +324,10 @@ static int assign(const cli_option *opt, void *args, const char *value,
     long   number;
     double real;
     int    choice;
+
+    if (opt->repeatable) {
+        return append(opt, args, value, program);
+    }
 
     switch (opt->type) {
         case OPT_DOUBLE:
@@ -660,11 +683,22 @@ static void print_json_choices(FILE *out, const cli_option *opt)
     fputc(']', out);
 }
 
+/* JSON has no spelling for a value that is not a number, so a default of one is described
+ * as having no default. */
+static void print_json_double(FILE *out, double value)
+{
+    if (isfinite(value)) {
+        fprintf(out, "%g", value);
+    } else {
+        fputs("null", out);
+    }
+}
+
 static void print_json_default(FILE *out, const cli_option *opt, const void *defaults)
 {
     const char *field = (const char *)defaults + opt->offset;
 
-    if (!stores_a_value(opt)) {
+    if (!stores_a_value(opt) || opt->repeatable) {
         fputs("null", out);
         return;
     }
@@ -674,7 +708,7 @@ static void print_json_default(FILE *out, const cli_option *opt, const void *def
         case OPT_STRING: print_json_string(out, *(const char *const *)field); break;
         case OPT_SIZE:   fprintf(out, "%zu", *(const size_t *)field);         break;
         case OPT_INT:    fprintf(out, "%d", *(const int *)field);             break;
-        case OPT_DOUBLE: fprintf(out, "%g", *(const double *)field);          break;
+        case OPT_DOUBLE: print_json_double(out, *(const double *)field);      break;
         case OPT_ENUM:
             for (const cli_choice *choice = opt->choices; choice->name; choice++) {
                 if (choice->value == *(const int *)field) {
@@ -722,6 +756,7 @@ static void print_json_option(FILE *out, const cli_option *opt, const void *defa
     fputs(",\n      \"help\": ", out);        print_json_string(out, opt->help);
     fprintf(out, ",\n      \"required\": %s", opt->required ? "true" : "false");
     fprintf(out, ",\n      \"hidden\": %s", opt->hidden ? "true" : "false");
+    fprintf(out, ",\n      \"repeatable\": %s", opt->repeatable ? "true" : "false");
     fputs(",\n      \"unset_label\": ", out); print_json_string(out, opt->unset_label);
     fputs(",\n      \"choices\": ", out);     print_json_choices(out, opt);
     fputs(",\n      \"default\": ", out);     print_json_default(out, opt, defaults);

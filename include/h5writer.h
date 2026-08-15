@@ -61,4 +61,8 @@ int h5writer_row(h5writer *w, out_field_id id, int32_t tid, const void *values);
  * having no row. */
 int h5writer_total(h5writer *w, out_field_id id, size_t value);
 
+/* Writes a number on the root group under this name. For a value belonging to one program
+ * rather than to every output, which is why output.h does not name it. */
+int h5writer_attribute(h5writer *w, const char *name, double value);
+
 const char *h5writer_error(const h5writer *w);

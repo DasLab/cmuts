@@ -45,3 +45,14 @@ A rate is missing wherever either input is missing one, since a difference needs
 | `reads/*` | the two counts added |
 
 Where the control measured nothing at a position, there is nothing to divide by and the rate and its error are missing there.
+
+## What normalization does to each dataset
+
+| Dataset | After `cmuts-norm` |
+| --- | --- |
+| `reactivity` | the rate over the scale, then held within the clipping bounds |
+| `error` | the error over the same scale |
+| `coverage` | unchanged |
+| `reads/*` | unchanged |
+
+The scale is one number drawn from the rates of every input given to the run, so a rate is comparable across those inputs and not across separate runs. A scale that comes out as zero, negative, or undefined leaves the rates as they are.

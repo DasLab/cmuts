@@ -105,6 +105,42 @@ done:
     return status;
 }
 
+/* Writes one double attribute on the root group, for a value belonging to one program
+ * rather than to every output. */
+static int write_number(hid_t file, const char *name, double value)
+{
+    hid_t space  = H5Screate(H5S_SCALAR);
+    hid_t attr   = H5I_INVALID_HID;
+    int   status = -1;
+
+    if (space < 0) {
+        goto done;
+    }
+
+    attr = H5Acreate2(file, name, H5T_IEEE_F64LE, space, H5P_DEFAULT, H5P_DEFAULT);
+
+    if (attr >= 0 && H5Awrite(attr, H5T_NATIVE_DOUBLE, &value) >= 0) {
+        status = 0;
+    }
+
+done:
+    if (attr >= 0) {
+        H5Aclose(attr);
+    }
+    if (space >= 0) {
+        H5Sclose(space);
+    }
+
+    return status;
+}
+
+int h5writer_attribute(h5writer *w, const char *name, double value)
+{
+    return write_number(w->file, name, value) < 0
+         ? fail(w, "unable to write an attribute")
+         : 0;
+}
+
 /* Records which program wrote the file, and at which version. output.h names the
  * attributes; the values are what this run holds.
  *

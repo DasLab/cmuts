@@ -77,6 +77,7 @@ cmuts-align
 cmuts-hmm
 cmuts-sub
 cmuts-div
+cmuts-norm
 cmuts-gen
 ```
 

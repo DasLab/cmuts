@@ -1,6 +1,6 @@
 # Basics
 
-The cmuts pipeline comprises four independent programs:
+The cmuts pipeline comprises five independent programs:
 
 {.field}
 [`cmuts-align`](cmuts-align.md)\
@@ -21,6 +21,11 @@ The cmuts pipeline comprises four independent programs:
 [`cmuts-div`](cmuts-div.md)\
 **Purpose:** Normalization of reactivity rates against a denatured control\
 **Requires:** Reactivity rates and denatured control rates, in cmuts-compatible HDF5 files
+
+{.field}
+[`cmuts-norm`](cmuts-norm.md)\
+**Purpose:** Normalization of reactivity rates against a scale taken from the rates themselves\
+**Requires:** One or more sets of reactivity rates, in cmuts-compatible HDF5 files
 
 This page goes over basic, end-to-end usage of these programs on standard data. For a full list of the arguments each command takes, please read their respective pages.
 

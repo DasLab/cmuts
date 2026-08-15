@@ -76,7 +76,7 @@ NAME     := cmuts
 # One directory under apps/ per program, named for the binary it builds. A
 # program is its own sources, its own private headers, and whichever members of
 # the library it refers to; adding one means adding a directory and a word here.
-PROGRAMS := cmuts-hmm cmuts-gen cmuts-sub cmuts-div
+PROGRAMS := cmuts-hmm cmuts-gen cmuts-sub cmuts-div cmuts-norm
 
 # Programs that are scripts rather than sources. One directory each, holding a
 # .in that the version is substituted into, so that no copy of the version is
@@ -105,6 +105,7 @@ LIBS_cmuts-hmm := $(HTS_LIBS) $(HDF5_LIBS) -pthread -lm
 LIBS_cmuts-gen := $(HTS_LIBS)
 LIBS_cmuts-sub := $(HDF5_LIBS) -lm
 LIBS_cmuts-div := $(HDF5_LIBS) -lm
+LIBS_cmuts-norm := $(HDF5_LIBS) -lm
 
 ifdef SAN
 $(foreach p,$(PROGRAMS),$(eval LIBS_$(p) += $(SANFLAGS)))

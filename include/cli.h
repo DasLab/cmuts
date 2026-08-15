@@ -67,6 +67,12 @@ typedef struct {
     long              minimum;  /* bounds for the numeric types */
     long              maximum;  /* CLI_UNBOUNDED where only the floor binds */
     bool              hidden;   /* kept out of the help, still described by JSON */
+    /* Takes a value every time it appears, rather than the last one winning. The values
+     * go to offset as an array of const char *, their count to count_offset, and capacity
+     * is how many that array holds. Only OPT_STRING may repeat. */
+    bool              repeatable;
+    size_t            count_offset;
+    size_t            capacity;
     const cli_choice *choices;  /* accepted values, for OPT_ENUM and OPT_SET */
     cli_action        action;
     void            (*print)(FILE *out);  /* what CLI_PRINT calls */
