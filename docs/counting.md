@@ -35,4 +35,13 @@ The default of 1 is one whole observation. Below that, the standard error of a p
 
 A rate is missing wherever either input is missing one, since a difference needs both. `--clip` raises a negative difference to zero and leaves a missing value missing, rather than reading it as a zero to raise.
 
-Given a denatured control, the reactivity becomes the background-subtracted rate over the control's and the error follows the division. Where the control measured nothing at a position, there is nothing to divide by and the result is missing there.
+## What division does to each dataset
+
+| Dataset | After `cmuts-div` |
+| --- | --- |
+| `reactivity` | the rate over the control's |
+| `error` | the two errors added in quadrature, the control's scaled by the rate, over the control's rate |
+| `coverage` | the two coverages added |
+| `reads/*` | the two counts added |
+
+Where the control measured nothing at a position, there is nothing to divide by and the rate and its error are missing there.

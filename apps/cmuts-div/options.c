@@ -1,4 +1,4 @@
-/* options.c -- cmuts-sub's command line, as one table.
+/* options.c -- cmuts-div's command line, as one table.
  * Rows use designated initializers, so that a field added to cli_option takes its
  * default without being spelled out in every row.
  * Author: Hamish M. Blair <hmblair@stanford.edu>
@@ -14,7 +14,7 @@ static const cli_option OPTIONS[] = {
         .name     = "output",
         .key      = 'o',
         .type     = OPT_STRING,
-        .offset   = offsetof(sub_args, subtract.output_path),
+        .offset   = offsetof(div_args, divide.output_path),
         .metavar  = "HDF5",
         .help     = "write results to this file",
         .required = true,
@@ -23,16 +23,8 @@ static const cli_option OPTIONS[] = {
         .group  = "Input and output",
         .name   = "overwrite",
         .type   = OPT_FLAG,
-        .offset = offsetof(sub_args, subtract.overwrite),
+        .offset = offsetof(div_args, divide.overwrite),
         .help   = "replace the output file if it already exists",
-    },
-
-    {
-        .group  = "Subtraction",
-        .name   = "clip",
-        .type   = OPT_FLAG,
-        .offset = offsetof(sub_args, subtract.clip),
-        .help   = "raise a negative reactivity to zero",
     },
 
     {
@@ -63,32 +55,32 @@ static const cli_option OPTIONS[] = {
 
 static const cli_positional POSITIONALS[] = {
     {
-        .name     = "treated",
-        .metavar  = "TREATED",
-        .help     = "the modified sample",
-        .offset   = offsetof(sub_args, subtract.treated_path),
+        .name     = "rates",
+        .metavar  = "RATES",
+        .help     = "the reactivities to normalize",
+        .offset   = offsetof(div_args, divide.rates_path),
         .required = true,
     },
     {
-        .name     = "untreated",
-        .metavar  = "UNTREATED",
-        .help     = "the background",
-        .offset   = offsetof(sub_args, subtract.untreated_path),
+        .name     = "control",
+        .metavar  = "CONTROL",
+        .help     = "the denatured control",
+        .offset   = offsetof(div_args, divide.control_path),
         .required = true,
     },
 };
 
-sub_args sub_defaults(void)
+div_args div_defaults(void)
 {
-    return (sub_args){ 0 };
+    return (div_args){ 0 };
 }
 
-cli_spec sub_spec(const sub_args *defaults)
+cli_spec div_spec(const div_args *defaults)
 {
     return (cli_spec){
-        .program       = "cmuts-sub",
+        .program       = "cmuts-div",
         .version       = CMUTS_VERSION,
-        .summary       = "subtract an untreated background from a cmuts output.",
+        .summary       = "divide a cmuts output by a denatured control.",
         .options       = OPTIONS,
         .n_options     = sizeof OPTIONS / sizeof *OPTIONS,
         .positionals   = POSITIONALS,

@@ -16,7 +16,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CMUTS_HMM = "cmuts-hmm"
 CMUTS_GEN = "cmuts-gen"
 CMUTS_SUB = "cmuts-sub"
-PROGRAMS = (CMUTS_HMM, CMUTS_GEN, CMUTS_SUB)
+CMUTS_DIV = "cmuts-div"
+PROGRAMS = (CMUTS_HMM, CMUTS_GEN, CMUTS_SUB, CMUTS_DIV)
 
 
 def locate(name: str) -> Path | None:
@@ -126,6 +127,23 @@ def run_subtract(treated, untreated, output, **options):
 def try_subtract(treated, untreated, output, **options):
     """Subtracts a background whether or not the run succeeds."""
     return attempt(_subtract_command(treated, untreated, output, options))
+
+
+def _divide_command(rates, control, output, options: dict) -> list:
+    return [CMUTS_DIV, "-o", output, *_options(options), rates, control]
+
+
+def run_divide(rates, control, output, **options):
+    """Divides a run by a denatured control, returning the path the result was
+    written to."""
+    execute(_divide_command(rates, control, output, options))
+
+    return output
+
+
+def try_divide(rates, control, output, **options):
+    """Divides by a control whether or not the run succeeds."""
+    return attempt(_divide_command(rates, control, output, options))
 
 
 def run_generator(prefix, parameters: dict):

@@ -1,20 +1,28 @@
 """Taking an untreated background off a treated run.
 
 The result depends on the values in the input files and on nothing else, so the
-inputs are written by hand and not counted from an alignment. outputs.py
-describes the layout the two programs share.
+inputs are written by hand and not counted from an alignment. inputs.py builds
+them and outputs.py describes the layout the programs share.
 """
 
 from __future__ import annotations
 
-import itertools
-
 import numpy as np
 import pytest
 
+from combining import SUB_RULES, expected
+from inputs import (
+    CAP,
+    LARGE_COUNT,
+    N_REFS,
+    NOTES,
+    missing_in_each_input,
+    not_hdf5,
+    random_fields,
+    random_values,
+)
 from outputs import (
     ALL_FIELDS,
-    BY_NAME,
     COUNTED,
     COVERAGE,
     ERROR,
@@ -38,42 +46,6 @@ from programs import (
     run_subtract,
     try_subtract,
 )
-from subtraction import expected
-
-# Small enough to write out by hand and to read in a failure, and ragged enough
-# that a row, a histogram and a scalar are all of different widths.
-N_REFS = 4
-CAP = 6
-
-# A count past what a float32 holds exactly, so a value that comes back whole
-# was not narrowed to the type the rates use.
-LARGE_COUNT = np.uint64(2) ** 40 + 1
-
-NOTES = "months of irreplaceable notes\n"
-
-
-@pytest.fixture(params=["plain", "chunked"])
-def storage(request):
-    """The two ways an input may be stored. cmuts-hmm writes chunked, shuffled
-    and deflated, and the result must be the same either way, so every test
-    that reads values runs against both."""
-    return request.param
-
-
-@pytest.fixture
-def build(tmp_path, storage):
-    """Returns a function that writes an input file. Each file is named
-    separately, so one test may build several."""
-    written = itertools.count()
-
-    def make(values=None, *, n_refs=N_REFS, cap=CAP, unmapped=0):
-        return write_output(
-            tmp_path / f"input{next(written)}.h5",
-            n_refs=n_refs, cap=cap, values=values, unmapped=unmapped,
-            storage=storage,
-        )
-
-    return make
 
 
 @pytest.fixture
@@ -85,39 +57,9 @@ def subtract(tmp_path):
     return run
 
 
-def random_values(field, n_refs=N_REFS, cap=CAP, seed=0):
-    """Builds values for one field that differ from column to column and from
-    row to row, so that a rule applied along the wrong axis does not agree by
-    accident."""
-    rng = np.random.default_rng(seed)
-    wanted = shape(BY_NAME[field], n_refs, cap)
-
-    if BY_NAME[field].dtype == "u8":
-        return rng.integers(0, 1000, size=wanted, dtype=np.uint64)
-
-    return rng.random(size=wanted).astype(np.float32)
-
-
-def random_fields(seed, n_refs=N_REFS, cap=CAP) -> dict:
-    """Builds values for every field at once, so that a test of one field runs
-    on a file whose other fields are not zero."""
-    return {field.name: random_values(field.name, n_refs, cap, seed=seed + i)
-            for i, field in enumerate(FIELDS)}
-
-
-def missing_in_each_input(rows: int, columns: int):
-    """Builds a pair of arrays that are NaN in the treated input only, in the
-    untreated input only, and in both."""
-    known = np.float32(0.5)
-
-    left = np.full((rows, columns), known, dtype=np.float32)
-    right = np.full((rows, columns), known, dtype=np.float32)
-
-    left[1, :] = np.nan
-    right[2, :] = np.nan
-    left[3, :] = right[3, :] = np.nan
-
-    return left, right
+def wanted(name, *inputs):
+    """Returns the values cmuts-sub should write for one field."""
+    return expected(SUB_RULES, name, *inputs)
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +114,7 @@ def test_each_field_follows_its_rule(build, subtract, name):
     output = subtract(treated, untreated)
 
     assert np.array_equal(
-        field_of(output, name), expected(name, treated, untreated),
+        field_of(output, name), wanted(name, treated, untreated),
     ), name
 
 
@@ -248,132 +190,7 @@ def test_counts_stay_whole_and_exact(build, subtract):
 
 
 # ---------------------------------------------------------------------------
-# The denatured control
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("name", ALL_FIELDS)
-def test_each_field_follows_its_rule_against_a_control(build, subtract, name):
-    """The error is compared to a tolerance because it rounds eight times over
-    a division and a root; every other rule rounds once and is exact."""
-    treated = build(random_fields(seed=31), unmapped=17)
-    untreated = build(random_fields(seed=32), unmapped=3)
-    denatured = build(random_fields(seed=33), unmapped=5)
-
-    output = subtract(treated, untreated, denatured=denatured)
-
-    result = field_of(output, name)
-    wanted = expected(name, treated, untreated, denatured)
-
-    if name == ERROR:
-        assert np.allclose(result, wanted, rtol=1e-6, equal_nan=True), name
-    else:
-        assert np.array_equal(result, wanted), name
-
-
-def test_a_control_divides_the_difference(build, subtract):
-    treated = build({REACTIVITY: 0.75})
-    untreated = build({REACTIVITY: 0.25})
-    denatured = build({REACTIVITY: 0.5})
-
-    output = subtract(treated, untreated, denatured=denatured)
-
-    assert np.all(field_of(output, REACTIVITY) == np.float32(1.0))
-
-
-def test_a_control_of_zero_leaves_no_reactivity(build, subtract):
-    treated = build({REACTIVITY: 0.75})
-    untreated = build({REACTIVITY: 0.25})
-    denatured = build({REACTIVITY: 0.0})
-
-    output = subtract(treated, untreated, denatured=denatured)
-
-    assert np.isnan(field_of(output, REACTIVITY)).all()
-    assert np.isnan(field_of(output, ERROR)).all()
-
-
-def test_a_control_of_nan_leaves_no_reactivity(build, subtract):
-    control = np.full((N_REFS, CAP), np.float32(0.5), dtype=np.float32)
-    control[2, :] = np.nan
-
-    output = subtract(build({REACTIVITY: 0.75}), build({REACTIVITY: 0.25}),
-                      denatured=build({REACTIVITY: control}))
-    result = field_of(output, REACTIVITY)
-
-    assert np.isnan(result[2]).all()
-    assert not np.isnan(result[0]).any()
-
-
-def test_a_control_of_ones_leaves_the_difference_alone(build, tmp_path):
-    treated, untreated = build(random_fields(seed=34)), build(random_fields(seed=35))
-    ones = build({REACTIVITY: 1.0})
-
-    plain = run_subtract(treated, untreated, tmp_path / "plain.h5")
-    controlled = run_subtract(treated, untreated, tmp_path / "controlled.h5",
-                              denatured=ones)
-
-    assert np.array_equal(field_of(controlled, REACTIVITY),
-                          field_of(plain, REACTIVITY))
-
-
-def test_a_control_can_only_widen_the_error(build, tmp_path):
-    treated, untreated = build(random_fields(seed=36)), build(random_fields(seed=37))
-    ones = build({REACTIVITY: 1.0, ERROR: random_values(ERROR, seed=38)})
-
-    plain = run_subtract(treated, untreated, tmp_path / "plain.h5")
-    controlled = run_subtract(treated, untreated, tmp_path / "controlled.h5",
-                              denatured=ones)
-
-    assert np.all(field_of(controlled, ERROR) >= field_of(plain, ERROR))
-
-
-def test_a_control_is_counted_in_the_totals(build, subtract):
-    treated = build({COUNTED: 3}, unmapped=11)
-    untreated = build({COUNTED: 5}, unmapped=13)
-    denatured = build({COUNTED: 7}, unmapped=17)
-
-    output = subtract(treated, untreated, denatured=denatured)
-
-    assert np.all(field_of(output, COUNTED) == 15)
-    assert field_of(output, UNMAPPED) == 41
-
-
-def test_clipping_holds_a_ratio_at_zero(build, subtract):
-    treated = build({REACTIVITY: 0.25})
-    untreated = build({REACTIVITY: 0.75})
-    denatured = build({REACTIVITY: 0.5})
-
-    output = subtract(treated, untreated, denatured=denatured, clip=True)
-
-    assert np.all(field_of(output, REACTIVITY) == 0)
-
-
-# The ways a control can disagree with the inputs, and the word each is
-# reported with.
-DISAGREEING_CONTROLS = {
-    "references": lambda build: build(n_refs=N_REFS + 1),
-    "wide": lambda build: build(cap=CAP + 1),
-}
-
-
-@pytest.mark.parametrize("wrong", sorted(DISAGREEING_CONTROLS))
-def test_a_control_disagreeing_with_the_inputs_is_refused(build, tmp_path, wrong):
-    control = DISAGREEING_CONTROLS[wrong](build)
-
-    failed = try_subtract(build(), build(), tmp_path / "out.h5", denatured=control)
-
-    assert failed.returncode != 0
-
-
-def test_a_control_missing_a_dataset_is_refused(build, tmp_path):
-    failed = try_subtract(build(), build(), tmp_path / "out.h5",
-                          denatured=delete_field(build(), ERROR))
-
-    assert failed.returncode != 0
-
-
-# ---------------------------------------------------------------------------
-# Values that were never measured
+# Values that are missing from an input
 # ---------------------------------------------------------------------------
 
 
@@ -404,7 +221,7 @@ def test_the_columns_past_a_reference_stay_nan(build, subtract):
 
 
 # ---------------------------------------------------------------------------
-# What holds of any two files
+# Properties that hold for any two inputs
 # ---------------------------------------------------------------------------
 
 
@@ -469,7 +286,7 @@ def test_each_field_follows_its_rule_at_any_shape(build, subtract, n_refs, cap):
 
     for name in ALL_FIELDS:
         assert np.array_equal(
-            field_of(output, name), expected(name, treated, untreated),
+            field_of(output, name), wanted(name, treated, untreated),
         ), name
 
 
@@ -499,8 +316,7 @@ def test_a_file_holding_no_references_is_refused(tmp_path):
 
 
 def test_something_that_is_not_hdf5_is_refused(build, tmp_path):
-    notes = tmp_path / "notes.txt"
-    notes.write_text(NOTES)
+    notes = not_hdf5(tmp_path)
 
     failed = try_subtract(notes, build(), tmp_path / "out.h5")
 
@@ -524,7 +340,7 @@ def test_an_input_whose_datasets_disagree_is_refused(build, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# What is already at the output path
+# An existing file at the output path
 # ---------------------------------------------------------------------------
 
 
@@ -550,19 +366,12 @@ def test_overwrite_replaces_an_existing_output(build, subtract):
     assert np.all(field_of(output, REACTIVITY) == np.float32(0.5))
 
 
-def _not_hdf5(tmp_path):
-    notes = tmp_path / "notes.txt"
-    notes.write_text(NOTES)
-
-    return notes
-
-
 # The ways an input can be refused, each built from the build fixture and the
 # temporary directory.
 BAD_INPUTS = {
     "shape": lambda build, tmp_path: build(n_refs=N_REFS + 1),
     "missing dataset": lambda build, tmp_path: delete_field(build(), UNMAPPED),
-    "not hdf5": lambda build, tmp_path: _not_hdf5(tmp_path),
+    "not hdf5": lambda build, tmp_path: not_hdf5(tmp_path),
 }
 
 

@@ -1,6 +1,6 @@
 # Basics
 
-The cmuts pipeline comprises three independent programs:
+The cmuts pipeline comprises four independent programs:
 
 {.field}
 [`cmuts-align`](cmuts-align.md)\
@@ -16,6 +16,11 @@ The cmuts pipeline comprises three independent programs:
 [`cmuts-sub`](cmuts-sub.md)\
 **Purpose:** Background subtraction of reactivity rates\
 **Requires:** Treated and untreated reactivity rates, in cmuts-compatible HDF5 files
+
+{.field}
+[`cmuts-div`](cmuts-div.md)\
+**Purpose:** Normalization of reactivity rates against a denatured control\
+**Requires:** Reactivity rates and denatured control rates, in cmuts-compatible HDF5 files
 
 This page goes over basic, end-to-end usage of these programs on standard data. For a full list of the arguments each command takes, please read their respective pages.
 
@@ -81,10 +86,10 @@ To account for a denatured control, first use the HMM to get its mutation rates 
 cmuts-hmm -f references.fasta -o denatured.h5 denatured.bam
 ```
 
-and then pass it to the `-d` flag of `cmuts-sub`.
+and then divide the background-subtracted rates by it.
 
 ```sh
-cmuts-sub -o combined.h5 -d denatured.h5 treated.h5 untreated.h5
+cmuts-div -o normalized.h5 combined.h5 denatured.h5
 ```
 
 ## No Control

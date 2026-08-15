@@ -6,6 +6,7 @@ dataset it was given can detect a violation of the contract under test. A test
 that is vacuous on every dataset fails the run.
 """
 
+import itertools
 import shutil
 from collections import defaultdict
 
@@ -18,6 +19,8 @@ pytest.register_assert_rewrite("oracle")
 
 from alignments import FORMATS, NATIVE, convert_format, generate  # noqa: E402
 from datasets import DATASETS  # noqa: E402
+from inputs import CAP, N_REFS  # noqa: E402
+from outputs import write_output  # noqa: E402
 from programs import PROGRAMS, ROOT, locate  # noqa: E402
 
 
@@ -67,6 +70,30 @@ def data(request, catalogue, fmt):
     """One dataset of the catalogue, in one format. A test taking this fixture
     runs over every combination of the two."""
     return catalogue(request.param, fmt)
+
+
+@pytest.fixture(params=["plain", "chunked"])
+def storage(request):
+    """The two ways an input may be stored. cmuts-hmm writes chunked, shuffled
+    and deflated, and the result must be the same either way, so every test
+    that reads values runs against both."""
+    return request.param
+
+
+@pytest.fixture
+def build(tmp_path, storage):
+    """Returns a function that writes an input file. Each file is named
+    separately, so one test may build several."""
+    written = itertools.count()
+
+    def make(values=None, *, n_refs=N_REFS, cap=CAP, unmapped=0):
+        return write_output(
+            tmp_path / f"input{next(written)}.h5",
+            n_refs=n_refs, cap=cap, values=values, unmapped=unmapped,
+            storage=storage,
+        )
+
+    return make
 
 
 # Whether each test had anything to assert over, keyed by test and not by

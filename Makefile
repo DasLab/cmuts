@@ -76,7 +76,7 @@ NAME     := cmuts
 # One directory under apps/ per program, named for the binary it builds. A
 # program is its own sources, its own private headers, and whichever members of
 # the library it refers to; adding one means adding a directory and a word here.
-PROGRAMS := cmuts-hmm cmuts-gen cmuts-sub
+PROGRAMS := cmuts-hmm cmuts-gen cmuts-sub cmuts-div
 
 # Programs that are scripts rather than sources. One directory each, holding a
 # .in that the version is substituted into, so that no copy of the version is
@@ -100,14 +100,11 @@ BINS     := $(addprefix $(BUILD)/,$(PROGRAMS) $(SCRIPTS))
 SRC      := $(LIB_SRC) $(APP_SRC)
 DEP      := $(LIB_OBJ:.o=.d) $(APP_OBJ:.o=.d)
 
-# What each program needs beyond the library. The archive is searched, not
-# swallowed, so a program links only the members it refers to and only the
-# libraries those in turn require: the generator reaches cli.o alone and so
-# needs nothing of HDF5, and the subtraction reads and writes output files
-# without ever opening an alignment.
+# Additional libraries beyond libcmuts
 LIBS_cmuts-hmm := $(HTS_LIBS) $(HDF5_LIBS) -pthread -lm
 LIBS_cmuts-gen := $(HTS_LIBS)
 LIBS_cmuts-sub := $(HDF5_LIBS) -lm
+LIBS_cmuts-div := $(HDF5_LIBS) -lm
 
 ifdef SAN
 $(foreach p,$(PROGRAMS),$(eval LIBS_$(p) += $(SANFLAGS)))
@@ -155,23 +152,17 @@ uninstall:
 # Defaults to a virtual environment in the current dir
 PYTHON ?= .venv/bin/python
 
-# The build directory goes first on PATH, which is how the tests reach these
-# programs and not an installed copy of them. They refuse anything found
-# outside this repository, so the tests cannot be run without it.
+# The build directory goes first on PATH. The tests refuse anything found
+# outside this repository, so they cannot be run without it.
 check: $(BINS)
 	PATH=$(CURDIR)/$(BUILD):$$PATH $(PYTHON) -m pytest
 
-# Every page under docs/ naming a program in one of its markers is written
-# from that program, so this builds them all first: a table can only describe
-# what was built here, never a version of it that is no longer around.
+# Ensure the auto-generated regions between markers are current
 docs: $(BINS)
 	@$(PYTHON) scripts/document.py $(BUILD) docs
 
-# The blocks are rewritten first, so the site cannot render a page describing a
-# program as it was. -W fails on a broken link or a page missing from the
-# toctree; the doctrees are cached beside the site, which is not published.
-#
-#     uv pip install --python .venv/bin/python --group docs
+#-W fails on a broken link or a page missing from the toctree; the doctrees are
+# cached beside the site, which is not published.
 site: docs
 	@$(PYTHON) -m sphinx -W -q -b html -d site/.doctrees docs site
 
@@ -194,7 +185,7 @@ compile_commands.json: Makefile $(SRC)
 lint: compile_commands.json
 	@$(CLANG_TIDY) -p . --quiet $(SRC)
 
-# Clear every variant, not just the one this invocation names.
+# Clears every variant
 clean:
 	rm -rf $(BUILD_ROOT) compile_commands.json
 

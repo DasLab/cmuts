@@ -15,6 +15,8 @@ Both must be in cmuts-compatible HDF5 files.
 
 The error of the background-subtracted rates is computed using the standard quadrature formula. The coverage and the four read-related datasets simply take the sum of the treated and untreated values.
 
+To normalize the result against a denatured control, pass it to [cmuts-div](cmuts-div.md).
+
 ```{warning}
 High coverage in the output dataset does not imply high-quality data, since it is insensitive to imbalances in the treated and untreated experiments. Either ensure each experiment separately has high coverage or use the signal-to-noise ratio as a more robust quality metric.
 ```
@@ -40,7 +42,6 @@ High coverage in the output dataset does not imply high-quality data, since it i
 
 | Option | Description |
 | --- | --- |
-| `-d, --denatured HDF5` | normalize against a denatured control (default: none) |
 | `--clip` | raise a negative reactivity to zero |
 
 ### Information

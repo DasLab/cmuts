@@ -76,6 +76,7 @@ output
 cmuts-align
 cmuts-hmm
 cmuts-sub
+cmuts-div
 cmuts-gen
 ```
 
