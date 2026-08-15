@@ -49,8 +49,8 @@ typedef struct {
  * not hold. Derived from the alphabet width, as UNINFORMATIVE is. */
 #define OTHER_BASES ((double)(NUC_BASES - 1))
 
-/* Forward times backward sums to one on every row. A departure past this
- * indicates an index error and not rounding, and the read is discarded. */
+/* Forward times backward sums to one on the first row. A departure past this indicates an
+ * index error and not rounding, and the run stops. */
 #define NORMALIZATION_TOLERANCE 1e-6
 
 /* Rows are stored at the widest row's stride, so a row is located by
@@ -838,8 +838,11 @@ static void backward_first_row(const context *ctx)
     }
 }
 
-/* Returns whether the two passes agree, checked on one row. They must describe the same
- * set of paths, or their product is not a posterior; every row then sums to one. */
+/* Returns whether the two passes agree at the first row. They must describe the same set
+ * of paths, or their product is not a posterior and the row does not sum to one.
+ *
+ * The first row is the last the backward pass computes, so it carries the whole backward
+ * chain and every forward scale factor. It is also one of the two rows the pass keeps. */
 static bool normalized(const context *ctx)
 {
     scaled_row       front = scaled_row_of(ctx, 0);
