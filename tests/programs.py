@@ -18,8 +18,6 @@ CMUTS_GEN = "cmuts-gen"
 CMUTS_SUB = "cmuts-sub"
 PROGRAMS = (CMUTS_HMM, CMUTS_GEN, CMUTS_SUB)
 
-DEFAULT_WORKERS = 4
-
 
 def locate(name: str) -> Path | None:
     """Finds a program on PATH, disregarding any copy from outside this
@@ -93,21 +91,24 @@ def _options(given: dict) -> list:
     return words
 
 
-def _cmuts_command(data, output, workers: int, options: dict) -> list:
-    return [CMUTS_HMM, "-f", data.fasta, "-o", output, "-j", workers,
-            *_options(options), *data.bams]
+def _cmuts_command(data, output, options: dict) -> list:
+    return [CMUTS_HMM, "-f", data.fasta, "-o", output, *_options(options), *data.bams]
 
 
-def run_cmuts(data, output, workers: int = DEFAULT_WORKERS, **options):
-    """Counts an alignment, returning the read counts written to the output."""
-    execute(_cmuts_command(data, output, workers, options))
+def run_cmuts(data, output, **options):
+    """Counts an alignment, returning the read counts written to the output.
+
+    An option the caller does not give is left to the program, so a run here is the run
+    a user gets.
+    """
+    execute(_cmuts_command(data, output, options))
 
     return read_summary(output)
 
 
-def try_cmuts(data, output, workers: int = DEFAULT_WORKERS, **options):
+def try_cmuts(data, output, **options):
     """Counts an alignment whether or not the run succeeds."""
-    return attempt(_cmuts_command(data, output, workers, options))
+    return attempt(_cmuts_command(data, output, options))
 
 
 def _subtract_command(treated, untreated, output, options: dict) -> list:

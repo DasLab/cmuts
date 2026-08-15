@@ -65,8 +65,8 @@ You may specify a subset of the parameters to modify only them.
 
 | Option | Description |
 | --- | --- |
-| `-j, --workers N` | threads running the processing step (default 4) |
-| `--decode-threads N` | htslib threads for BGZF decompression (default 4) |
+| `-j, --workers N` | threads running the processing step (default 1) |
+| `--decode-threads N` | htslib threads for BGZF decompression (default 0) |
 | `--queue-capacity N` | reads in transit at once (default 4096) |
 | `--batch N` | reads transferred per queue operation (default 64) |
 | `--live-refs N` | references in flight (default 64) |

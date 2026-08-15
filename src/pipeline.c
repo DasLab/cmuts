@@ -565,8 +565,8 @@ pipeline_config pipeline_defaults(void)
     return (pipeline_config){
         .rate_config    = rate_defaults(),
         .verify         = REFSEQ_VERIFY_ALL,
-        .workers        = 4,
-        .decode_threads = 4,
+        .workers        = 1,
+        .decode_threads = 0,
         .queue_capacity = 4096,
         .batch          = 64,
         .live_refs      = 64,
