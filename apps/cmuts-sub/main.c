@@ -23,7 +23,7 @@ int main(int argc, char **argv)
         case CLI_OK:    break;
     }
 
-    if (subtract_run(&args.subtract, error, sizeof error) < 0) {
+    if (subtract_run(&args.subtract, spec.program, error, sizeof error) < 0) {
         fprintf(stderr, "%s: %s\n", spec.program, error);
         return 1;
     }

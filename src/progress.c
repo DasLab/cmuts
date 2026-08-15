@@ -18,6 +18,9 @@
 #define BAR_MAX_CELLS   60
 #define ASSUMED_COLUMNS 80
 
+/* The percentage a finished run stands at, which is also what the bar divides by. */
+#define PERCENT_WHOLE 100
+
 /* A cell is UTF-8, occupying one column but more than one byte. */
 #define CELL_FILLED "█"
 #define CELL_EMPTY  " "
@@ -75,22 +78,25 @@ progress *progress_start(const cm_bam_stream *stream)
     return bar;
 }
 
-/* Returns how far along the bar a position is, held to 100. Decoding runs ahead of the
- * records handed on, so the reader can be past the span the bar was drawn across. */
+/* Returns how far along the bar a position is, held to PERCENT_WHOLE. Decoding runs ahead
+ * of the records handed on, so the reader can be past the span the bar was drawn
+ * across. */
 static int percentage(const progress *bar, uint64_t position)
 {
-    return position >= bar->span ? 100 : (int)(position * 100 / bar->span);
+    return position >= bar->span ? PERCENT_WHOLE : (int)(position * PERCENT_WHOLE / bar->span);
 }
 
 static uint64_t redraw_at(const progress *bar, int percent)
 {
-    return percent >= 100 ? UINT64_MAX : bar->span * (uint64_t)(percent + 1) / 100;
+    return percent >= PERCENT_WHOLE
+         ? UINT64_MAX
+         : bar->span * (uint64_t)(percent + 1) / PERCENT_WHOLE;
 }
 
 static void draw(const progress *bar, int percent)
 {
     char   cells[BAR_MAX_CELLS * CELL_MAX_BYTES + 1];
-    int    filled = bar->width * percent / 100;
+    int    filled = bar->width * percent / PERCENT_WHOLE;
     size_t at     = 0;
 
     for (int cell = 0; cell < bar->width; cell++) {

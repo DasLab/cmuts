@@ -26,12 +26,15 @@
 /* What getopt returns for an option given without the value it needs. */
 #define MISSING_VALUE ':'
 
-#define REJECTED_MAX   64  /* an option as it was written on the command line */
-#define METAVAR_MAX    32  /* a placeholder, with any ellipsis */
-#define INVOCATION_MAX 64  /* both forms of an option, and its placeholder */
-#define CEILING_MAX    32  /* an option's largest value, written out */
-#define SET_LIST_MAX   64  /* the choices a set holds, comma separated */
-#define DEFAULT_NOTE_MAX 64 /* the note giving an option's default. */
+#define REJECTED_MAX     64  /* an option as it was written on the command line */
+#define METAVAR_MAX      32  /* a placeholder, with any ellipsis */
+#define INVOCATION_MAX   64  /* both forms of an option, and its placeholder */
+#define CEILING_MAX      32  /* an option's largest value, written out */
+#define SET_LIST_MAX     64  /* the choices a set holds, comma separated */
+#define DEFAULT_NOTE_MAX 64  /* the note giving an option's default */
+
+/* A leading colon, a letter and possibly a colon per option, and the terminator. */
+#define SHORTOPTS_SIZE(options) (2 + (2 * (options)))
 
 /* The column an option's help begins in, shared with the arguments list so the
  * two cannot step apart. A floor and not a fixed width, since a metavar may be
@@ -98,14 +101,15 @@ static const cli_option *option_by_id(const cli_spec *spec, int id)
 /* ------------------------------------------------------------------------ */
 
 /* Builds the short option string. The leading colon has getopt report a missing
- * value separately from an unknown option, so they can get different messages. */
+ * value separately from an unknown option, so they can get different messages. The guard
+ * leaves room for an option and the terminator, which SHORTOPTS_SIZE provides. */
 static void build_short_options(const cli_spec *spec, char *out, size_t size)
 {
     size_t n = 0;
 
     out[n++] = ':';
 
-    for (size_t i = 0; i < spec->n_options && n + 3 < size; i++) {
+    for (size_t i = 0; i < spec->n_options && n + 2 < size; i++) {
         if (!spec->options[i].key) {
             continue;
         }
@@ -903,7 +907,7 @@ static bool answer(const cli_spec *spec, const cli_option *opt)
 
 cli_status cli_parse(const cli_spec *spec, int argc, char **argv, void *args)
 {
-    size_t         shortopts_size = 2 * spec->n_options + 3;
+    size_t         shortopts_size = SHORTOPTS_SIZE(spec->n_options);
     struct option *longopts  = calloc(spec->n_options + 1, sizeof *longopts);
     char          *shortopts = calloc(shortopts_size, sizeof *shortopts);
     bool          *seen      = calloc(spec->n_options, sizeof *seen);

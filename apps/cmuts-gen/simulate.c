@@ -1,8 +1,8 @@
 /* simulate.c -- alignments built from a reference and a mutation model.
  *
- * A read is first laid out as a list of single-base events, from which the CIGAR, SEQ, MD and NM
- * are all then derived. Nothing is written twice, so the four cannot contradict each other
- * however the events fall.
+ * A read is first laid out as a list of single-base events, from which the CIGAR, SEQ, MD
+ * and NM are all then derived. Nothing is written twice, so the four cannot contradict
+ * each other however the events fall.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -304,9 +304,9 @@ static size_t build_sequence(const sim_event *events, size_t n, const sim_model 
 /* Appends a match count and the one character closing it: the base that broke the run, or the
  * caret opening a deletion.
  *
- * Returns the cursor where the text ends, not where it would have ended had there been room,
- * which is what snprintf reports. The two differ only once the buffer is full, and a cursor past
- * the end would put every write after it outside the buffer. */
+ * Returns the cursor where the text ends, not where it would have ended had there been
+ * room, which is what snprintf reports. The two differ only once the buffer is full, and
+ * a cursor past the end would put every write after it outside the buffer. */
 static size_t append_run(char *md, size_t used, size_t cap, long run,
                          char closing)
 {
@@ -332,9 +332,9 @@ static size_t append_base(char *md, size_t used, size_t cap, char base)
     return used;
 }
 
-/* Builds the MD tag. It describes only the reference-consuming positions, so insertions and soft
- * clips contribute nothing. It opens and closes with a match count and carries one between every
- * pair of events, which is why a run of zero is still written out.
+/* Builds the MD tag. It describes only the reference-consuming positions, so insertions
+ * and soft clips contribute nothing. It opens and closes with a match count and carries
+ * one between every pair of events, which is why a run of zero is still written out.
  *
  * Every step leaves the cursor short of cap, so the closing count writes inside the buffer
  * however the events fell. */

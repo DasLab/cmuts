@@ -14,9 +14,6 @@
 #include "combine.h"
 #include "output.h"
 
-/* The name written into the output as the program that produced it. */
-#define SUBTRACT_PROGRAM "cmuts-sub"
-
 typedef enum {
     SUB_TREATED,
     SUB_UNTREATED,
@@ -126,7 +123,8 @@ static int subtract_field(const combine_rows *rows, out_field_id id, void *out, 
 /* Assembly                                                                  */
 /* ------------------------------------------------------------------------ */
 
-int subtract_run(const subtract_config *cfg, char *error, size_t error_len)
+int subtract_run(const subtract_config *cfg, const char *program, char *error,
+                 size_t error_len)
 {
     const char *paths[SUB_N_INPUTS];
 
@@ -134,7 +132,7 @@ int subtract_run(const subtract_config *cfg, char *error, size_t error_len)
     paths[SUB_UNTREATED] = cfg->untreated_path;
 
     const combine_spec spec = {
-        .program   = SUBTRACT_PROGRAM,
+        .program   = program,
         .inputs    = paths,
         .n_inputs  = SUB_N_INPUTS,
         .output    = cfg->output_path,

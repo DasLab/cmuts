@@ -18,7 +18,7 @@ from alignments import (
     write_fasta,
 )
 from oracle import sequences
-from outputs import outputs_agree
+from outputs import outputs_agree, read_summary
 from programs import run_cmuts, try_cmuts
 
 
@@ -46,8 +46,9 @@ def test_a_matching_checksum_changes_nothing_counted(data, falsifiable, tmp_path
     asserts that checking it leaves the result unchanged."""
     falsifiable(has_references(data))
 
-    checked = run_cmuts(data, tmp_path / "checked.h5")
-    unchecked = run_cmuts(data, tmp_path / "unchecked.h5", verify="name,length")
+    checked = read_summary(run_cmuts(data, tmp_path / "checked.h5"))
+    unchecked = read_summary(
+        run_cmuts(data, tmp_path / "unchecked.h5", verify="name,length"))
 
     assert checked == unchecked
     assert outputs_agree(tmp_path / "checked.h5", tmp_path / "unchecked.h5")
@@ -74,7 +75,7 @@ def test_a_reference_without_a_checksum_is_not_checked(data, falsifiable, tmp_pa
 
     assert try_cmuts(replace_bases(stripped, tmp_path), wrong).returncode == 0
 
-    kept = run_cmuts(data, right).kept
+    kept = read_summary(run_cmuts(data, right)).kept
 
     # Where every read was rejected, the two runs count nothing either way, so
     # the bases they would have counted over cannot be told apart.

@@ -95,13 +95,17 @@ typedef struct {
 
 /* How a marginalization ended.
  *
- * Both failures indicate a bad parameter or a bug, and not a bad read, so neither is fixed
- * by trying the next alignment. A row summing to zero means a band with no width; a
- * row summing to something non-finite means a parameter that is not a probability; the two
- * passes disagreeing about which paths exist means an index error. */
+ * PHMM_NO_PATH is the read, the rates and the band together: the rates give probability
+ * zero to something the read contains, and the band is too narrow to route around it.
+ * Widening the band or opening the rate it needs admits a path.
+ *
+ * The other two are a bad parameter or a bug, and trying the next alignment fixes
+ * neither. A row summing to something non-finite means a rate that is not a probability;
+ * the two passes disagreeing about which paths exist means an index error. */
 typedef enum {
     PHMM_OK,          /* out holds the read's contribution */
     PHMM_NO_MEMORY,   /* the matrix could not be allocated */
+    PHMM_NO_PATH,     /* no alignment the band admits has any probability */
     PHMM_UNSOUND,     /* the two passes did not agree */
 } phmm_status;
 

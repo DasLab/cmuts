@@ -33,6 +33,7 @@ from outputs import (
     delete_field,
     field_of,
     layout_of,
+    read_summary,
     set_field_width,
     write_output,
 )
@@ -468,7 +469,7 @@ def test_cmuts_div_reads_what_cmuts_hmm_writes(data, falsifiable, tmp_path):
     rates = tmp_path / "rates.h5"
     control = tmp_path / "control.h5"
 
-    summary = run_cmuts(data, rates)
+    summary = read_summary(run_cmuts(data, rates))
     run_cmuts(data, control, min_mapq=30)
 
     falsifiable(summary.rows > 0)

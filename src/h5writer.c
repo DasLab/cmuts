@@ -421,6 +421,14 @@ const char *h5writer_error(const h5writer *w)
     return w->error[0] ? w->error : NULL;
 }
 
+int h5writer_fail(const h5writer *w, const char *path, char *error, size_t error_len)
+{
+    const char *why = h5writer_error(w);
+
+    snprintf(error, error_len, "%s: %s", path, why ? why : "unable to write it");
+    return -1;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Rows                                                                      */
 /* ------------------------------------------------------------------------ */

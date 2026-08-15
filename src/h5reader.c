@@ -248,6 +248,14 @@ const char *h5reader_error(const h5reader *r)
     return r->error[0] ? r->error : NULL;
 }
 
+int h5reader_fail(const h5reader *r, const char *path, char *error, size_t error_len)
+{
+    const char *why = h5reader_error(r);
+
+    snprintf(error, error_len, "%s: %s", path, why ? why : "unable to read it");
+    return -1;
+}
+
 int32_t h5reader_refs(const h5reader *r)
 {
     return r->n_refs;

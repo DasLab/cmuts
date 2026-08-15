@@ -12,7 +12,7 @@ import pytest
 
 from alignments import replace_header, split_across_files
 from oracle import header_text
-from outputs import COUNT_FIELDS, field_of, outputs_agree
+from outputs import COUNT_FIELDS, field_of, outputs_agree, read_summary
 from programs import run_cmuts, try_cmuts
 
 # Two and three leave every file holding a share of every busy reference.
@@ -30,8 +30,9 @@ SPLIT_PARTS = 4
 
 @pytest.mark.parametrize("parts", PARTS)
 def test_a_split_file_counts_the_same_as_the_whole(data, falsifiable, tmp_path, parts):
-    whole = run_cmuts(data, tmp_path / "whole.h5")
-    split = run_cmuts(split_across_files(data, tmp_path, parts), tmp_path / "split.h5")
+    whole = read_summary(run_cmuts(data, tmp_path / "whole.h5"))
+    split = read_summary(
+        run_cmuts(split_across_files(data, tmp_path, parts), tmp_path / "split.h5"))
 
     falsifiable(whole.kept > 0)
 
@@ -42,7 +43,7 @@ def test_a_split_file_counts_the_same_as_the_whole(data, falsifiable, tmp_path, 
 def test_the_order_of_the_input_files_does_not_matter(data, falsifiable, tmp_path):
     split = split_across_files(data, tmp_path, SPLIT_PARTS)
 
-    forwards = run_cmuts(split, tmp_path / "forwards.h5")
+    forwards = read_summary(run_cmuts(split, tmp_path / "forwards.h5"))
     run_cmuts(replace(split, bams=tuple(reversed(split.bams))),
               tmp_path / "backwards.h5")
 
@@ -57,8 +58,9 @@ def test_the_order_of_the_input_files_does_not_matter(data, falsifiable, tmp_pat
 
 
 def test_the_same_file_twice_counts_everything_twice(data, falsifiable, tmp_path):
-    once = run_cmuts(data, tmp_path / "once.h5")
-    twice = run_cmuts(replace(data, bams=data.bams * 2), tmp_path / "twice.h5")
+    once = read_summary(run_cmuts(data, tmp_path / "once.h5"))
+    twice = read_summary(
+        run_cmuts(replace(data, bams=data.bams * 2), tmp_path / "twice.h5"))
 
     # Where the first run kept no reads, both totals are zero whether or not
     # cmuts-hmm read the second file.

@@ -34,6 +34,7 @@ from outputs import (
     delete_field,
     field_of,
     layout_of,
+    read_summary,
     write_output,
 )
 from programs import (
@@ -473,7 +474,7 @@ def test_a_second_output_already_there_leaves_the_first_alone(build, tmp_path):
 def test_cmuts_norm_reads_what_cmuts_hmm_writes(data, falsifiable, tmp_path):
     """Asserts that the run succeeds and leaves a file shaped like its input."""
     counted = tmp_path / "counted.h5"
-    summary = run_cmuts(data, counted)
+    summary = read_summary(run_cmuts(data, counted))
 
     falsifiable(summary.rows > 0)
 

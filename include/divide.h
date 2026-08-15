@@ -16,5 +16,7 @@ typedef struct {
 } divide_config;
 
 /* Divides the rates by the control, field by field, into a file of the same layout.
- * Returns 0, or -1 with a description in error. */
-int divide_run(const divide_config *cfg, char *error, size_t error_len);
+ * program is recorded in the output as what produced it. Returns 0, or -1 with a
+ * description in error. */
+int divide_run(const divide_config *cfg, const char *program, char *error,
+               size_t error_len);

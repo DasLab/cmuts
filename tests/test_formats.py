@@ -15,7 +15,7 @@ import pytest
 from alignments import CRAM, FORMATS, NATIVE, convert_format
 from filters import COMPOUND, criteria, describe_filters
 from oracle import assert_counts_agree
-from outputs import outputs_agree
+from outputs import outputs_agree, read_summary
 from programs import run_cmuts
 
 # The criteria a format is tried under. The whole matrix belongs to
@@ -51,7 +51,8 @@ def test_every_format_gives_the_same_answer(data, falsifiable, tmp_path, target,
     """The target is named separately from the fmt fixture, which holds the
     alignments in the format they were generated in for the comparison."""
     converted = convert_format(data, tmp_path, target)
-    summary = run_cmuts(converted, tmp_path / "out.h5", **criteria(filters))
+    summary = read_summary(
+        run_cmuts(converted, tmp_path / "out.h5", **criteria(filters)))
 
     # Only a run that kept reads compares what the format stored.
     falsifiable(summary.kept > 0)
@@ -74,7 +75,7 @@ def test_cram_decodes_against_the_reference_it_was_given(data, falsifiable, tmp_
     run_cmuts(data, tmp_path / "bam.h5")
 
     with moved_aside(converted.fasta):
-        summary = run_cmuts(hidden, tmp_path / "cram.h5")
+        summary = read_summary(run_cmuts(hidden, tmp_path / "cram.h5"))
 
     # The read counts agree whichever reference cmuts-hmm decoded against, so
     # only the per-base fields depend on which one it used, and those are

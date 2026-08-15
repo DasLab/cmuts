@@ -66,3 +66,8 @@ int h5writer_total(h5writer *w, out_field_id id, size_t value);
 int h5writer_attribute(h5writer *w, const char *name, double value);
 
 const char *h5writer_error(const h5writer *w);
+
+/* Writes why the writer failed into error, naming the path it was created at. Stands in
+ * for a writer that failed without saying why. Returns -1, which is what a caller reporting
+ * a failure returns. */
+int h5writer_fail(const h5writer *w, const char *path, char *error, size_t error_len);

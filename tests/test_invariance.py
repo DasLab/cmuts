@@ -7,7 +7,7 @@ writing empty arrays, so each test declares on what its own run kept.
 
 import pytest
 
-from outputs import outputs_agree
+from outputs import outputs_agree, read_summary
 from programs import run_cmuts
 
 # The divisions of work a run is tried under.
@@ -36,7 +36,7 @@ def baseline(tmp_path_factory):
 
 
 def test_worker_count_does_not_change_the_result(data, falsifiable, tmp_path):
-    one = run_cmuts(data, tmp_path / "one.h5", workers=1, min_mapq=10)
+    one = read_summary(run_cmuts(data, tmp_path / "one.h5", workers=1, min_mapq=10))
     run_cmuts(data, tmp_path / "many.h5", workers=16, min_mapq=10)
 
     falsifiable(one.kept > 0)
@@ -47,7 +47,8 @@ def test_worker_count_does_not_change_the_result(data, falsifiable, tmp_path):
 @pytest.mark.parametrize("threads", DECODE_THREADS)
 def test_decode_threads_do_not_change_the_result(data, falsifiable, baseline, tmp_path,
                                                  threads):
-    varied = run_cmuts(data, tmp_path / "threaded.h5", decode_threads=threads)
+    varied = read_summary(
+        run_cmuts(data, tmp_path / "threaded.h5", decode_threads=threads))
 
     falsifiable(varied.kept > 0)
 
@@ -57,7 +58,7 @@ def test_decode_threads_do_not_change_the_result(data, falsifiable, baseline, tm
 @pytest.mark.parametrize("batch", BATCH_SIZES)
 def test_batch_size_does_not_change_the_result(data, falsifiable, baseline, tmp_path,
                                                batch):
-    varied = run_cmuts(data, tmp_path / "sized.h5", batch=batch)
+    varied = read_summary(run_cmuts(data, tmp_path / "sized.h5", batch=batch))
 
     falsifiable(varied.kept > 0)
 
@@ -66,7 +67,8 @@ def test_batch_size_does_not_change_the_result(data, falsifiable, baseline, tmp_
 
 def test_a_queue_of_one_does_not_change_the_result(data, falsifiable, baseline,
                                                    tmp_path):
-    varied = run_cmuts(data, tmp_path / "starved.h5", queue_capacity=1, batch=1)
+    varied = read_summary(
+        run_cmuts(data, tmp_path / "starved.h5", queue_capacity=1, batch=1))
 
     falsifiable(varied.kept > 0)
 
@@ -75,7 +77,7 @@ def test_a_queue_of_one_does_not_change_the_result(data, falsifiable, baseline,
 
 def test_one_reference_in_flight_does_not_change_the_result(data, falsifiable, baseline,
                                                             tmp_path):
-    varied = run_cmuts(data, tmp_path / "single-file.h5", live_refs=1)
+    varied = read_summary(run_cmuts(data, tmp_path / "single-file.h5", live_refs=1))
 
     falsifiable(varied.kept > 0)
 

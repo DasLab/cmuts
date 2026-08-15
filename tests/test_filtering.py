@@ -11,6 +11,7 @@ from oracle import (
     records,
     samtools_kept,
 )
+from outputs import read_summary
 from programs import run_cmuts
 
 
@@ -18,7 +19,7 @@ from programs import run_cmuts
 def test_read_counts_match_samtools(data, falsifiable, tmp_path, filters):
     falsifiable(data.mapped > 0)
 
-    summary = run_cmuts(data, tmp_path / "out.h5", **criteria(filters))
+    summary = read_summary(run_cmuts(data, tmp_path / "out.h5", **criteria(filters)))
 
     assert_counts_agree(summary, data, criteria(filters))
 
@@ -32,7 +33,7 @@ def test_an_unavailable_mapping_quality_is_refused(data, falsifiable, tmp_path):
 
     falsifiable(len(unavailable) > 0)
 
-    summary = run_cmuts(data, tmp_path / "out.h5", **UNFILTERED)
+    summary = read_summary(run_cmuts(data, tmp_path / "out.h5", **UNFILTERED))
 
     assert summary.kept == len(counted) - len(unavailable), \
         "a read of unavailable mapping quality survived a threshold of zero"
@@ -41,7 +42,7 @@ def test_an_unavailable_mapping_quality_is_refused(data, falsifiable, tmp_path):
 def test_rejecting_everything_leaves_a_valid_file(data, falsifiable, tmp_path):
     falsifiable(data.mapped > 0)
 
-    summary = run_cmuts(data, tmp_path / "out.h5", min_length=9000)
+    summary = read_summary(run_cmuts(data, tmp_path / "out.h5", min_length=9000))
 
     assert summary.kept == 0
     assert summary.rejected == data.mapped
@@ -58,7 +59,7 @@ def test_secondary_alignments_are_refused(data, falsifiable, tmp_path):
 
     falsifiable(marked > 0)
 
-    summary = run_cmuts(marked_data, tmp_path / "out.h5", **UNFILTERED)
+    summary = read_summary(run_cmuts(marked_data, tmp_path / "out.h5", **UNFILTERED))
 
     assert summary.kept == samtools_kept(marked_data, **UNFILTERED), \
         "agreement with samtools"

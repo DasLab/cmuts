@@ -13,9 +13,6 @@
 #include "combine.h"
 #include "output.h"
 
-/* The name written into the output as the program that produced it. */
-#define DIVIDE_PROGRAM "cmuts-div"
-
 typedef enum {
     DIV_RATES,
     DIV_CONTROL,
@@ -117,7 +114,8 @@ static int divide_field(const combine_rows *rows, out_field_id id, void *out, si
 /* Assembly                                                                  */
 /* ------------------------------------------------------------------------ */
 
-int divide_run(const divide_config *cfg, char *error, size_t error_len)
+int divide_run(const divide_config *cfg, const char *program, char *error,
+               size_t error_len)
 {
     const char *paths[DIV_N_INPUTS];
 
@@ -125,7 +123,7 @@ int divide_run(const divide_config *cfg, char *error, size_t error_len)
     paths[DIV_CONTROL] = cfg->control_path;
 
     const combine_spec spec = {
-        .program   = DIVIDE_PROGRAM,
+        .program   = program,
         .inputs    = paths,
         .n_inputs  = DIV_N_INPUTS,
         .output    = cfg->output_path,

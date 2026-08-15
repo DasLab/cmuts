@@ -8,14 +8,19 @@
 #include <stddef.h>
 #include <stdio.h>
 
+/* The rates the pair HMM runs on. What a transition rate leaves over goes to the step back
+ * to a match, so the two opening rates sum below one and each extending rate is below
+ * one. */
 typedef struct {
-    double open_deletion;
-    double open_insertion;
-    double extend_deletion;
-    double extend_insertion;
-    double modification;
+    double open_deletion;     /* a match steps to a deletion */
+    double open_insertion;    /* a match steps to an insertion */
+    double extend_deletion;   /* a deletion runs on */
+    double extend_insertion;  /* an insertion runs on */
+    double modification;      /* a reference base was modified before it was read */
 } phmm_params;
 
+/* The default rates a run uses. Overridden by fields present in the file passed to
+ * --params. */
 phmm_params phmm_defaults(void);
 
 /* Reads an HMM parameter file. Returns 0, or -1 with a reason in error. */

@@ -19,9 +19,6 @@
 #include "h5writer.h"
 #include "output.h"
 
-/* The name written into the output as the program that produced it. */
-#define NORMALIZE_PROGRAM "cmuts-norm"
-
 /* The rate the ubr scale sits at, as a fraction of the way up the pool. */
 #define UBR_PERCENTILE 0.90
 
@@ -272,24 +269,6 @@ static bool is_scaled(out_field_id id)
 /* Failures                                                                  */
 /* ------------------------------------------------------------------------ */
 
-static int fail_input(const h5reader *in, const char *path, char *error,
-                      size_t error_len)
-{
-    const char *why = h5reader_error(in);
-
-    snprintf(error, error_len, "%s: %s", path, why ? why : "unable to read it");
-    return -1;
-}
-
-static int fail_output(const h5writer *out, const char *path, char *error,
-                       size_t error_len)
-{
-    const char *why = h5writer_error(out);
-
-    snprintf(error, error_len, "%s: %s", path, why ? why : "unable to write it");
-    return -1;
-}
-
 static int fail_memory(char *error, size_t error_len)
 {
     snprintf(error, error_len, "out of memory");
@@ -340,7 +319,7 @@ static int gather_input(const normalize_config *cfg, rate_pool *p, h5reader *in,
     for (int32_t tid = 0; tid < h5reader_refs(in); tid++) {
         if (h5reader_field(in, OUT_REACTIVITY, tid, rate) < 0 ||
             h5reader_field(in, OUT_COVERAGE, tid, cover) < 0) {
-            fail_input(in, path, error, error_len);
+            h5reader_fail(in, path, error, error_len);
             goto done;
         }
 
@@ -372,7 +351,7 @@ static int gather(const normalize_config *cfg, rate_pool *p, char *error,
         }
 
         if (h5reader_error(in)) {
-            fail_input(in, cfg->inputs[i], error, error_len);
+            h5reader_fail(in, cfg->inputs[i], error, error_len);
         } else {
             status = gather_input(cfg, p, in, cfg->inputs[i], error, error_len);
         }
@@ -399,6 +378,7 @@ typedef struct {
     h5writer   *out;
     const char *in_path;
     const char *out_path;
+    const char *program;
 
     void   *row;
     int32_t n_refs;
@@ -427,13 +407,13 @@ static int transfer_reference(const transfer *t, int32_t tid, char *error,
         }
 
         if (h5reader_field(t->in, id, tid, t->row) < 0) {
-            return fail_input(t->in, t->in_path, error, error_len);
+            return h5reader_fail(t->in, t->in_path, error, error_len);
         }
 
         transfer_row(t, id, out_values(id, t->ref_cap, t->ref_cap));
 
         if (h5writer_row(t->out, id, tid, t->row) < 0) {
-            return fail_output(t->out, t->out_path, error, error_len);
+            return h5writer_fail(t->out, t->out_path, error, error_len);
         }
     }
 
@@ -450,11 +430,11 @@ static int transfer_totals(const transfer *t, char *error, size_t error_len)
         }
 
         if (h5reader_total(t->in, id, &total) < 0) {
-            return fail_input(t->in, t->in_path, error, error_len);
+            return h5reader_fail(t->in, t->in_path, error, error_len);
         }
 
         if (h5writer_total(t->out, id, total) < 0) {
-            return fail_output(t->out, t->out_path, error, error_len);
+            return h5writer_fail(t->out, t->out_path, error, error_len);
         }
     }
 
@@ -474,7 +454,7 @@ static int transfer_file(const transfer *t, char *error, size_t error_len)
     }
 
     if (h5writer_attribute(t->out, NORMALIZE_ATTRIBUTE, t->factor) < 0) {
-        return fail_output(t->out, t->out_path, error, error_len);
+        return h5writer_fail(t->out, t->out_path, error, error_len);
     }
 
     return 0;
@@ -489,7 +469,7 @@ static int open_transfer(transfer *t, bool may_replace, char *error, size_t erro
     }
 
     if (h5reader_error(t->in)) {
-        return fail_input(t->in, t->in_path, error, error_len);
+        return h5reader_fail(t->in, t->in_path, error, error_len);
     }
 
     t->n_refs  = h5reader_refs(t->in);
@@ -500,13 +480,13 @@ static int open_transfer(transfer *t, bool may_replace, char *error, size_t erro
         return fail_memory(error, error_len);
     }
 
-    t->out = h5writer_create(t->out_path, NORMALIZE_PROGRAM, t->n_refs, t->ref_cap,
+    t->out = h5writer_create(t->out_path, t->program, t->n_refs, t->ref_cap,
                              may_replace);
     if (!t->out) {
         return fail_memory(error, error_len);
     }
 
-    return h5writer_error(t->out) ? fail_output(t->out, t->out_path, error, error_len) : 0;
+    return h5writer_error(t->out) ? h5writer_fail(t->out, t->out_path, error, error_len) : 0;
 }
 
 static void transfer_teardown(transfer *t)
@@ -516,14 +496,15 @@ static void transfer_teardown(transfer *t)
     free(t->row);
 }
 
-static int write_output(const normalize_config *cfg, size_t which, double factor,
-                        char *error, size_t error_len)
+static int write_output(const normalize_config *cfg, size_t which, const char *program,
+                        double factor, char *error, size_t error_len)
 {
     transfer t = {
         .cfg      = cfg,
         .factor   = factor,
         .in_path  = cfg->inputs[which],
         .out_path = cfg->outputs[which],
+        .program  = program,
     };
     bool may_replace = false;
     int  status      = -1;
@@ -564,11 +545,11 @@ static int check_outputs(const normalize_config *cfg, char *error, size_t error_
     return 0;
 }
 
-static int write_outputs(const normalize_config *cfg, double factor, char *error,
-                         size_t error_len)
+static int write_outputs(const normalize_config *cfg, const char *program, double factor,
+                         char *error, size_t error_len)
 {
     for (size_t i = 0; i < cfg->n_files; i++) {
-        if (write_output(cfg, i, factor, error, error_len) < 0) {
+        if (write_output(cfg, i, program, factor, error, error_len) < 0) {
             return -1;
         }
     }
@@ -576,7 +557,8 @@ static int write_outputs(const normalize_config *cfg, double factor, char *error
     return 0;
 }
 
-int normalize_run(const normalize_config *cfg, char *error, size_t error_len)
+int normalize_run(const normalize_config *cfg, const char *program, char *error,
+                  size_t error_len)
 {
     rate_pool p      = { 0 };
     int       status = -1;
@@ -586,7 +568,7 @@ int normalize_run(const normalize_config *cfg, char *error, size_t error_len)
     }
 
     if (gather(cfg, &p, error, error_len) == 0) {
-        status = write_outputs(cfg, pooled_factor(cfg, &p), error, error_len);
+        status = write_outputs(cfg, program, pooled_factor(cfg, &p), error, error_len);
     }
 
     rate_pool_free(&p);

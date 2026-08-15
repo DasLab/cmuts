@@ -34,6 +34,8 @@ typedef struct {
 
 pipeline_config pipeline_defaults(void);
 
-/* Runs the input to completion, leaving the results in the output file. Returns 0, or -1 with
- * a description in error. */
-int pipeline_run(const pipeline_config *cfg, char *error, size_t error_len);
+/* Runs the input to completion, leaving the results in the output file. program is
+ * recorded in the output as what produced it, and comes from the command line the caller
+ * declared. Returns 0, or -1 with a description in error. */
+int pipeline_run(const pipeline_config *cfg, const char *program, char *error,
+                 size_t error_len);

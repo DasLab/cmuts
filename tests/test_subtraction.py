@@ -34,6 +34,7 @@ from outputs import (
     delete_field,
     field_of,
     layout_of,
+    read_summary,
     set_field_width,
     shape,
     write_output,
@@ -412,7 +413,7 @@ def test_cmuts_sub_reads_what_cmuts_hmm_writes(data, falsifiable, tmp_path):
     treated = tmp_path / "treated.h5"
     untreated = tmp_path / "untreated.h5"
 
-    summary = run_cmuts(data, treated)
+    summary = read_summary(run_cmuts(data, treated))
     run_cmuts(data, untreated, min_mapq=30)
 
     falsifiable(summary.rows > 0)

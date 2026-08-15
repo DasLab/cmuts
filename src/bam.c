@@ -32,6 +32,9 @@
 /* The low bits a BGZF virtual offset spends on the position within a block. */
 #define BGZF_OFFSET_BITS 16
 
+/* A header line names its record type in an at sign and two letters. */
+#define RECORD_TYPE_LEN 3
+
 static const char SORT_ORDER_COORDINATE[] = "coordinate";
 
 struct cm_bam_reader {
@@ -348,7 +351,7 @@ bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader)
     const char *order;
     size_t      len = strlen(SORT_ORDER_COORDINATE);
 
-    if (!text || strncmp(text, "@HD", 3) != 0) {
+    if (!text || strncmp(text, "@HD", RECORD_TYPE_LEN) != 0) {
         return false;
     }
 
@@ -373,7 +376,7 @@ bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader)
 static const char *next_declaration(const char *line)
 {
     for (; line; line = next_line(line)) {
-        if (strncmp(line, "@SQ", 3) == 0) {
+        if (strncmp(line, "@SQ", RECORD_TYPE_LEN) == 0) {
             return line;
         }
     }

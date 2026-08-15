@@ -6,7 +6,7 @@ covered here as well.
 """
 
 from datasets import DATASETS
-from outputs import attributes_of, outputs_agree
+from outputs import attributes_of, outputs_agree, read_summary
 from programs import CMUTS_HMM, reported_version, run_cmuts, try_cmuts
 
 # Higher than the first run's threshold of zero, so the two runs of an
@@ -29,7 +29,7 @@ def next_dataset(catalogue, data):
 def test_an_existing_output_is_not_replaced_without_overwrite(data, falsifiable,
                                                               tmp_path):
     output = tmp_path / "out.h5"
-    first = run_cmuts(data, output)
+    first = read_summary(run_cmuts(data, output))
     before = output.read_bytes()
 
     # The refusal protects a result, so the first run must have written rows.
@@ -46,9 +46,10 @@ def test_overwrite_replaces_an_existing_output(data, falsifiable, tmp_path):
     them identifies which result was left at the path. Where the criteria make
     no difference to what a dataset counts, agreement identifies nothing."""
     output = tmp_path / "out.h5"
-    first = run_cmuts(data, output)
+    first = read_summary(run_cmuts(data, output))
 
-    second = run_cmuts(data, output, overwrite=True, min_mapq=STRICTER_MAPQ)
+    second = read_summary(
+        run_cmuts(data, output, overwrite=True, min_mapq=STRICTER_MAPQ))
     run_cmuts(data, tmp_path / "separate.h5", min_mapq=STRICTER_MAPQ)
 
     falsifiable(second != first)
@@ -60,7 +61,7 @@ def test_a_run_that_would_fail_destroys_nothing(data, falsifiable, catalogue, tm
     """The second run is given another dataset, so a result written before the
     refusal would be the wrong shape as well as the wrong values."""
     output = tmp_path / "out.h5"
-    first = run_cmuts(data, output)
+    first = read_summary(run_cmuts(data, output))
     before = output.read_bytes()
 
     falsifiable(first.rows > 0)
@@ -79,7 +80,7 @@ def test_an_empty_file_is_replaced_without_overwrite(data, falsifiable, tmp_path
 
     # Compared against the references any read reached: a dataset whose reads
     # are all rejected still gets a row for every reference they aligned to.
-    assert run_cmuts(data, output).rows == data.touched
+    assert read_summary(run_cmuts(data, output)).rows == data.touched
 
 
 def test_a_file_that_is_not_an_output_is_left_intact(data, falsifiable, tmp_path):

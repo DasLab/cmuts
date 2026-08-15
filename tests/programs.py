@@ -98,14 +98,14 @@ def _cmuts_command(data, output, options: dict) -> list:
 
 
 def run_cmuts(data, output, **options):
-    """Counts an alignment, returning the read counts written to the output.
+    """Counts an alignment, returning the path the result was written to.
 
     An option the caller does not give is left to the program, so a run here is the run
-    a user gets.
+    a user gets. Read the counts back with read_summary.
     """
     execute(_cmuts_command(data, output, options))
 
-    return read_summary(output)
+    return output
 
 
 def try_cmuts(data, output, **options):

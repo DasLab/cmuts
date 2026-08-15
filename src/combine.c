@@ -61,20 +61,12 @@ static size_t row_values(out_field_id id, size_t ref_cap)
 
 static int fail_input(const combination *c, size_t which, char *error, size_t error_len)
 {
-    const char *why = h5reader_error(c->input[which]);
-
-    snprintf(error, error_len, "%s: %s", c->spec->inputs[which],
-             why ? why : "unable to read it");
-    return -1;
+    return h5reader_fail(c->input[which], c->spec->inputs[which], error, error_len);
 }
 
 static int fail_output(const combination *c, char *error, size_t error_len)
 {
-    const char *why = h5writer_error(c->out);
-
-    snprintf(error, error_len, "%s: %s", c->spec->output,
-             why ? why : "unable to write it");
-    return -1;
+    return h5writer_fail(c->out, c->spec->output, error, error_len);
 }
 
 static int fail_rule(out_field_id id, char *error, size_t error_len)

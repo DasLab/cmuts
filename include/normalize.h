@@ -33,5 +33,7 @@ typedef struct {
 } normalize_config;
 
 /* Divides every input by one scale pooled over all of them, writing each to its own
- * output. Returns 0, or -1 with a description in error. */
-int normalize_run(const normalize_config *cfg, char *error, size_t error_len);
+ * output. program is recorded in each as what produced it. Returns 0, or -1 with a
+ * description in error. */
+int normalize_run(const normalize_config *cfg, const char *program, char *error,
+                  size_t error_len);

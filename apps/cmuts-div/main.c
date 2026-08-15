@@ -23,7 +23,7 @@ int main(int argc, char **argv)
         case CLI_OK:    break;
     }
 
-    if (divide_run(&args.divide, error, sizeof error) < 0) {
+    if (divide_run(&args.divide, spec.program, error, sizeof error) < 0) {
         fprintf(stderr, "%s: %s\n", spec.program, error);
         return 1;
     }

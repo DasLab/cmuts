@@ -499,36 +499,38 @@ static double forward_row(const context *ctx, size_t i)
     return (total_paired + total_inserted) + total_deleted;
 }
 
-/* Stores row i's scale factor, refusing a total that is zero or not finite. Every
- * row is scaled by its own total, an unscaled forward pass underflowing a double
- * within a few hundred bases; the scaling itself is applied in the descent out of
- * the row. */
-static bool record_total(const context *ctx, size_t i, double total)
+/* Stores row i's scale factor. Every row is scaled by its own total, an unscaled forward
+ * pass underflowing a double within a few hundred bases; the scaling itself is applied in
+ * the descent out of the row.
+ *
+ * A total of zero means every path the band admits has probability zero, which is the read
+ * against the rates and not a fault. Anything else the reciprocal cannot be taken of is. */
+static phmm_status record_total(const context *ctx, size_t i, double total)
 {
+    if (total == 0.0) {
+        return PHMM_NO_PATH;
+    }
+
     if (!(total > 0.0) || !isfinite(total)) {
-        return false;
+        return PHMM_UNSOUND;
     }
 
     ctx->scratch->scale[i] = 1.0 / total;
 
-    return true;
+    return PHMM_OK;
 }
 
 /* Runs the forward pass. The first row is filled directly, having no row above to step
  * from. */
-static bool forward(const context *ctx)
+static phmm_status forward(const context *ctx)
 {
-    if (!record_total(ctx, 0, forward_first_row(ctx))) {
-        return false;
+    phmm_status status = record_total(ctx, 0, forward_first_row(ctx));
+
+    for (size_t i = 1; status == PHMM_OK && i < ctx->rows; i++) {
+        status = record_total(ctx, i, forward_row(ctx, i));
     }
 
-    for (size_t i = 1; i < ctx->rows; i++) {
-        if (!record_total(ctx, i, forward_row(ctx, i))) {
-            return false;
-        }
-    }
-
-    return true;
+    return status;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1099,12 +1101,19 @@ phmm_status phmm_run(const phmm *model, const phred *quality,
         .scratch = scratch,
         .half    = half,
     };
+    phmm_status status;
 
     if (!prepare(&ctx)) {
         return PHMM_NO_MEMORY;
     }
 
-    if (!forward(&ctx) || !backward(&ctx)) {
+    status = forward(&ctx);
+
+    if (status != PHMM_OK) {
+        return status;
+    }
+
+    if (!backward(&ctx)) {
         return PHMM_UNSOUND;
     }
 
