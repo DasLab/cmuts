@@ -54,7 +54,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_U64,
         .absent  = OUT_ZERO,
-        .detail  = "The number of reads rejected by at least one filter.",
+        .detail  = "The number of reads that contributed nothing: rejected by at least one filter, or carrying something the pair HMM's rates give no alignment of.",
     },
     [OUT_UNMAPPED] = {
         .name    = "reads/unmapped",

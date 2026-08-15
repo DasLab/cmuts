@@ -97,7 +97,8 @@ typedef struct {
  *
  * PHMM_NO_PATH is the read, the rates and the band together: the rates give probability
  * zero to something the read contains, and the band is too narrow to route around it.
- * Widening the band or opening the rate it needs admits a path.
+ * Widening the band or opening the rate it needs admits a path. It says nothing about the
+ * reads after it, so the caller counts that read as rejected and carries on.
  *
  * The other two are a bad parameter or a bug, and trying the next alignment fixes
  * neither. A row summing to something non-finite means a rate that is not a probability;

@@ -119,20 +119,28 @@ def test_a_missing_file_is_refused(data, falsifiable, tmp_path):
 
 
 @pytest.mark.parametrize("fmt", [NATIVE], indirect=True)
-def test_a_read_with_no_path_stops_the_run(data, falsifiable, tmp_path):
-    """A dataset from which no read is counted has nothing to score and runs to
-    the end, which is what makes this conditional rather than unconditional."""
+def test_a_read_with_no_path_is_scored_by_nothing(data, falsifiable, tmp_path):
     params = write_params(tmp_path / "params.txt", **NO_SECOND_BASE)
-    counted = read_summary(run_cmuts(data, tmp_path / "plain.h5")).kept
 
-    failed = try_cmuts(data, tmp_path / "out.h5", params=params)
+    summary = read_summary(run_cmuts(data, tmp_path / "out.h5", params=params))
 
-    falsifiable(counted > 0)
+    falsifiable(data.mapped > 0)
 
-    if counted > 0:
-        assert failed.returncode != 0
-    else:
-        assert failed.returncode == 0
+    assert summary.kept == 0
+
+
+@pytest.mark.parametrize("fmt", [NATIVE], indirect=True)
+def test_a_read_with_no_path_is_counted_as_rejected(data, falsifiable, tmp_path):
+    """Every mapped read lands in one of the two counts whether or not the model
+    can score it, so a run against rates that fit nothing still accounts for the
+    file it read."""
+    params = write_params(tmp_path / "params.txt", **NO_SECOND_BASE)
+
+    summary = read_summary(run_cmuts(data, tmp_path / "out.h5", params=params))
+
+    falsifiable(data.mapped > 0)
+
+    assert summary.kept + summary.rejected == data.mapped
 
 
 # The bases each deletion spans. The band is the other half of what makes a path,
@@ -148,39 +156,33 @@ def short_deletions(tmp_path):
                     deletion_length=DELETION_LENGTH)
 
 
-def test_a_narrow_band_gives_no_path(short_deletions, tmp_path):
+def scored(data, path, **options) -> int:
+    """The reads a run counted."""
+    return read_summary(run_cmuts(data, path, **options)).kept
+
+
+def test_a_narrow_band_scores_fewer_reads(short_deletions, tmp_path):
+    """A band that cannot reach across a deletion leaves the reads carrying one no
+    path, and a band that can scores them as mismatches instead."""
     params = write_params(tmp_path / "params.txt", **NO_INDELS)
 
-    failed = try_cmuts(short_deletions, tmp_path / "out.h5", params=params,
-                       band=str(DELETION_LENGTH - 1))
+    narrow = scored(short_deletions, tmp_path / "narrow.h5", params=params,
+                    band=str(DELETION_LENGTH - 1))
+    wide = scored(short_deletions, tmp_path / "wide.h5", params=params,
+                  band=str(DELETION_LENGTH + 1))
 
-    assert failed.returncode != 0
+    assert narrow < wide
 
 
-def test_a_wide_band_admits_a_path(short_deletions, tmp_path):
-    """The deletion is scored as mismatches instead, so the rates that stop the
-    narrower band run to the end."""
+def test_forbidding_indels_scores_nothing_in_a_run_with_them(catalogue, tmp_path):
     params = write_params(tmp_path / "params.txt", **NO_INDELS)
 
-    run = try_cmuts(short_deletions, tmp_path / "out.h5", params=params,
-                    band=str(DELETION_LENGTH + 1))
-
-    assert run.returncode == 0
+    assert scored(catalogue("indels", NATIVE), tmp_path / "out.h5", params=params) == 0
 
 
-def test_forbidding_indels_stops_a_run_with_them(catalogue, tmp_path):
+def test_forbidding_indels_scores_a_run_without_them(catalogue, tmp_path):
+    """The same rates that leave a dataset carrying indels unscored: whether a
+    model can score a run's reads is a property of the two together."""
     params = write_params(tmp_path / "params.txt", **NO_INDELS)
 
-    failed = try_cmuts(catalogue("indels", NATIVE), tmp_path / "out.h5", params=params)
-
-    assert failed.returncode != 0
-
-
-def test_forbidding_indels_allows_a_run_without_them(catalogue, tmp_path):
-    """The same rates that stop a dataset carrying indels: whether a model can
-    score a run's reads is a property of the two together."""
-    params = write_params(tmp_path / "params.txt", **NO_INDELS)
-
-    run = try_cmuts(catalogue("clean", NATIVE), tmp_path / "out.h5", params=params)
-
-    assert run.returncode == 0
+    assert scored(catalogue("clean", NATIVE), tmp_path / "out.h5", params=params) > 0

@@ -49,8 +49,9 @@ void           tally_scratch_destroy(tally_scratch *scratch);
  * reads: contributions land there with no allocation and no locking, and reach the shared
  * per-reference accumulator in a single merge.
  *
- * Anything but PHMM_OK ends the run: the marginal fails only on what would fail again on
- * every read after it. */
+ * PHMM_NO_PATH counts the read as rejected and contributes nothing else, the model having
+ * no alignment of it to score. Anything else but PHMM_OK ends the run: the marginal then
+ * fails on what would fail again on every read after it. */
 phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
                   const tally_tables *tables, tally_scratch *scratch,
                   accum *target);

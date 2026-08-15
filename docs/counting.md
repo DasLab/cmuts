@@ -4,6 +4,8 @@
 
 Unmapped reads are counted separately and reach no reference. Secondary alignments, records storing no sequence, and records carrying no CIGAR are always refused, as is a read of mapping quality 255, which the SAM specification defines as "unavailable" rather than as a score above every threshold.
 
+A read the pair HMM can find no alignment of is rejected as well. That happens where the rates give probability zero to something the read carries and `--band` is too narrow to reach around it, so it follows from the model and the band rather than from the read alone.
+
 Every mapped read is either counted or rejected, and both totals are written, so nothing goes missing between the file and the result.
 
 ## What counts as a modification
@@ -16,7 +18,7 @@ Insertions are weighed at zero by default. An inserted base sits between two ref
 
 A deletion inside a run of the same base can be written after any base of the run, and every CIGAR that writes it describes the same alignment. cmuts marginalizes over the placements the aligner might have chosen instead, so a result does not depend on which one it did choose.
 
-`--band` is how far either side of the CIGAR the marginal looks, in reference positions. It must be at least as wide as a gap for the placements of that gap to agree. The default of 2 covers the gaps that occur in practice, and a wider band costs time.
+`--band` is how far either side of the CIGAR the marginal looks, in reference positions. It must be at least as wide as a gap for the placements of that gap to agree. The default of 2 covers the gaps that occur in practice, and a wider band costs time. A band too narrow to reach around a gap can leave the reads carrying one with no alignment at all, which counts them as rejected.
 
 ## Positions that get a rate
 

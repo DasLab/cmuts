@@ -49,8 +49,8 @@ typedef struct {
  * not hold. Derived from the alphabet width, as UNINFORMATIVE is. */
 #define OTHER_BASES ((double)(NUC_BASES - 1))
 
-/* Forward times backward sums to one on the first row. A departure past this indicates an
- * index error and not rounding, and the run stops. */
+/* Forward times backward sums to one on the first row. A finite departure past this
+ * indicates an index error and not rounding, and the run stops. */
 #define NORMALIZATION_TOLERANCE 1e-6
 
 /* Rows are stored at the widest row's stride, so a row is located by
@@ -503,16 +503,17 @@ static double forward_row(const context *ctx, size_t i)
  * pass underflowing a double within a few hundred bases; the scaling itself is applied in
  * the descent out of the row.
  *
- * A total of zero means every path the band admits has probability zero, which is the read
- * against the rates and not a fault. Anything else the reciprocal cannot be taken of is. */
+ * A total that is zero or subnormal has lost the precision the scaling needs: the band
+ * admits no path this read can be scored along, which is the read against the rates and
+ * not a fault. A total that is negative or not a number is one. */
 static phmm_status record_total(const context *ctx, size_t i, double total)
 {
-    if (total == 0.0) {
-        return PHMM_NO_PATH;
+    if (total < 0.0 || !isfinite(total)) {
+        return PHMM_UNSOUND;
     }
 
-    if (!(total > 0.0) || !isfinite(total)) {
-        return PHMM_UNSOUND;
+    if (!isnormal(total)) {
+        return PHMM_NO_PATH;
     }
 
     ctx->scratch->scale[i] = 1.0 / total;
@@ -838,12 +839,12 @@ static void backward_first_row(const context *ctx)
     }
 }
 
-/* Returns whether the two passes agree at the first row. They must describe the same set
- * of paths, or their product is not a posterior and the row does not sum to one.
+/* Returns the first row's forward times backward, which is one where the two passes
+ * describe the same set of paths.
  *
  * The first row is the last the backward pass computes, so it carries the whole backward
  * chain and every forward scale factor. It is also one of the two rows the pass keeps. */
-static bool normalized(const context *ctx)
+static double agreement(const context *ctx)
 {
     scaled_row       front = scaled_row_of(ctx, 0);
     const band_cell *back  = read_backward_row_of(ctx, 0);
@@ -855,12 +856,32 @@ static bool normalized(const context *ctx)
         }
     }
 
-    return fabs(total - 1.0) < NORMALIZATION_TOLERANCE;
+    return total;
+}
+
+/* Returns how the two passes ended.
+ *
+ * A total that is not finite is the backward pass overflowing: it multiplies by each row's
+ * scale factor as it descends, and on a read the rates make astronomically unlikely those
+ * factors are large enough that their product leaves the range of a double. That is the
+ * same absence of a path a forward total of zero is, reached from the other end.
+ *
+ * A finite total away from one is an index error, the two passes having described
+ * different sets of paths. */
+static phmm_status passes_agree(const context *ctx)
+{
+    double total = agreement(ctx);
+
+    if (!isfinite(total)) {
+        return PHMM_NO_PATH;
+    }
+
+    return fabs(total - 1.0) < NORMALIZATION_TOLERANCE ? PHMM_OK : PHMM_UNSOUND;
 }
 
 /* Runs the backward pass. A read places at least one base, so there are always two rows
  * for the ends of it and the loop between them may be empty. */
-static bool backward(const context *ctx)
+static phmm_status backward(const context *ctx)
 {
     backward_last_row(ctx);
 
@@ -870,7 +891,7 @@ static bool backward(const context *ctx)
 
     backward_first_row(ctx);
 
-    return normalized(ctx);
+    return passes_agree(ctx);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1116,8 +1137,10 @@ phmm_status phmm_run(const phmm *model, const phred *quality,
         return status;
     }
 
-    if (!backward(&ctx)) {
-        return PHMM_UNSOUND;
+    status = backward(&ctx);
+
+    if (status != PHMM_OK) {
+        return status;
     }
 
     out->origin    = ctx.window.origin;

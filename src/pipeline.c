@@ -82,16 +82,15 @@ static phmm_status failure_seen(const failure_flag *f)
     return (phmm_status)atomic_load(&f->status);
 }
 
-/* What each way a marginalization can fail is reported as. Only PHMM_NO_PATH is the run's
- * own settings; the rest leave nothing for the caller to change. */
+/* What each way a marginalization can fail is reported as. PHMM_NO_PATH is listed for the
+ * switch and not reached: the worker counts that read as rejected and reads on. */
 static const char *failure_text(phmm_status status)
 {
     switch (status) {
         case PHMM_NO_MEMORY:
             return "out of memory marginalizing a read";
         case PHMM_NO_PATH:
-            return "no alignment of a read has any probability under these rates; "
-                   "a wider --band or a rate it needs opened may admit one";
+            return "no alignment of a read has any probability under these rates";
         case PHMM_UNSOUND:
             return "a marginalization did not hold together";
         case PHMM_OK:
@@ -172,6 +171,12 @@ static void worker_count_run(worker *w, void **slots, size_t n,
         cm_bam_record_view(item->rec, &read);
         status = tally(&read, ref, &w->pipe->tally_tables, w->scratch,
                        &w->shadow);
+
+        /* The tally has counted a read it could not score as rejected, so the run goes
+         * on. Every other failure would meet every read after it. */
+        if (status == PHMM_NO_PATH) {
+            continue;
+        }
 
         if (status != PHMM_OK) {
             failure_record(w->failure, status);

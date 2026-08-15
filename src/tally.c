@@ -172,6 +172,14 @@ phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
     };
     phmm_status status = marginalize(&ctx, scratch);
 
+    /* A read the model gives no path contributes nothing, and is counted where a read a
+     * filter turned away is counted. Nothing has reached the target: the window is added
+     * only on PHMM_OK, and the failure is seen before either count below. */
+    if (status == PHMM_NO_PATH) {
+        *accum_data(target, ACCUM_FILTERED) += 1.0;
+        return status;
+    }
+
     if (status != PHMM_OK) {
         return status;
     }
