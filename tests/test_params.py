@@ -3,8 +3,8 @@
 `--params` replaces the built-in rates. A file is refused where a rate is out of
 range or the two opening rates sum above one. Anything else is read, and whether
 a read can be scored against the model it describes is settled per read: a model
-that forbids what a read contains gives that read a probability of zero, which
-stops the run.
+that forbids what a read contains gives that read a probability of zero, and the
+read is counted as rejected.
 """
 
 from __future__ import annotations
@@ -30,8 +30,9 @@ USABLE = {
 # rate being in range and the openings summing to one.
 NO_SECOND_BASE = {"deletion-open": "1.0", "insertion-open": "0.0"}
 
-# A model that forbids indels, by never opening one. A read carrying an indel has
-# no path through it; a read without one is scored as usual.
+# A model that forbids indels, by never opening one. A read whose indels are short
+# enough for the band to cross is scored as a run of mismatches; a read carrying a
+# longer one has no path through the model.
 NO_INDELS = {"deletion-open": "0", "insertion-open": "0"}
 
 # Files the reader itself refuses.
@@ -174,15 +175,21 @@ def test_a_narrow_band_scores_fewer_reads(short_deletions, tmp_path):
     assert narrow < wide
 
 
-def test_forbidding_indels_scores_nothing_in_a_run_with_them(catalogue, tmp_path):
+def test_forbidding_indels_scores_fewer_reads(catalogue, tmp_path):
+    """Compared against the rates a default run uses, over the one dataset, so that
+    what the two disagree on is the model and not the reads."""
+    data = catalogue("indels", NATIVE)
     params = write_params(tmp_path / "params.txt", **NO_INDELS)
 
-    assert scored(catalogue("indels", NATIVE), tmp_path / "out.h5", params=params) == 0
+    forbidden = scored(data, tmp_path / "forbidden.h5", params=params)
+    allowed = scored(data, tmp_path / "allowed.h5")
+
+    assert forbidden < allowed
 
 
 def test_forbidding_indels_scores_a_run_without_them(catalogue, tmp_path):
-    """The same rates that leave a dataset carrying indels unscored: whether a
-    model can score a run's reads is a property of the two together."""
+    """The same rates that leave most of a dataset carrying indels unscored: whether
+    a model can score a run's reads is a property of the two together."""
     params = write_params(tmp_path / "params.txt", **NO_INDELS)
 
     assert scored(catalogue("clean", NATIVE), tmp_path / "out.h5", params=params) > 0

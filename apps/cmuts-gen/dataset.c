@@ -289,12 +289,21 @@ static void writer_close(writer *w)
 /* Reads                                                                     */
 /* ------------------------------------------------------------------------ */
 
+/* Orders placements by start, and those sharing one by span. qsort is not stable and
+ * orders equal elements differently between C libraries, so a comparison leaving any pair
+ * equal would leave the order of the reads, and every draw made laying them out, to the
+ * platform. Two placements agreeing on both fields are laid out from the same input and
+ * so may be taken in either order. */
 static int by_start(const void *a, const void *b)
 {
-    hts_pos_t x = ((const sim_placement *)a)->start;
-    hts_pos_t y = ((const sim_placement *)b)->start;
+    const sim_placement *x = a;
+    const sim_placement *y = b;
 
-    return x < y ? -1 : x > y;
+    if (x->start != y->start) {
+        return x->start < y->start ? -1 : 1;
+    }
+
+    return x->span < y->span ? -1 : x->span > y->span;
 }
 
 static int write_read(writer *w, rng *r, int32_t tid, sim_placement where)
