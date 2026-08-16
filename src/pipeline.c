@@ -656,8 +656,6 @@ static int pipeline_build_buffers(pipeline *p, const pipeline_config *cfg,
 
     p->batch         = cfg->batch;
     p->pairwise      = cfg->pairwise;
-    p->wanted[OUT_PAIRWISE_CORRELATION] = cfg->pairwise;
-    p->wanted[OUT_PAIRWISE_COVERAGE]    = cfg->pairwise;
     p->filter_config = cfg->filter_config;
     p->ref_cap       = (size_t)cm_bam_stream_max_reflen(p->bam);
 
@@ -736,8 +734,8 @@ static int worker_start_all(worker *workers, size_t n, const pipeline *p,
     return 0;
 }
 
-int pipeline_run(const pipeline_config *cfg, const char *program, char *error,
-                 size_t error_len)
+int pipeline_run(const pipeline_config *cfg, const char *program,
+                 const out_manifest *writes, char *error, size_t error_len)
 {
     pipeline     p           = { 0 };
     failure_flag failed      = { 0 };
@@ -752,6 +750,12 @@ int pipeline_run(const pipeline_config *cfg, const char *program, char *error,
         snprintf(error, error_len, "out of memory");
         return -1;
     }
+
+    /* The manifest says what a run of this program writes; the squares among it are
+     * written only where they were asked for. */
+    out_selection(writes, p.wanted);
+    p.wanted[OUT_PAIRWISE_CORRELATION] &= cfg->pairwise;
+    p.wanted[OUT_PAIRWISE_COVERAGE]    &= cfg->pairwise;
 
     if (h5writer_may_replace(cfg->output_path, cfg->overwrite, &may_replace,
                              error, error_len) < 0 ||

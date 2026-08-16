@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "output.h"
+
 #include "cli.h"
 #include "normalize.h"
 #include "version.h"
@@ -37,3 +39,6 @@ cli_spec norm_spec(const norm_args *defaults);
  * whose inputs and outputs do not pair up. Returns 0, or -1 with a description in
  * error. */
 int norm_take_arguments(norm_args *args, char *error, size_t error_len);
+
+/* The datasets a run of this program writes. */
+extern const out_manifest CMUTS_NORM_WRITES;

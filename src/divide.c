@@ -114,7 +114,8 @@ static int divide_field(const combine_rows *rows, out_field_id id, void *out, si
 /* Assembly                                                                  */
 /* ------------------------------------------------------------------------ */
 
-int divide_run(const divide_config *cfg, const char *program, char *error,
+int divide_run(const divide_config *cfg, const char *program,
+               const out_manifest *writes, char *error,
                size_t error_len)
 {
     const char *paths[DIV_N_INPUTS];
@@ -124,6 +125,7 @@ int divide_run(const divide_config *cfg, const char *program, char *error,
 
     const combine_spec spec = {
         .program   = program,
+        .writes    = writes,
         .inputs    = paths,
         .n_inputs  = DIV_N_INPUTS,
         .output    = cfg->output_path,

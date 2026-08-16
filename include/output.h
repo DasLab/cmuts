@@ -69,7 +69,6 @@ typedef struct {
     bool        per_ref;  /* whether there is one such row per reference */
     out_stored  stored;   /* the type its values are narrowed to */
     out_absent  absent;   /* what a value it was never given means */
-    bool        optional; /* whether a run may leave the field out of its output */
     const char *detail;   /* what the numbers are, in one sentence */
 } out_field;
 
@@ -101,14 +100,34 @@ extern const out_attribute OUT_ATTRIBUTES[OUT_N_ATTRS];
  * longest reference is cap. */
 size_t out_values(out_field_id id, size_t len, size_t cap);
 
-/* Whether a run writes a field, given the optional ones it asked for. wanted is one
- * entry per field, or NULL for a run writing every field there is. A field that is not
- * optional is written whatever it says. */
-bool out_wanted(out_field_id id, const bool *wanted);
+/* One field of one program's output.
+ *
+ * A field has the same shape, type and fill wherever it is written, so those stay in
+ * OUT_FIELDS. What the numbers mean depends on what produced them -- a rate cmuts-hmm
+ * counted is not a rate cmuts-sub took a background off -- so the description belongs
+ * here, and falls back to the field's own where the two agree. */
+typedef struct {
+    out_field_id id;
+    const char  *detail;   /* NULL takes the description in OUT_FIELDS */
+} out_written;
 
-/* A selection holding none of the optional fields, for the programs that read and write
- * the per-base fields and have nothing to say about the rest. */
-extern const bool OUT_REQUIRED_ONLY[OUT_N_FIELDS];
+/* The fields one program writes.
+ *
+ * A program is an interface: it takes the datasets it needs, ignores whatever else its
+ * input carries, and writes exactly these. */
+typedef struct {
+    const out_written *fields;
+    size_t             n_fields;
+} out_manifest;
+
+/* The fields every output holds, which is what a program reading one takes. */
+extern const out_manifest OUT_COMMON;
+
+/* Fills one entry per field with whether the manifest writes it. */
+void out_selection(const out_manifest *manifest, bool *wanted);
+
+/* Whether a selection holds a field. */
+bool out_wanted(out_field_id id, const bool *wanted);
 
 /* Gives the widest row of any field, which is what a buffer must hold to take a row of
  * any of them. */
@@ -131,4 +150,5 @@ int out_rank(out_field_id id);
 
 /* Writes the table above as JSON, for generating the documentation of the format from the
  * program that writes it. */
-void out_dump_layout(FILE *out);
+void out_dump_layout(FILE *out, const char *program,
+                     const out_manifest *manifest);

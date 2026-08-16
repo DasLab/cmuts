@@ -8,6 +8,25 @@
 
 #include <stddef.h>
 
+/* The datasets a run leaves behind, which are those every output holds: what it was
+ * given, less the background it was given. */
+static const out_written WRITTEN[] = {
+    { .id = OUT_COVERAGE },
+    { .id = OUT_REACTIVITY, .detail = "The mutation rate of the treated sample less that of the untreated one, so what remains is the signal the treatment added." },
+    { .id = OUT_ERROR },
+    { .id = OUT_LENGTHS },
+    { .id = OUT_READS },
+    { .id = OUT_REJECTED },
+    { .id = OUT_UNMAPPED },
+};
+
+const out_manifest CMUTS_SUB_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTEN };
+
+static void dump_layout(FILE *out)
+{
+    out_dump_layout(out, "cmuts-sub", &CMUTS_SUB_WRITES);
+}
+
 static const cli_option OPTIONS[] = {
     {
         .group    = "Input and output",
@@ -58,6 +77,15 @@ static const cli_option OPTIONS[] = {
         .help   = "describe every argument as JSON and exit",
         .hidden = true,
         .action = CLI_DUMP_OPTIONS,
+    },
+    {
+        .group  = "Information",
+        .name   = "dump-layout",
+        .type   = OPT_FLAG,
+        .help   = "describe the output format as JSON and exit",
+        .hidden = true,
+        .action = CLI_PRINT,
+        .print  = dump_layout,
     },
 };
 

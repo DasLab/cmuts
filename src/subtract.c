@@ -123,7 +123,8 @@ static int subtract_field(const combine_rows *rows, out_field_id id, void *out, 
 /* Assembly                                                                  */
 /* ------------------------------------------------------------------------ */
 
-int subtract_run(const subtract_config *cfg, const char *program, char *error,
+int subtract_run(const subtract_config *cfg, const char *program,
+                 const out_manifest *writes, char *error,
                  size_t error_len)
 {
     const char *paths[SUB_N_INPUTS];
@@ -133,6 +134,7 @@ int subtract_run(const subtract_config *cfg, const char *program, char *error,
 
     const combine_spec spec = {
         .program   = program,
+        .writes    = writes,
         .inputs    = paths,
         .n_inputs  = SUB_N_INPUTS,
         .output    = cfg->output_path,

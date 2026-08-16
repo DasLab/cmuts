@@ -41,6 +41,66 @@ Both divide the reactivity and its error by the scale, leaving the coverage and 
 
 `--clip-below` and `--clip-above` bound the normalized reactivity. Neither is applied unless given, and neither touches the error, so a signal-to-noise ratio derived from the two shifts with the clip. A missing value is left missing rather than raised to a bound.
 
+## Output
+
+<!-- BEGIN GENERATED cmuts-norm FIELDS -->
+{.field}
+### `coverage`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `zero`
+
+The number of reads in which this base was present, weighted by PHRED scores.
+
+{.field}
+### `reactivity`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+The mutation rate divided by the scale this file records, so a rate reads against the scale rather than as a raw frequency.
+
+{.field}
+### `error`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors.
+
+{.field}
+### `reads/lengths`
+
+**Shape** `(n, 2l)` · **Type** `uint64` · **Fill** `zero`
+
+The number of reads passing all filters, binned by length.
+
+{.field}
+### `reads/counted`
+
+**Shape** `(n,)` · **Type** `uint64` · **Fill** `zero`
+
+The number of reads passing all filters.
+
+{.field}
+### `reads/rejected`
+
+**Shape** `(n,)` · **Type** `uint64` · **Fill** `zero`
+
+The number of reads that contributed nothing: rejected by at least one filter, or carrying something the pair HMM's rates give no alignment of.
+
+{.field}
+### `reads/unmapped`
+
+**Shape** `()` · **Type** `uint64` · **Fill** `zero`
+
+The number of reads not aligned to any reference.
+
+{.field}
+### `norm`
+
+**Shape** `()` · **Type** `float32` · **Fill** `NaN`
+
+The scale every rate in this file was divided by.
+<!-- END GENERATED cmuts-norm FIELDS -->
+
 ## CLI Options
 
 <!-- BEGIN GENERATED cmuts-norm OPTIONS -->
@@ -85,4 +145,5 @@ Accepted, and left out of `--help`.
 | Option | Description |
 | --- | --- |
 | `--dump-options` | describe every argument as JSON and exit |
+| `--dump-layout` | describe the output format as JSON and exit |
 <!-- END GENERATED cmuts-norm OPTIONS -->

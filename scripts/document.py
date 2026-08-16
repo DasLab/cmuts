@@ -21,12 +21,6 @@ from pathlib import Path
 EXTENTS = {"per base": ("l",), "per length": ("2l",), "per pair": ("l", "l"),
            "scalar": ()}
 
-# Whether a run writes a field at all, for the column that says so.
-PRESENT = {False: "always", True: "when asked for"}
-
-# What marks a field a run may leave out of its output.
-OPTIONAL = "written only when asked for"
-
 # The value a dataset holds where the run wrote nothing, spelled as the pages
 # spell it. What it means differs by field, and the output page covers it.
 ABSENT = {"nan": "NaN", "zero": "zero"}
@@ -86,10 +80,9 @@ def layout(program: str) -> str:
     dataset.fillvalue.
     """
     return table(
-        ["Dataset", "Shape", "Type", "Fill", "Written"],
+        ["Dataset", "Shape", "Type", "Fill"],
         [[f"`{field['name']}`", f"`{shape(field)}`", f"`{field['type']}`",
-          f"`{ABSENT.get(field['absent'], field['absent'])}`",
-          PRESENT[field["optional"]]]
+          f"`{ABSENT.get(field['absent'], field['absent'])}`"]
          for field in described(program, "--dump-layout")["fields"]],
     )
 
@@ -122,10 +115,9 @@ def fields(program: str) -> str:
 
     for field in described(program, "--dump-layout")["fields"]:
         absent = ABSENT.get(field["absent"], field["absent"])
-        marked = f" · _{OPTIONAL}_" if field["optional"] else ""
         written += [FIELD_CLASS, f"### `{field['name']}`", "",
                     f"**Shape** `{shape(field)}` · **Type** `{field['type']}` · "
-                    f"**Fill** `{absent}`{marked}", ""]
+                    f"**Fill** `{absent}`", ""]
 
         if field["detail"]:
             written += [field["detail"], ""]

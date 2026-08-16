@@ -62,7 +62,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref  = true,
         .stored   = OUT_F32,
         .absent   = OUT_NAN,
-        .optional = true,
         .detail   = "The correlation between two positions being modified in the same read, as the Pearson coefficient of the two binary variables. NaN where the reads are too few, and where either position is modified in all of them or in none. The diagonal is a position against itself, which falls short of one by however much of its variance the base calls leave unsettled; divide a correlation by the square root of the two diagonals to take that out.",
     },
     [OUT_PAIRWISE_COVERAGE] = {
@@ -71,7 +70,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref  = true,
         .stored   = OUT_F32,
         .absent   = OUT_ZERO,
-        .optional = true,
         .detail   = "The evidence behind each correlation: the reads reaching both positions.",
     },
     [OUT_NORM] = {
@@ -80,7 +78,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref  = false,
         .stored   = OUT_F32,
         .absent   = OUT_NAN,
-        .optional = true,
         .detail   = "The scale every rate in this file was divided by.",
     },
     [OUT_UNMAPPED] = {
@@ -109,11 +106,34 @@ size_t out_values(out_field_id id, size_t len, size_t cap)
     return shape_values(OUT_FIELDS[id].row, len, cap);
 }
 
-const bool OUT_REQUIRED_ONLY[OUT_N_FIELDS] = { false };
+/* Every output holds these, whichever program wrote it, so a program reading one takes
+ * exactly them. */
+static const out_written COMMON[] = {
+    { .id = OUT_COVERAGE },
+    { .id = OUT_REACTIVITY },
+    { .id = OUT_ERROR },
+    { .id = OUT_LENGTHS },
+    { .id = OUT_READS },
+    { .id = OUT_REJECTED },
+    { .id = OUT_UNMAPPED },
+};
+
+const out_manifest OUT_COMMON = { COMMON, sizeof COMMON / sizeof *COMMON };
+
+void out_selection(const out_manifest *manifest, bool *wanted)
+{
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        wanted[id] = false;
+    }
+
+    for (size_t i = 0; i < manifest->n_fields; i++) {
+        wanted[manifest->fields[i].id] = true;
+    }
+}
 
 bool out_wanted(out_field_id id, const bool *wanted)
 {
-    return !OUT_FIELDS[id].optional || !wanted || wanted[id];
+    return wanted[id];
 }
 
 /* Gives the values the widest row of the run occupies. A field left out is not measured,
@@ -124,7 +144,7 @@ size_t out_widest(size_t cap, const bool *wanted)
     size_t widest = 0;
 
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        size_t width = out_wanted(id, wanted) ? out_values(id, cap, cap) : 0;
+        size_t width = wanted[id] ? out_values(id, cap, cap) : 0;
 
         widest = width > widest ? width : widest;
     }
@@ -247,35 +267,37 @@ static void dump_attributes(FILE *out)
 
 /* cmuts_version is the version of the program dumping this, which is not the version
  * attribute above: that one is written into a file and says what produced it. */
-void out_dump_layout(FILE *out)
+void out_dump_layout(FILE *out, const char *program, const out_manifest *manifest)
 {
-    fprintf(out, "{\n  \"cmuts_version\": \"%s\",\n  \"attributes\": [\n", CMUTS_VERSION);
+    fprintf(out, "{\n  \"program\": \"%s\",\n  \"cmuts_version\": \"%s\",\n"
+                 "  \"attributes\": [\n", program, CMUTS_VERSION);
 
     dump_attributes(out);
 
     fprintf(out, "  ],\n  \"fields\": [\n");
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        const out_field *field = &OUT_FIELDS[id];
+    for (size_t i = 0; i < manifest->n_fields; i++) {
+        out_field_id     id     = manifest->fields[i].id;
+        const out_field *field  = &OUT_FIELDS[id];
+        const char      *detail = manifest->fields[i].detail
+                                ? manifest->fields[i].detail : field->detail;
 
         fprintf(out,
                 "    {\n"
                 "      \"name\": \"%s\",\n"
                 "      \"row\": \"%s\",\n"
                 "      \"per_reference\": %s,\n"
-                "      \"optional\": %s,\n"
                 "      \"rank\": %d,\n"
                 "      \"type\": \"%s\",\n"
                 "      \"absent\": \"%s\",\n"
                 "      \"detail\": ",
                 field->name, shape_name(field->row),
-                field->per_ref ? "true" : "false",
-                field->optional ? "true" : "false", out_rank(id),
+                field->per_ref ? "true" : "false", out_rank(id),
                 stored_name(field->stored), absent_name(field->absent));
 
-        print_detail(out, field->detail);
+        print_detail(out, detail);
 
-        fprintf(out, "\n    }%s\n", id + 1 < OUT_N_FIELDS ? "," : "");
+        fprintf(out, "\n    }%s\n", i + 1 < manifest->n_fields ? "," : "");
     }
 
     fprintf(out, "  ]\n}\n");

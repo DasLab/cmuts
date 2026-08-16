@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "output.h"
+
 #include "cli.h"
 #include "pipeline.h"
 #include "version.h"
@@ -25,3 +27,6 @@ cli_args cmuts_hmm_defaults(void);
 
 /* The spec borrows defaults, which must outlive it. */
 cli_spec cmuts_hmm_spec(const cli_args *defaults);
+
+/* The datasets a run of this program writes. */
+extern const out_manifest CMUTS_HMM_WRITES;

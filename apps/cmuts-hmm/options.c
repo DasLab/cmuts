@@ -25,6 +25,29 @@ static const cli_choice STRAND_CHOICES[] = {
     { NULL,      0                     },
 };
 
+/* The datasets a run leaves behind. Every output holds the first of them; the pairwise
+ * squares are written only when they are asked for. */
+static const out_written WRITTEN[] = {
+    { .id = OUT_COVERAGE },
+    { .id = OUT_REACTIVITY },
+    { .id = OUT_ERROR },
+    { .id = OUT_LENGTHS },
+    { .id = OUT_READS },
+    { .id = OUT_REJECTED },
+    { .id = OUT_UNMAPPED },
+    { .id = OUT_PAIRWISE_CORRELATION,
+      .detail = "Written when --pairwise is given. The correlation between two positions being modified in the same read, as the Pearson coefficient of the two binary variables. NaN where the reads are too few, and where either position is modified in all of them or in none. The diagonal is a position against itself, which falls short of one by however much of its variance the base calls leave unsettled; divide a correlation by the square root of the two diagonals to take that out." },
+    { .id = OUT_PAIRWISE_COVERAGE,
+      .detail = "Written when --pairwise is given. The evidence behind each correlation: the reads reaching both positions." },
+};
+
+const out_manifest CMUTS_HMM_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTEN };
+
+static void dump_layout(FILE *out)
+{
+    out_dump_layout(out, "cmuts-hmm", &CMUTS_HMM_WRITES);
+}
+
 static const cli_option OPTIONS[] = {
     {
         .group    = "Input and output",
@@ -270,7 +293,7 @@ static const cli_option OPTIONS[] = {
         .help   = "describe the output format as JSON and exit",
         .hidden = true,
         .action = CLI_PRINT,
-        .print  = out_dump_layout,
+        .print  = dump_layout,
     },
 };
 

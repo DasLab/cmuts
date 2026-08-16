@@ -8,6 +8,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "output.h"
+
 typedef struct {
     const char *treated_path;
     const char *untreated_path;
@@ -19,5 +21,6 @@ typedef struct {
 /* Takes the background off the treated run, field by field, into a file of the same
  * layout. program is recorded in the output as what produced it. Returns 0, or -1 with a
  * description in error. */
-int subtract_run(const subtract_config *cfg, const char *program, char *error,
+int subtract_run(const subtract_config *cfg, const char *program,
+                 const out_manifest *writes, char *error,
                  size_t error_len);

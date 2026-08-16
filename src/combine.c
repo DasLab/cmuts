@@ -32,6 +32,7 @@ typedef struct {
 
     int32_t n_refs;
     size_t  ref_cap;
+    bool    writes[OUT_N_FIELDS];   /* what the spec says this run leaves behind */
 } combination;
 
 /* ------------------------------------------------------------------------ */
@@ -52,9 +53,9 @@ const void *combine_row(const combine_rows *rows, size_t input, out_field_id id)
  * value. */
 /* Values one input row of a field holds. A field this program does not read holds none,
  * so no buffer is taken for it. */
-static size_t row_values(out_field_id id, size_t ref_cap)
+static size_t row_values(const combination *c, out_field_id id, size_t ref_cap)
 {
-    if (!out_wanted(id, OUT_REQUIRED_ONLY)) {
+    if (!out_wanted(id, c->writes)) {
         return 0;
     }
 
@@ -165,11 +166,11 @@ static int combine_field(const combination *c, out_field_id id, size_t n, char *
 static int write_reference(combination *c, int32_t tid, char *error, size_t error_len)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (!OUT_FIELDS[id].per_ref || !out_wanted(id, OUT_REQUIRED_ONLY)) {
+        if (!OUT_FIELDS[id].per_ref || !out_wanted(id, c->writes)) {
             continue;
         }
 
-        if (combine_field(c, id, row_values(id, c->ref_cap), error, error_len) < 0) {
+        if (combine_field(c, id, row_values(c, id, c->ref_cap), error, error_len) < 0) {
             return -1;
         }
 
@@ -227,7 +228,7 @@ static int read_totals(combination *c, char *error, size_t error_len)
 static int write_totals(combination *c, char *error, size_t error_len)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (OUT_FIELDS[id].per_ref || !out_wanted(id, OUT_REQUIRED_ONLY)) {
+        if (OUT_FIELDS[id].per_ref || !out_wanted(id, c->writes)) {
             continue;
         }
 
@@ -314,7 +315,7 @@ static int build_rows(combination *c, char *error, size_t error_len)
         for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
             void **slot = &c->rows.value[(i * OUT_N_FIELDS) + id];
 
-            size_t values = row_values(id, c->ref_cap);
+            size_t values = row_values(c, id, c->ref_cap);
 
             if (values == 0) {
                 continue;
@@ -329,7 +330,7 @@ static int build_rows(combination *c, char *error, size_t error_len)
         }
     }
 
-    c->result = calloc(out_widest(c->ref_cap, OUT_REQUIRED_ONLY), out_widest_bytes());
+    c->result = calloc(out_widest(c->ref_cap, c->writes), out_widest_bytes());
 
     if (!c->result) {
         snprintf(error, error_len, "out of memory");
@@ -342,7 +343,7 @@ static int build_rows(combination *c, char *error, size_t error_len)
 static int open_output(combination *c, bool may_replace, char *error, size_t error_len)
 {
     c->out = h5writer_create(c->spec->output, c->spec->program, c->n_refs, c->ref_cap,
-                             may_replace, OUT_REQUIRED_ONLY);
+                             may_replace, c->writes);
     if (!c->out) {
         snprintf(error, error_len, "out of memory");
         return -1;
@@ -375,6 +376,8 @@ static void combination_teardown(combination *c)
 int combine_run(const combine_spec *spec, char *error, size_t error_len)
 {
     combination c           = { .spec = spec };
+
+    out_selection(spec->writes, c.writes);
     bool        may_replace = false;
     int         status      = -1;
 

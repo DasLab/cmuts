@@ -373,6 +373,7 @@ static int gather(const normalize_config *cfg, rate_pool *p, char *error,
 typedef struct {
     const normalize_config *cfg;
     double                  factor;
+    bool                    writes[OUT_N_FIELDS];   /* what this run leaves behind */
 
     h5reader   *in;
     h5writer   *out;
@@ -397,10 +398,6 @@ static void transfer_row(const transfer *t, out_field_id id, size_t n)
         clip_f32(t->row, n, t->cfg->clip_below, t->cfg->clip_above);
     }
 }
-
-/* The optional fields this program writes. Every other output holds no scale, having
- * divided by none. */
-static const bool WRITES[OUT_N_FIELDS] = { [OUT_NORM] = true };
 
 static int transfer_reference(const transfer *t, int32_t tid, char *error,
                               size_t error_len)
@@ -478,14 +475,14 @@ static int open_transfer(transfer *t, bool may_replace, char *error, size_t erro
 
     t->n_refs  = h5reader_refs(t->in);
     t->ref_cap = h5reader_capacity(t->in);
-    t->row     = calloc(out_widest(t->ref_cap, OUT_REQUIRED_ONLY), out_widest_bytes());
+    t->row     = calloc(out_widest(t->ref_cap, t->writes), out_widest_bytes());
 
     if (!t->row) {
         return fail_memory(error, error_len);
     }
 
     t->out = h5writer_create(t->out_path, t->program, t->n_refs, t->ref_cap,
-                             may_replace, WRITES);
+                             may_replace, t->writes);
     if (!t->out) {
         return fail_memory(error, error_len);
     }
@@ -501,6 +498,7 @@ static void transfer_teardown(transfer *t)
 }
 
 static int write_output(const normalize_config *cfg, size_t which, const char *program,
+                        const out_manifest *writes,
                         double factor, char *error, size_t error_len)
 {
     transfer t = {
@@ -512,6 +510,8 @@ static int write_output(const normalize_config *cfg, size_t which, const char *p
     };
     bool may_replace = false;
     int  status      = -1;
+
+    out_selection(writes, t.writes);
 
     /* Asked again here rather than carried over from check_outputs, so that a file
      * appearing at the path since then is seen. */
@@ -549,11 +549,12 @@ static int check_outputs(const normalize_config *cfg, char *error, size_t error_
     return 0;
 }
 
-static int write_outputs(const normalize_config *cfg, const char *program, double factor,
+static int write_outputs(const normalize_config *cfg, const char *program,
+                         const out_manifest *writes, double factor,
                          char *error, size_t error_len)
 {
     for (size_t i = 0; i < cfg->n_files; i++) {
-        if (write_output(cfg, i, program, factor, error, error_len) < 0) {
+        if (write_output(cfg, i, program, writes, factor, error, error_len) < 0) {
             return -1;
         }
     }
@@ -561,7 +562,8 @@ static int write_outputs(const normalize_config *cfg, const char *program, doubl
     return 0;
 }
 
-int normalize_run(const normalize_config *cfg, const char *program, char *error,
+int normalize_run(const normalize_config *cfg, const char *program,
+                  const out_manifest *writes, char *error,
                   size_t error_len)
 {
     rate_pool p      = { 0 };
@@ -572,7 +574,8 @@ int normalize_run(const normalize_config *cfg, const char *program, char *error,
     }
 
     if (gather(cfg, &p, error, error_len) == 0) {
-        status = write_outputs(cfg, program, pooled_factor(cfg, &p), error, error_len);
+        status = write_outputs(cfg, program, writes, pooled_factor(cfg, &p),
+                               error, error_len);
     }
 
     rate_pool_free(&p);

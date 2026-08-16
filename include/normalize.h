@@ -8,6 +8,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "output.h"
+
 /* How the scale is taken from the pooled rates. */
 typedef enum {
     NORM_UBR,
@@ -32,5 +34,6 @@ typedef struct {
 /* Divides every input by one scale pooled over all of them, writing each to its own
  * output. program is recorded in each as what produced it. Returns 0, or -1 with a
  * description in error. */
-int normalize_run(const normalize_config *cfg, const char *program, char *error,
+int normalize_run(const normalize_config *cfg, const char *program,
+                  const out_manifest *writes, char *error,
                   size_t error_len);

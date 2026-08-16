@@ -47,7 +47,8 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    if (pipeline_run(&args.pipeline, spec.program, error, sizeof error) < 0) {
+    if (pipeline_run(&args.pipeline, spec.program, &CMUTS_HMM_WRITES, error,
+                     sizeof error) < 0) {
         fprintf(stderr, "%s: %s\n", spec.program, error);
         return 1;
     }

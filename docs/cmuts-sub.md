@@ -21,6 +21,59 @@ To normalize the result against a denatured control, pass it to [cmuts-div](cmut
 High coverage in the output dataset does not imply high-quality data, since it is insensitive to imbalances in the treated and untreated experiments. Either ensure each experiment separately has high coverage or use the signal-to-noise ratio as a more robust quality metric.
 ```
 
+## Output
+
+<!-- BEGIN GENERATED cmuts-sub FIELDS -->
+{.field}
+### `coverage`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `zero`
+
+The number of reads in which this base was present, weighted by PHRED scores.
+
+{.field}
+### `reactivity`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+The mutation rate of the treated sample less that of the untreated one, so what remains is the signal the treatment added.
+
+{.field}
+### `error`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors.
+
+{.field}
+### `reads/lengths`
+
+**Shape** `(n, 2l)` · **Type** `uint64` · **Fill** `zero`
+
+The number of reads passing all filters, binned by length.
+
+{.field}
+### `reads/counted`
+
+**Shape** `(n,)` · **Type** `uint64` · **Fill** `zero`
+
+The number of reads passing all filters.
+
+{.field}
+### `reads/rejected`
+
+**Shape** `(n,)` · **Type** `uint64` · **Fill** `zero`
+
+The number of reads that contributed nothing: rejected by at least one filter, or carrying something the pair HMM's rates give no alignment of.
+
+{.field}
+### `reads/unmapped`
+
+**Shape** `()` · **Type** `uint64` · **Fill** `zero`
+
+The number of reads not aligned to any reference.
+<!-- END GENERATED cmuts-sub FIELDS -->
+
 ## CLI Options
 
 <!-- BEGIN GENERATED cmuts-sub OPTIONS -->
@@ -58,4 +111,5 @@ Accepted, and left out of `--help`.
 | Option | Description |
 | --- | --- |
 | `--dump-options` | describe every argument as JSON and exit |
+| `--dump-layout` | describe the output format as JSON and exit |
 <!-- END GENERATED cmuts-sub OPTIONS -->

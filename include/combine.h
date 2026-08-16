@@ -31,7 +31,8 @@ typedef int (*combine_fn)(const combine_rows *rows, out_field_id id, void *out, 
                           const void *ctx);
 
 typedef struct {
-    const char        *program;  /* the name written into the output */
+    const char         *program;  /* the name written into the output */
+    const out_manifest *writes;   /* the fields it leaves behind */
     const char *const *inputs;   /* paths, in the order the rules index them */
     size_t             n_inputs;
     const char        *output;

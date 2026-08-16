@@ -21,6 +21,7 @@ struct h5reader {
     /* A dataspace apiece, kept for the life of the reader as the writer keeps its
      * own: only the selection differs between one row and the next. */
     hid_t   filespace[OUT_N_FIELDS];
+    bool    taken[OUT_N_FIELDS];   /* the fields it opened */
     hid_t   memspace;   /* one row of the widest field, selected down to size */
     int32_t n_refs;
     size_t  ref_cap;
@@ -150,7 +151,7 @@ static int open_field(h5reader *r, out_field_id id)
 static int open_fields(h5reader *r)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (!out_wanted(id, OUT_REQUIRED_ONLY)) {
+        if (!out_wanted(id, r->taken)) {
             continue;
         }
 
@@ -175,6 +176,8 @@ static h5reader *reader_alloc(void)
     if (!r) {
         return NULL;
     }
+
+    out_selection(&OUT_COMMON, r->taken);
 
     /* Report failures through h5reader_error, with HDF5's own stack trace on stderr
      * turned off. */
@@ -202,7 +205,7 @@ static int open_file(h5reader *r, const char *path)
 /* Prepares the row every read is selected into, which the shape must be known to size. */
 static int build_memspace(h5reader *r)
 {
-    r->memspace = h5layout_row_space(r->ref_cap, OUT_REQUIRED_ONLY);
+    r->memspace = h5layout_row_space(r->ref_cap, r->taken);
 
     return r->memspace < 0 ? fail(r, "unable to prepare the file for reading") : 0;
 }
@@ -281,7 +284,7 @@ bool h5reader_holds(const h5reader *r, out_field_id id)
 {
     (void)r;
 
-    return out_wanted(id, OUT_REQUIRED_ONLY);
+    return out_wanted(id, r->taken);
 }
 
 int h5reader_field(h5reader *r, out_field_id id, int32_t tid, void *values)

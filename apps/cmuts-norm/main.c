@@ -28,7 +28,7 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    if (normalize_run(&args.normalize, spec.program, error, sizeof error) < 0) {
+    if (normalize_run(&args.normalize, spec.program, &CMUTS_NORM_WRITES, error, sizeof error) < 0) {
         fprintf(stderr, "%s: %s\n", spec.program, error);
         return 1;
     }

@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "output.h"
+
 #include "cli.h"
 #include "divide.h"
 #include "version.h"
@@ -21,3 +23,6 @@ div_args div_defaults(void);
 
 /* The spec borrows defaults, which must outlive it. */
 cli_spec div_spec(const div_args *defaults);
+
+/* The datasets a run of this program writes. */
+extern const out_manifest CMUTS_DIV_WRITES;
