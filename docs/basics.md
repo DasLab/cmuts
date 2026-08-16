@@ -58,15 +58,17 @@ cmuts-sub -o combined.h5 treated.h5 untreated.h5
 All HDF5 files in cmuts have the same format, where `n` is the number of references and `l` the length of the longest of them.
 
 <!-- BEGIN GENERATED cmuts-hmm LAYOUT -->
-| Dataset | Shape | Type | Fill |
-| --- | --- | --- | --- |
-| `coverage` | `(n, l)` | `float32` | `zero` |
-| `reactivity` | `(n, l)` | `float32` | `NaN` |
-| `error` | `(n, l)` | `float32` | `NaN` |
-| `reads/lengths` | `(n, 2l)` | `uint64` | `zero` |
-| `reads/counted` | `(n,)` | `uint64` | `zero` |
-| `reads/rejected` | `(n,)` | `uint64` | `zero` |
-| `reads/unmapped` | `()` | `uint64` | `zero` |
+| Dataset | Shape | Type | Fill | Written |
+| --- | --- | --- | --- | --- |
+| `coverage` | `(n, l)` | `float32` | `zero` | always |
+| `reactivity` | `(n, l)` | `float32` | `NaN` | always |
+| `error` | `(n, l)` | `float32` | `NaN` | always |
+| `reads/lengths` | `(n, 2l)` | `uint64` | `zero` | always |
+| `reads/counted` | `(n,)` | `uint64` | `zero` | always |
+| `reads/rejected` | `(n,)` | `uint64` | `zero` | always |
+| `reads/unmapped` | `()` | `uint64` | `zero` | always |
+| `pairwise/correlation` | `(n, l, l)` | `float32` | `NaN` | when asked for |
+| `pairwise/coverage` | `(n, l, l)` | `float32` | `zero` | when asked for |
 <!-- END GENERATED cmuts-hmm LAYOUT -->
 
 See the [output](output.md) page for more detail on what each dataset contains.
@@ -100,3 +102,7 @@ cmuts-div -o normalized.h5 combined.h5 denatured.h5
 ## No Control
 
 With no control, skip background subtraction and use the output of `cmuts-hmm` directly.
+
+## Correlation-Based Data
+
+To analyze M2-seq, RING-MaP, or MOHCA-seq data, pass the `--pairwise` flag to `cmuts-hmm`, which causes it to compute and store pairwise mutation correlations.

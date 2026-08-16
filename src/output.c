@@ -254,12 +254,14 @@ void out_dump_layout(FILE *out)
                 "      \"name\": \"%s\",\n"
                 "      \"row\": \"%s\",\n"
                 "      \"per_reference\": %s,\n"
+                "      \"optional\": %s,\n"
                 "      \"rank\": %d,\n"
                 "      \"type\": \"%s\",\n"
                 "      \"absent\": \"%s\",\n"
                 "      \"detail\": ",
                 field->name, shape_name(field->row),
-                field->per_ref ? "true" : "false", out_rank(id),
+                field->per_ref ? "true" : "false",
+                field->optional ? "true" : "false", out_rank(id),
                 stored_name(field->stored), absent_name(field->absent));
 
         print_detail(out, field->detail);

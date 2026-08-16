@@ -14,11 +14,18 @@ import subprocess
 import sys
 from pathlib import Path
 
-# How a row is written, given the shape the program names and whether there is
-# one row per reference. n is the references and l the longest of them; a field
-# indexed by read length reaches twice that, a read being longer than what it
-# aligns to.
-EXTENTS = {"per base": "l", "per length": "2l", "scalar": None}
+# The extents a row occupies, given the shape the program names. n is the
+# references and l the longest of them; a field indexed by read length reaches
+# twice that, a read being longer than what it aligns to, and one indexed by a
+# pair of positions is square.
+EXTENTS = {"per base": ("l",), "per length": ("2l",), "per pair": ("l", "l"),
+           "scalar": ()}
+
+# Whether a run writes a field at all, for the column that says so.
+PRESENT = {False: "always", True: "when asked for"}
+
+# What marks a field a run may leave out of its output.
+OPTIONAL = "written only when asked for"
 
 # The value a dataset holds where the run wrote nothing, spelled as the pages
 # spell it. What it means differs by field, and the output page covers it.
@@ -64,10 +71,12 @@ def shape(field: dict) -> str:
     if field["row"] not in EXTENTS:
         raise SystemExit(f"{field['name']}: unknown row shape {field['row']!r}")
 
-    extents = [extent for extent in ("n" if field["per_reference"] else None,
-                                     EXTENTS[field["row"]]) if extent]
+    extents = ["n"] * field["per_reference"] + list(EXTENTS[field["row"]])
 
-    return "()" if not extents else f"({', '.join(extents)}{',' if len(extents) == 1 else ''})"
+    if not extents:
+        return "()"
+
+    return f"({', '.join(extents)}{',' if len(extents) == 1 else ''})"
 
 
 def layout(program: str) -> str:
@@ -77,9 +86,10 @@ def layout(program: str) -> str:
     dataset.fillvalue.
     """
     return table(
-        ["Dataset", "Shape", "Type", "Fill"],
-        [[f"`{cell}`" for cell in (field["name"], shape(field), field["type"],
-                                   ABSENT.get(field["absent"], field["absent"]))]
+        ["Dataset", "Shape", "Type", "Fill", "Written"],
+        [[f"`{field['name']}`", f"`{shape(field)}`", f"`{field['type']}`",
+          f"`{ABSENT.get(field['absent'], field['absent'])}`",
+          PRESENT[field["optional"]]]
          for field in described(program, "--dump-layout")["fields"]],
     )
 
@@ -112,9 +122,10 @@ def fields(program: str) -> str:
 
     for field in described(program, "--dump-layout")["fields"]:
         absent = ABSENT.get(field["absent"], field["absent"])
+        marked = f" · _{OPTIONAL}_" if field["optional"] else ""
         written += [FIELD_CLASS, f"### `{field['name']}`", "",
                     f"**Shape** `{shape(field)}` · **Type** `{field['type']}` · "
-                    f"**Fill** `{absent}`", ""]
+                    f"**Fill** `{absent}`{marked}", ""]
 
         if field["detail"]:
             written += [field["detail"], ""]

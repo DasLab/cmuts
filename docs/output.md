@@ -69,6 +69,20 @@ The number of reads that contributed nothing: rejected by at least one filter, o
 **Shape** `()` · **Type** `uint64` · **Fill** `zero`
 
 The number of reads not aligned to any reference.
+
+{.field}
+### `pairwise/correlation`
+
+**Shape** `(n, l, l)` · **Type** `float32` · **Fill** `NaN` · _written only when asked for_
+
+The correlation between two positions being modified in the same read, as the Pearson coefficient of the two binary variables. NaN where the reads are too few, and where either position is modified in all of them or in none. The diagonal is a position against itself, which falls short of one by however much of its variance the base calls leave unsettled; divide a correlation by the square root of the two diagonals to take that out.
+
+{.field}
+### `pairwise/coverage`
+
+**Shape** `(n, l, l)` · **Type** `float32` · **Fill** `zero` · _written only when asked for_
+
+The evidence behind each correlation: the reads reaching both positions.
 <!-- END GENERATED cmuts-hmm FIELDS -->
 
 ## Mixed-Length Libraries

@@ -59,6 +59,7 @@ The length check is required to avoid buffer overflows and cannot be disabled.
 | Option | Description |
 | --- | --- |
 | `--band N` | reference positions the marginal may look either side of the CIGAR (default 2) |
+| `--pairwise` | also write how often two positions are modified together |
 | `--min-depth D` | evidence a position needs before its rate is written (default 1) |
 | `--params FILE` | read the pair HMM's rates from this file (default: built in) |
 | `--substitution-weight W` | what a substitution counts towards the mutation total (0 to 1; default 1) |
