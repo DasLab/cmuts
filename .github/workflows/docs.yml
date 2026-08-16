@@ -27,6 +27,15 @@ jobs:
       # programs before it renders anything.
       - run: make site
 
+      # The step above rewrites the generated blocks in place, so a page committed
+      # without being rebuilt differs here from what the binaries describe.
+      - name: Check the generated pages are current
+        run: |
+          git diff --exit-code docs/ || {
+            echo "::error::a page is out of date with the program it describes; run make docs"
+            exit 1
+          }
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
