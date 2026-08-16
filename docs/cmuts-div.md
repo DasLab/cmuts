@@ -73,7 +73,7 @@ The number of reads passing all filters.
 
 **Shape** `(n,)` · **Type** `uint64` · **Fill** `zero`
 
-The number of reads that contributed nothing: rejected by at least one filter, or carrying something the pair HMM's rates give no alignment of.
+The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM
 
 {.field}
 ### `reads/unmapped`

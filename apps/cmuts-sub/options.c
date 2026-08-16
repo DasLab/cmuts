@@ -22,7 +22,7 @@ static const out_written WRITTEN[] = {
     { .id = OUT_READS,
       .detail = "The number of reads passing all filters." },
     { .id = OUT_REJECTED,
-      .detail = "The number of reads that contributed nothing: rejected by at least one filter, or carrying something the pair HMM's rates give no alignment of." },
+      .detail = "The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM" },
     { .id = OUT_UNMAPPED,
       .detail = "The number of reads not aligned to any reference." },
 };
