@@ -10,8 +10,8 @@ compile_commands.json
 # Indexes an editor builds from the above, and rebuilds as readily.
 .cache/
 
-# The documentation site, rendered from docs/ by sphinx and served from a
-# branch of its own rather than from here. Holds the doctree cache as well.
+# The documentation site, rendered from docs/ by sphinx and published by the
+# workflow that builds it rather than from here.
 site/
 
 # Program output

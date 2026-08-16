@@ -1,0 +1,51 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # Built on every pull request as well, so that a broken link or a page left
+  # out of the toctree fails there rather than on the way to the site.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/dependencies
+
+      # Separate from the dev group the shared action installs: sphinx and the
+      # theme are of no use to the tests.
+      - name: Install the documentation dependencies
+        run: uv pip install --python .venv/bin/python --group docs
+
+      # The generated pages are read out of the binaries, so this builds the
+      # programs before it renders anything.
+      - run: make site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    # One deployment at a time, with a later push waiting rather than replacing
+    # the run already under way.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

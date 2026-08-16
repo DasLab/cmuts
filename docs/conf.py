@@ -24,6 +24,16 @@ html_theme = "furo"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 
+# Where the site is served from, which the canonical link of each page needs.
+# The organization's root site carries a custom domain, so a project page of
+# the organization is served under that rather than under github.io.
+html_baseurl = "https://daslab.stanford.edu/cmuts/"
+
+# Copied to the root of the site. GitHub Pages runs the output through Jekyll
+# otherwise, which drops the _static and _sources directories sphinx writes.
+# The file is empty; its presence is the whole of it.
+html_extra_path = [".nojekyll"]
+
 html_theme_options = {
     "source_repository": "https://github.com/DasLab/cmuts",
     "source_branch": "main",
