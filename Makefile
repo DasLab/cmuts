@@ -18,6 +18,11 @@ VARIANT    := release
 SANITIZE_asan := address,undefined
 SANITIZE_tsan := thread
 
+# The variable each runtime reads its options from, named so that a target
+# needing one does not have to know which sanitizer is in use.
+SANOPTS_asan := ASAN_OPTIONS
+SANOPTS_tsan := TSAN_OPTIONS
+
 ifdef SAN
 ifeq ($(SANITIZE_$(SAN)),)
 $(error unknown sanitizer: $(SAN))
@@ -153,10 +158,20 @@ uninstall:
 # Defaults to a virtual environment in the current dir
 PYTHON ?= .venv/bin/python
 
+# The tests capture the stderr of every program they run, and a failure reports
+# only the exit status. log_path sends each report to a file of its own under
+# the variant's build directory instead, which make clean removes along with
+# the rest of it. The caller's own options can override this.
+ifdef SAN
+LOGDIR := $(BUILD)/logs
+SANENV := $(SANOPTS_$(SAN))="log_path=$(CURDIR)/$(LOGDIR)/$(SAN) $$$(SANOPTS_$(SAN))"
+endif
+
 # The build directory goes first on PATH. The tests refuse anything found
 # outside this repository, so they cannot be run without it.
 check: $(BINS)
-	PATH=$(CURDIR)/$(BUILD):$$PATH $(PYTHON) -m pytest
+	@$(if $(SAN),mkdir -p $(LOGDIR))
+	PATH=$(CURDIR)/$(BUILD):$$PATH $(SANENV) $(PYTHON) -m pytest
 
 # Ensure the auto-generated regions between markers are current
 docs: $(BINS)

@@ -39,12 +39,20 @@ This writes `compile_commands.json` and runs clang-tidy over every source under 
 
 ## Sanitizers
 
-`SAN` names a sanitizer and integrates with the tests:
+`SAN` names a sanitizer to build under, and applies to whichever target follows it:
 
 ```sh
 make SAN=asan         # address and undefined behavior
-make check SAN=tsan   # thread
+make check SAN=tsan   # thread, over the tests
 ```
+
+The tests capture the standard error of every program they run, and a failure reports only the exit status, so `make check` sends each report to a file of its own under the build directory of the variant:
+
+```
+build/tsan/logs/tsan.<pid>
+```
+
+A value already in `ASAN_OPTIONS` or `TSAN_OPTIONS` is read after the one `make` sets and so overrides it.
 
 ## Documentation
 
