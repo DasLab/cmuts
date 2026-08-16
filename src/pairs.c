@@ -153,9 +153,7 @@ void pairs_correlation(const pairs *p, size_t len, double min_depth, size_t i,
                        double *row)
 {
     for (size_t j = 0; j < len; j++) {
-        row[j] = i == j
-               ? (double)NAN
-               : coefficient(ordered(p, len, i, j), min_depth, j < i);
+        row[j] = coefficient(ordered(p, len, i, j), min_depth, j < i);
     }
 }
 
