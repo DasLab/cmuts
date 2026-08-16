@@ -398,6 +398,10 @@ static void transfer_row(const transfer *t, out_field_id id, size_t n)
     }
 }
 
+/* The optional fields this program writes. Every other output holds no scale, having
+ * divided by none. */
+static const bool WRITES[OUT_N_FIELDS] = { [OUT_NORM] = true };
+
 static int transfer_reference(const transfer *t, int32_t tid, char *error,
                               size_t error_len)
 {
@@ -425,7 +429,7 @@ static int transfer_totals(const transfer *t, char *error, size_t error_len)
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
         size_t total;
 
-        if (OUT_FIELDS[id].per_ref) {
+        if (OUT_FIELDS[id].per_ref || !h5reader_holds(t->in, id)) {
             continue;
         }
 
@@ -453,7 +457,7 @@ static int transfer_file(const transfer *t, char *error, size_t error_len)
         return -1;
     }
 
-    if (h5writer_attribute(t->out, NORMALIZE_ATTRIBUTE, t->factor) < 0) {
+    if (h5writer_value(t->out, OUT_NORM, t->factor) < 0) {
         return h5writer_fail(t->out, t->out_path, error, error_len);
     }
 
@@ -481,7 +485,7 @@ static int open_transfer(transfer *t, bool may_replace, char *error, size_t erro
     }
 
     t->out = h5writer_create(t->out_path, t->program, t->n_refs, t->ref_cap,
-                             may_replace, OUT_REQUIRED_ONLY);
+                             may_replace, WRITES);
     if (!t->out) {
         return fail_memory(error, error_len);
     }

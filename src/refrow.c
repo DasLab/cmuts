@@ -76,6 +76,7 @@ static const double *values(refrow *r, out_field_id id, const accum *acc,
         case OUT_LENGTHS:    return accum_const_data(acc, ACCUM_LENGTHS);
         case OUT_READS:      return accum_const_data(acc, ACCUM_READS);
         case OUT_REJECTED:   return accum_const_data(acc, ACCUM_FILTERED);
+        case OUT_NORM:
         case OUT_UNMAPPED:
         case OUT_N_FIELDS:   break;
         case OUT_REACTIVITY:

@@ -83,6 +83,13 @@ The correlation between two positions being modified in the same read, as the Pe
 **Shape** `(n, l, l)` · **Type** `float32` · **Fill** `zero` · _written only when asked for_
 
 The evidence behind each correlation: the reads reaching both positions.
+
+{.field}
+### `norm`
+
+**Shape** `()` · **Type** `float32` · **Fill** `NaN` · _written only when asked for_
+
+The scale every rate in this file was divided by.
 <!-- END GENERATED cmuts-hmm FIELDS -->
 
 ## Mixed-Length Libraries

@@ -14,6 +14,7 @@ LENGTHS = "reads/lengths"
 COUNTED = "reads/counted"
 REJECTED = "reads/rejected"
 UNMAPPED = "reads/unmapped"
+NORM = "norm"
 
 READS_GROUP = "reads"
 

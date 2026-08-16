@@ -69,6 +69,7 @@ All HDF5 files in cmuts have the same format, where `n` is the number of referen
 | `reads/unmapped` | `()` | `uint64` | `zero` | always |
 | `pairwise/correlation` | `(n, l, l)` | `float32` | `NaN` | when asked for |
 | `pairwise/coverage` | `(n, l, l)` | `float32` | `zero` | when asked for |
+| `norm` | `()` | `float32` | `NaN` | when asked for |
 <!-- END GENERATED cmuts-hmm LAYOUT -->
 
 See the [output](output.md) page for more detail on what each dataset contains.

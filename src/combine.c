@@ -209,7 +209,7 @@ static int read_totals(combination *c, char *error, size_t error_len)
         for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
             size_t total;
 
-            if (OUT_FIELDS[id].per_ref) {
+            if (OUT_FIELDS[id].per_ref || !h5reader_holds(c->input[i], id)) {
                 continue;
             }
 
@@ -227,7 +227,7 @@ static int read_totals(combination *c, char *error, size_t error_len)
 static int write_totals(combination *c, char *error, size_t error_len)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (OUT_FIELDS[id].per_ref) {
+        if (OUT_FIELDS[id].per_ref || !out_wanted(id, OUT_REQUIRED_ONLY)) {
             continue;
         }
 

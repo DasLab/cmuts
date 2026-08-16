@@ -74,6 +74,15 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .optional = true,
         .detail   = "The evidence behind each correlation: the reads reaching both positions.",
     },
+    [OUT_NORM] = {
+        .name     = "norm",
+        .row      = shape_none,
+        .per_ref  = false,
+        .stored   = OUT_F32,
+        .absent   = OUT_NAN,
+        .optional = true,
+        .detail   = "The scale every rate in this file was divided by.",
+    },
     [OUT_UNMAPPED] = {
         .name    = "reads/unmapped",
         .row     = shape_none,

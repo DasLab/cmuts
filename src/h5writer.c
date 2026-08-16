@@ -106,41 +106,6 @@ done:
     return status;
 }
 
-/* Writes one double attribute on the root group, for a value belonging to one program
- * rather than to every output. */
-static int write_number(hid_t file, const char *name, double value)
-{
-    hid_t space  = H5Screate(H5S_SCALAR);
-    hid_t attr   = H5I_INVALID_HID;
-    int   status = -1;
-
-    if (space < 0) {
-        goto done;
-    }
-
-    attr = H5Acreate2(file, name, H5T_IEEE_F64LE, space, H5P_DEFAULT, H5P_DEFAULT);
-
-    if (attr >= 0 && H5Awrite(attr, H5T_NATIVE_DOUBLE, &value) >= 0) {
-        status = 0;
-    }
-
-done:
-    if (attr >= 0) {
-        H5Aclose(attr);
-    }
-    if (space >= 0) {
-        H5Sclose(space);
-    }
-
-    return status;
-}
-
-int h5writer_attribute(h5writer *w, const char *name, double value)
-{
-    return write_number(w->file, name, value) < 0
-         ? fail(w, "unable to write an attribute")
-         : 0;
-}
 
 /* Records which program wrote the file, and at which version. output.h names the
  * attributes; the values are what this run holds.
@@ -548,6 +513,21 @@ int h5writer_block(h5writer *w, out_field_id id, int32_t tid, size_t len,
  *
  * Transferred as an unsigned and not through the double every row passes through, since
  * a run total is counted whole and never accumulated. */
+int h5writer_value(h5writer *w, out_field_id id, double value)
+{
+    float  stored = (float)value;
+    herr_t status;
+
+    if (OUT_FIELDS[id].per_ref) {
+        return fail(w, "a field with a row per reference holds no single value");
+    }
+
+    status = H5Dwrite(w->dataset[id], H5T_NATIVE_FLOAT, H5S_ALL, H5S_ALL,
+                      H5P_DEFAULT, &stored);
+
+    return status < 0 ? fail(w, "unable to write a value") : 0;
+}
+
 int h5writer_total(h5writer *w, out_field_id id, size_t value)
 {
     uint64_t stored = value;

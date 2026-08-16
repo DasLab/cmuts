@@ -8,9 +8,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/* The attribute the scale is written under, on the root group of every output. */
-#define NORMALIZE_ATTRIBUTE "norm"
-
 /* How the scale is taken from the pooled rates. */
 typedef enum {
     NORM_UBR,

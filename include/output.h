@@ -35,6 +35,7 @@ typedef enum {
     OUT_UNMAPPED,
     OUT_PAIRWISE_CORRELATION,
     OUT_PAIRWISE_COVERAGE,
+    OUT_NORM,
     OUT_N_FIELDS,
 } out_field_id;
 

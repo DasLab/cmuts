@@ -28,6 +28,7 @@ from outputs import (
     COUNTED,
     COVERAGE,
     ERROR,
+    NORM,
     REACTIVITY,
     UNMAPPED,
     attributes_of,
@@ -74,7 +75,13 @@ def covered(values=None, **rest):
 
 def recorded(path) -> float:
     """The scale an output records for itself."""
-    return float(attributes_of(path)["norm"])
+    return float(field_of(path, NORM))
+
+
+def besides_the_scale(path) -> dict:
+    """The datasets an output holds other than the scale, which is what this program
+    adds to whatever it was given."""
+    return {name: shape for name, shape in layout_of(path).items() if name != NORM}
 
 
 # ---------------------------------------------------------------------------
@@ -240,8 +247,8 @@ def test_inputs_of_different_shapes_share_a_scale(build, normalize):
     outputs = normalize(first, second)
 
     assert recorded(outputs[0]) == recorded(outputs[1])
-    assert layout_of(outputs[0]) == layout_of(first)
-    assert layout_of(outputs[1]) == layout_of(second)
+    assert besides_the_scale(outputs[0]) == layout_of(first)
+    assert besides_the_scale(outputs[1]) == layout_of(second)
 
 
 def test_each_output_matches_the_input_it_was_paired_with(build, normalize):
@@ -325,7 +332,7 @@ def test_the_output_is_shaped_and_typed_like_its_input(build, normalize):
 
     output, = normalize(rates)
 
-    assert layout_of(output) == layout_of(rates)
+    assert besides_the_scale(output) == layout_of(rates)
 
 
 def test_the_columns_past_a_reference_stay_nan(build, normalize):
@@ -480,4 +487,4 @@ def test_cmuts_norm_reads_what_cmuts_hmm_writes(data, falsifiable, tmp_path):
 
     output, = run_normalize([counted], [tmp_path / "normalized.h5"], min_coverage="0")
 
-    assert layout_of(output) == layout_of(counted)
+    assert besides_the_scale(output) == layout_of(counted)
