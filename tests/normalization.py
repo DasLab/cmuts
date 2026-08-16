@@ -87,19 +87,12 @@ def scaled(path, name, scale) -> np.ndarray:
     return (values / scale).astype(np.float32)
 
 
-def clipped(values, below=None, above=None) -> np.ndarray:
-    """The values held within the bounds, leaving NaN as it is."""
-    held = values
-
-    if below is not None:
-        held = np.maximum(held, np.float32(below))
-    if above is not None:
-        held = np.minimum(held, np.float32(above))
-
-    return held
+def clipped(values, above=None) -> np.ndarray:
+    """The values held under the bound, leaving NaN as it is."""
+    return values if above is None else np.minimum(values, np.float32(above))
 
 
-def expected(path, name, scale, below=None, above=None) -> np.ndarray:
+def expected(path, name, scale, above=None) -> np.ndarray:
     """What one field of an output should hold. Only the rates and their error
     carry the scale, and only the rates are clipped."""
     if name not in (REACTIVITY, ERROR):
@@ -107,4 +100,4 @@ def expected(path, name, scale, below=None, above=None) -> np.ndarray:
 
     values = scaled(path, name, scale)
 
-    return clipped(values, below, above) if name == REACTIVITY else values
+    return clipped(values, above) if name == REACTIVITY else values

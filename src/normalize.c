@@ -220,12 +220,20 @@ static double outlier_factor(rate_pool *p)
     return total / (double)((last - first) + 1);
 }
 
+/* Gives the scale the pooled rates come to, or NaN where they support none: a scale is
+ * a divisor, so one that is not above zero is no scale at all. */
 static double pooled_factor(const normalize_config *cfg, rate_pool *p)
 {
     double factor = cfg->scheme == NORM_UBR ? ubr_factor(p) : outlier_factor(p);
 
-    /* A factor that is not above zero leaves the rates unscaled. */
-    return (isnan(factor) || factor <= 0.0) ? 1.0 : factor;
+    return (isnan(factor) || factor <= 0.0) ? (double)NAN : factor;
+}
+
+/* Gives what the rates are divided by. Where there is no scale they are left as they
+ * are, which is dividing by one. */
+static double divisor(double factor)
+{
+    return isnan(factor) ? 1.0 : factor;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -241,18 +249,16 @@ static void scale_f32(float *row, size_t n, double factor)
 
 /* Holds every value within the bounds, leaving NaN as it is and leaving a bound that is
  * NaN unapplied. */
-static void clip_f32(float *row, size_t n, double below, double above)
+static void clip_f32(float *row, size_t n, double above)
 {
-    bool  has_below = !isnan(below);
-    bool  has_above = !isnan(above);
-    float low       = (float)below;
-    float high      = (float)above;
+    float high = (float)above;
+
+    if (isnan(above)) {
+        return;
+    }
 
     for (size_t i = 0; i < n; i++) {
-        if (has_below && row[i] < low) {
-            row[i] = low;
-        }
-        if (has_above && row[i] > high) {
+        if (row[i] > high) {
             row[i] = high;
         }
     }
@@ -392,10 +398,10 @@ static void transfer_row(const transfer *t, out_field_id id, size_t n)
         return;
     }
 
-    scale_f32(t->row, n, t->factor);
+    scale_f32(t->row, n, divisor(t->factor));
 
     if (id == OUT_REACTIVITY) {
-        clip_f32(t->row, n, t->cfg->clip_below, t->cfg->clip_above);
+        clip_f32(t->row, n, t->cfg->clip_above);
     }
 }
 

@@ -115,6 +115,18 @@ def test_a_constant_rate_is_its_own_scale(build, normalize):
 
 
 @pytest.mark.parametrize("scheme", [UBR, OUTLIER])
+def test_rates_supporting_no_scale_record_none(build, normalize, scheme):
+    """A scale is a divisor, so rates that come to zero support none. The rates are
+    left as they are, and the output says it holds no scale rather than one."""
+    rates = build(covered({REACTIVITY: 0.0}))
+
+    output, = normalize(rates, norm=scheme)
+
+    assert np.isnan(recorded(output))
+    assert np.allclose(field_of(output, REACTIVITY), 0.0)
+
+
+@pytest.mark.parametrize("scheme", [UBR, OUTLIER])
 @pytest.mark.parametrize("name", ALL_FIELDS)
 def test_each_field_follows_the_scale(build, normalize, scheme, name):
     rates = build(covered(random_fields(seed=2)), unmapped=17)
@@ -268,21 +280,20 @@ def test_each_output_matches_the_input_it_was_paired_with(build, normalize):
 # ---------------------------------------------------------------------------
 
 
-def test_clipping_holds_the_reactivity_within_the_bounds(build, normalize):
+def test_clipping_holds_the_reactivity_under_the_bound(build, normalize):
     rates = build(covered(random_fields(seed=7)))
 
-    output, = normalize(rates, clip_below="0.25", clip_above="0.75")
+    output, = normalize(rates, clip_above="0.75")
     result = field_of(output, REACTIVITY)
 
-    assert np.all(result[~np.isnan(result)] >= np.float32(0.25))
     assert np.all(result[~np.isnan(result)] <= np.float32(0.75))
 
 
 def test_clipping_matches_its_oracle(build, normalize):
     rates = build(covered(random_fields(seed=8)))
 
-    output, = normalize(rates, clip_below="0.25", clip_above="0.75")
-    wanted = expected(rates, REACTIVITY, factor(UBR, [rates]), below=0.25, above=0.75)
+    output, = normalize(rates, clip_above="0.75")
+    wanted = expected(rates, REACTIVITY, factor(UBR, [rates]), above=0.75)
 
     assert np.allclose(field_of(output, REACTIVITY), wanted, rtol=TOLERANCE,
                        equal_nan=True)
@@ -292,7 +303,7 @@ def test_clipping_reaches_no_field_but_the_reactivity(build, tmp_path):
     rates = build(covered(random_fields(seed=9)), unmapped=5)
 
     plain = run_normalize([rates], [tmp_path / "plain.h5"])
-    clipped = run_normalize([rates], [tmp_path / "clipped.h5"], clip_below="0.5")
+    clipped = run_normalize([rates], [tmp_path / "clipped.h5"], clip_above="0.5")
 
     for name in set(ALL_FIELDS) - {REACTIVITY}:
         assert np.array_equal(
@@ -300,10 +311,10 @@ def test_clipping_reaches_no_field_but_the_reactivity(build, tmp_path):
         ), name
 
 
-def test_clipping_does_not_raise_a_missing_value(build, normalize):
+def test_clipping_does_not_fill_a_missing_value(build, normalize):
     left, _ = missing_in_each_input(N_REFS, CAP)
 
-    output, = normalize(build(covered({REACTIVITY: left})), clip_below="0")
+    output, = normalize(build(covered({REACTIVITY: left})), clip_above="0")
     result = field_of(output, REACTIVITY)
 
     assert np.array_equal(np.isnan(result), np.isnan(left))

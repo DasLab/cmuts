@@ -92,17 +92,6 @@ static const cli_option OPTIONS[] = {
 
     {
         .group       = "Clipping",
-        .name        = "clip-below",
-        .type        = OPT_DOUBLE,
-        .offset      = offsetof(norm_args, normalize.clip_below),
-        .metavar     = "N",
-        .help        = "raise a normalized reactivity up to this value",
-        .unset_label = "none",
-        .minimum     = -CLI_UNBOUNDED,
-        .maximum     = CLI_UNBOUNDED,
-    },
-    {
-        .group       = "Clipping",
         .name        = "clip-above",
         .type        = OPT_DOUBLE,
         .offset      = offsetof(norm_args, normalize.clip_above),
@@ -165,7 +154,6 @@ norm_args norm_defaults(void)
     return (norm_args){
         .normalize = {
             .min_coverage = DEFAULT_MIN_COVERAGE,
-            .clip_below   = (double)NAN,
             .clip_above   = (double)NAN,
         },
         .scheme = NORM_UBR,
