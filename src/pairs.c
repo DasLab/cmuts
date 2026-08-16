@@ -46,8 +46,9 @@ static const double *const_cell(const pairs *p, size_t len, size_t i, size_t j)
 
 int pairs_alloc(pairs *p, size_t cap)
 {
-    p->cap   = cap;
-    p->cells = calloc(pair_values(cap) ? pair_values(cap) : 1, sizeof *p->cells);
+    size_t values = pair_values(cap);
+
+    p->cells = calloc(values ? values : 1, sizeof *p->cells);
 
     return p->cells ? 0 : -1;
 }
@@ -131,14 +132,17 @@ static const double *ordered(const pairs *p, size_t len, size_t i, size_t j)
     return i <= j ? const_cell(p, len, i, j) : const_cell(p, len, j, i);
 }
 
-/* Gives the correlation the four sums come to, or NaN where they support none. The
- * marginals are the reads modified at each position and the reads not, and a coefficient
- * needs all four to be positive. */
-static double coefficient(const double *at, double min_depth, bool swapped)
+/* Gives the correlation the four sums come to, or NaN where they support none. Both
+ * halves of it are symmetric in the two marginals, so a pair reads the same either way
+ * round and the order it was asked for does not enter.
+ *
+ * The marginals are the reads modified at each position and the reads not, and a
+ * coefficient needs all four to be positive. */
+static double coefficient(const double *at, double min_depth)
 {
     double span  = at[PAIR_SPAN];
-    double left  = swapped ? at[PAIR_RIGHT] : at[PAIR_LEFT];
-    double right = swapped ? at[PAIR_LEFT] : at[PAIR_RIGHT];
+    double left  = at[PAIR_LEFT];
+    double right = at[PAIR_RIGHT];
     double both  = at[PAIR_BOTH];
     double scale = left * (span - left) * right * (span - right);
 
@@ -153,7 +157,7 @@ void pairs_correlation(const pairs *p, size_t len, double min_depth, size_t i,
                        double *row)
 {
     for (size_t j = 0; j < len; j++) {
-        row[j] = coefficient(ordered(p, len, i, j), min_depth, j < i);
+        row[j] = coefficient(ordered(p, len, i, j), min_depth);
     }
 }
 

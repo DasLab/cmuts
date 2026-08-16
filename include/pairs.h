@@ -26,8 +26,7 @@ typedef enum {
  * length and not the capacity, so two may be merged only at the length both were zeroed
  * at. */
 typedef struct {
-    double *cells;   /* owned; PAIR_N_CELLS per pair */
-    size_t  cap;
+    double *cells;   /* owned; PAIR_N_CELLS per pair, and NULL where none are held */
 } pairs;
 
 int  pairs_alloc(pairs *p, size_t cap);
