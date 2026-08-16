@@ -78,3 +78,11 @@ Tests which run a program over an alignment take the `data` fixture, which is pa
 A test requiring specific formats pins `fmt` instead of taking all three. A whole module pins it by overriding the fixture, whereas a single test pins it with `indirect`.
 
 To ensure tests are not vacuous, the `falsifiable` fixture is used to signal whether the test is falsifiable on the current dataset. Place the call between the setup and the assertions of the test. A test in which no dataset declares itself falsifiable fails the run, signalling the need for a new dataset in `tests/datasets.py`.
+
+## Continuous Integration
+
+Two workflows run on every push to `main` and on every pull request against it.
+
+`CI` runs `make check` under gcc and clang on Linux and under clang on macOS, and `make lint` on Linux. The sanitizers are not among them, taking longer than the rest of the run put together; run those locally.
+
+`Documentation` renders the site, and fails where `make docs` would rewrite a page. The generated blocks are read out of the binaries, so a change to a program's options or output leaves them behind until they are rebuilt: run `make docs` and commit what it writes alongside the change. A push to `main` deploys the rendered site as well.
