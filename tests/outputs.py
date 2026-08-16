@@ -225,8 +225,9 @@ def read_summary(path) -> Summary:
         )
 
 
-def _arrays_agree(a, b) -> bool:
-    # Two floating arrays agree where both hold a NaN in the same position.
+def arrays_agree(a, b) -> bool:
+    """Returns whether two arrays hold the same values. Two floating ones agree where
+    both hold a NaN in the same position."""
     return np.array_equal(a[()], b[()], equal_nan=np.issubdtype(a.dtype, np.floating))
 
 
@@ -240,7 +241,7 @@ def outputs_agree(first, second) -> bool:
         left, right = arrays_of(a), arrays_of(b)
 
         return set(left) == set(right) and all(
-            _arrays_agree(left[name], right[name]) for name in left
+            arrays_agree(left[name], right[name]) for name in left
         )
 
 
