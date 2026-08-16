@@ -12,6 +12,13 @@ shape_extents shape_per_base(size_t len, size_t cap)
     return (shape_extents){ .rank = 1, .dim = { len } };
 }
 
+shape_extents shape_per_pair(size_t len, size_t cap)
+{
+    (void)cap;
+
+    return (shape_extents){ .rank = 2, .dim = { len, len } };
+}
+
 shape_extents shape_per_length(size_t len, size_t cap)
 {
     (void)len;
@@ -44,6 +51,10 @@ const char *shape_name(shape_fn shape)
 {
     if (shape == shape_per_base) {
         return "per base";
+    }
+
+    if (shape == shape_per_pair) {
+        return "per pair";
     }
 
     if (shape == shape_per_length) {

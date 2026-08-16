@@ -16,6 +16,7 @@ typedef struct {
     const cm_fasta_record *ref;
     const tally_tables    *tables;
     accum                 *target;
+    pairs                 *target_pairs;   /* NULL where no pairs are counted */
 } context;
 
 struct tally_scratch {
@@ -106,6 +107,10 @@ static phmm_status marginalize(const context *ctx, tally_scratch *scratch)
 
     if (status == PHMM_OK) {
         add_window(ctx, &window);
+
+        if (ctx->target_pairs) {
+            pairs_count(ctx->target_pairs, ctx->ref->len, &window);
+        }
     }
 
     return status;
@@ -162,13 +167,14 @@ void tally_scratch_destroy(tally_scratch *scratch)
 
 phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
                   const tally_tables *tables, tally_scratch *scratch,
-                  accum *target)
+                  accum *target, pairs *target_pairs)
 {
     context ctx = {
-        .read   = read,
-        .ref    = ref,
-        .tables = tables,
-        .target = target,
+        .read         = read,
+        .ref          = ref,
+        .tables       = tables,
+        .target       = target,
+        .target_pairs = target_pairs,
     };
     phmm_status status = marginalize(&ctx, scratch);
 

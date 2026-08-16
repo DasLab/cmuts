@@ -13,6 +13,7 @@
 
 #include "accum.h"
 #include "fasta.h"
+#include "pairs.h"
 
 /* Everything a reference accumulates while its reads are in flight.
  *
@@ -27,8 +28,9 @@ typedef struct refctx {
     char           *seq;   /* owned; the FASTA reader's buffer does not persist */
     size_t          len;
     accum           acc;
+    pairs           pr;    /* co-modification; held only under --pairwise */
     atomic_int      handles;
-    pthread_mutex_t lock;  /* guards acc */
+    pthread_mutex_t lock;  /* guards acc and pr */
 } refctx;
 
 void refctx_acquire(refctx *ctx, int n);
@@ -38,8 +40,9 @@ void refctx_acquire(refctx *ctx, int n);
 bool refctx_release(refctx *ctx, int n);
 
 /* ctx->acc += src, serialized against the other workers. The lock is held for the merge
- * and not for the processing, which happens outside it. */
-void refctx_merge(refctx *ctx, const accum *src);
+ * and not for the processing, which happens outside it. src_pairs is merged under the
+ * same lock, and is NULL for a run counting no pairs. */
+void refctx_merge(refctx *ctx, const accum *src, const pairs *src_pairs);
 
 /* Adds to one scalar field, for counts arising outside the processing step and so having
  * no accumulator of their own to merge from. */
@@ -57,8 +60,10 @@ void refctx_sequence(const refctx *ctx, cm_fasta_record *out);
 typedef struct ctxpool ctxpool;
 
 /* Creates a pool of contexts. ref_cap is the longest reference in the file, and every
- * context is sized to it so that any two accumulators share a layout and may be merged. */
-ctxpool *ctxpool_create(size_t capacity, size_t ref_cap);
+ * context is sized to it so that any two accumulators share a layout and may be merged.
+ * Co-modification is held only when asked for, its storage going as the square of
+ * ref_cap where every other field goes linearly. */
+ctxpool *ctxpool_create(size_t capacity, size_t ref_cap, bool pairwise);
 void     ctxpool_destroy(ctxpool *p);
 
 /* Takes a context, blocking while every one is live. */

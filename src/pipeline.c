@@ -56,6 +56,8 @@ typedef struct {
     filter_config  filter_config;
     size_t         batch;
     size_t         ref_cap;    /* longest reference, sizing every accumulator */
+    bool           pairwise;
+    bool           wanted[OUT_N_FIELDS];   /* the optional fields this run writes */
 } pipeline;
 
 /* The pipeline is filled in while the run is assembled and only read once it starts,
@@ -116,6 +118,7 @@ typedef struct {
     failure_flag  *failure;  /* shared; the one thing a worker writes */
     refctx        *held;    /* reference the shadow holds a handle for, or NULL */
     accum          shadow;
+    pairs          shadow_pairs;   /* cells only under --pairwise */
     tally_scratch *scratch; /* buffers for the processing step */
     void         **slots;   /* a batch of workitems, allocated before the
                                thread starts */
@@ -132,8 +135,13 @@ static void worker_flush_shadow(worker *w)
         return;
     }
 
-    refctx_merge(ctx, &w->shadow);
+    refctx_merge(ctx, &w->shadow, w->shadow_pairs.cells ? &w->shadow_pairs : NULL);
     accum_zero(&w->shadow, ctx->len);
+
+    if (w->shadow_pairs.cells) {
+        pairs_zero(&w->shadow_pairs, ctx->len);
+    }
+
     w->held = NULL;
 
     if (refctx_release(ctx, 1)) {
@@ -170,7 +178,8 @@ static void worker_count_run(worker *w, void **slots, size_t n,
 
         cm_bam_record_view(item->rec, &read);
         status = tally(&read, ref, &w->pipe->tally_tables, w->scratch,
-                       &w->shadow);
+                       &w->shadow,
+                       w->shadow_pairs.cells ? &w->shadow_pairs : NULL);
 
         /* The tally has counted a read it could not score as rejected, so the run goes
          * on. Every other failure would meet every read after it. */
@@ -567,7 +576,8 @@ static void *consumer_main(void *arg)
             /* Keep draining after a failure, or the loader and workers block on a
              * queue nothing is emptying. */
             if (c->status == 0 &&
-                refrow_write(c->pipe->rows, ctx->tid, ctx->len, &ctx->acc) < 0) {
+                refrow_write(c->pipe->rows, ctx->tid, ctx->len, &ctx->acc,
+                             ctx->pr.cells ? &ctx->pr : NULL) < 0) {
                 c->status = -1;
             }
 
@@ -645,13 +655,16 @@ static int pipeline_build_buffers(pipeline *p, const pipeline_config *cfg,
     size_t carriers = cfg->queue_capacity + (cfg->workers + 2) * cfg->batch;
 
     p->batch         = cfg->batch;
+    p->pairwise      = cfg->pairwise;
+    p->wanted[OUT_PAIRWISE_CORRELATION] = cfg->pairwise;
+    p->wanted[OUT_PAIRWISE_COVERAGE]    = cfg->pairwise;
     p->filter_config = cfg->filter_config;
     p->ref_cap       = (size_t)cm_bam_stream_max_reflen(p->bam);
 
     p->work      = queue_create(cfg->queue_capacity);
     p->completed = queue_create(cfg->live_refs);
     p->items     = itempool_create(carriers);
-    p->contexts  = ctxpool_create(cfg->live_refs, p->ref_cap);
+    p->contexts  = ctxpool_create(cfg->live_refs, p->ref_cap, cfg->pairwise);
 
     if (!p->work || !p->completed || !p->items || !p->contexts) {
         snprintf(error, error_len, "out of memory building the pipeline");
@@ -666,7 +679,8 @@ static int pipeline_open_output(pipeline *p, const pipeline_config *cfg,
                                 size_t error_len)
 {
     p->out = h5writer_create(cfg->output_path, program,
-                             cm_bam_stream_nref(p->bam), p->ref_cap, may_replace);
+                             cm_bam_stream_nref(p->bam), p->ref_cap, may_replace,
+                             p->wanted);
     if (!p->out) {
         snprintf(error, error_len, "out of memory");
         return -1;
@@ -678,7 +692,7 @@ static int pipeline_open_output(pipeline *p, const pipeline_config *cfg,
         return -1;
     }
 
-    p->rows = refrow_create(p->out, cfg->rate_config, p->ref_cap);
+    p->rows = refrow_create(p->out, cfg->rate_config, p->ref_cap, p->wanted);
     if (!p->rows) {
         snprintf(error, error_len, "out of memory");
         return -1;
@@ -703,7 +717,8 @@ static int worker_start_all(worker *workers, size_t n, const pipeline *p,
         workers[i].scratch = tally_scratch_create();
 
         if (!workers[i].slots || !workers[i].scratch
-            || accum_alloc(&workers[i].shadow, p->ref_cap) < 0) {
+            || accum_alloc(&workers[i].shadow, p->ref_cap) < 0
+            || (p->pairwise && pairs_alloc(&workers[i].shadow_pairs, p->ref_cap) < 0)) {
             snprintf(error, error_len, "out of memory preparing worker %zu", i);
             return -1;
         }
@@ -788,6 +803,7 @@ int pipeline_run(const pipeline_config *cfg, const char *program, char *error,
 done:
     for (size_t i = 0; i < cfg->workers; i++) {
         accum_free(&workers[i].shadow);
+        pairs_free(&workers[i].shadow_pairs);
         tally_scratch_destroy(workers[i].scratch);
         free(workers[i].slots);
     }

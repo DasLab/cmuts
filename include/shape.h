@@ -35,7 +35,7 @@
 
 /* The largest number of extents any of the shapes below writes. Raise it alongside a shape
  * that writes more. */
-#define SHAPE_RANK_MAX 1
+#define SHAPE_RANK_MAX 2
 
 /* The extents one reference's values occupy. A shape fills this and nothing wider, so one
  * reporting a rank it has no room for misdescribes a field without overrunning
@@ -52,6 +52,11 @@ typedef struct {
 typedef shape_extents (*shape_fn)(size_t len, size_t cap);
 
 shape_extents shape_per_base(size_t len, size_t cap);
+
+/* Gives the extents of one value for every ordered pair of the reference's positions. The
+ * square is written whole, both halves of it, so that a reader indexing either way finds
+ * the pair; what is accumulated is the triangle. */
+shape_extents shape_per_pair(size_t len, size_t cap);
 shape_extents shape_per_length(size_t len, size_t cap);
 shape_extents shape_none(size_t len, size_t cap);
 

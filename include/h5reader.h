@@ -32,6 +32,10 @@ size_t  h5reader_capacity(const h5reader *r);
 
 /* Reads one field's whole row for a reference. values must hold
  * out_values(id, capacity, capacity) of the field's stored type. */
+/* Whether the reader holds a field. The optional fields are not opened, so a caller
+ * walking every field skips those the file may not carry and this one does not read. */
+bool h5reader_holds(const h5reader *r, out_field_id id);
+
 int h5reader_field(h5reader *r, out_field_id id, int32_t tid, void *values);
 
 /* Reads the whole of a field belonging to the run and not to any one reference. */

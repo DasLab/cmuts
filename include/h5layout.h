@@ -33,7 +33,7 @@ const void *h5layout_fill(out_field_id id);
 
 /* Gives a dataspace holding one row of the widest field, from which a span of any field's
  * row is then selected. */
-hid_t h5layout_row_space(size_t cap);
+hid_t h5layout_row_space(size_t cap, const bool *wanted);
 
 /* Selects n values of one reference's row of a field, starting at column from, in the file
  * and in the memory row the values move through. The two are selected together so that
@@ -43,6 +43,13 @@ hid_t h5layout_row_space(size_t cap);
  * the file is open and reselected for each row. */
 int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
                          int32_t tid, size_t from, size_t n);
+
+/* Selects one reference's whole block of a field whose row has two extents, in the file
+ * and in memory together. The block is square and starts at the origin of the row, so a
+ * reference shorter than the longest leaves the rest of its row unwritten, which the
+ * dataset's fill already holds. */
+int h5layout_select_block(hid_t filespace, hid_t memspace, out_field_id id,
+                          int32_t tid, size_t len);
 
 /* Gives a creation property list with object timestamping turned off.
  *

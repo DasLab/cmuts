@@ -118,6 +118,13 @@ static const cli_option OPTIONS[] = {
         .maximum = CLI_UNBOUNDED,
     },
     {
+        .group  = "Counting",
+        .name   = "pairwise",
+        .type   = OPT_FLAG,
+        .offset = offsetof(cli_args, pipeline.pairwise),
+        .help   = "also write how often two positions are modified together",
+    },
+    {
         .group   = "Counting",
         .name    = "min-depth",
         .type    = OPT_DOUBLE,

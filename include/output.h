@@ -33,6 +33,8 @@ typedef enum {
     OUT_READS,
     OUT_REJECTED,
     OUT_UNMAPPED,
+    OUT_PAIRWISE_CORRELATION,
+    OUT_PAIRWISE_COVERAGE,
     OUT_N_FIELDS,
 } out_field_id;
 
@@ -66,6 +68,7 @@ typedef struct {
     bool        per_ref;  /* whether there is one such row per reference */
     out_stored  stored;   /* the type its values are narrowed to */
     out_absent  absent;   /* what a value it was never given means */
+    bool        optional; /* whether a run may leave the field out of its output */
     const char *detail;   /* what the numbers are, in one sentence */
 } out_field;
 
@@ -97,9 +100,18 @@ extern const out_attribute OUT_ATTRIBUTES[OUT_N_ATTRS];
  * longest reference is cap. */
 size_t out_values(out_field_id id, size_t len, size_t cap);
 
+/* Whether a run writes a field, given the optional ones it asked for. wanted is one
+ * entry per field, or NULL for a run writing every field there is. A field that is not
+ * optional is written whatever it says. */
+bool out_wanted(out_field_id id, const bool *wanted);
+
+/* A selection holding none of the optional fields, for the programs that read and write
+ * the per-base fields and have nothing to say about the rest. */
+extern const bool OUT_REQUIRED_ONLY[OUT_N_FIELDS];
+
 /* Gives the widest row of any field, which is what a buffer must hold to take a row of
  * any of them. */
-size_t out_widest(size_t cap);
+size_t out_widest(size_t cap, const bool *wanted);
 
 /* Give the bytes one of a field's values occupies, and the most any field's value
  * occupies. A buffer taking a row of any field is as long as out_widest values of

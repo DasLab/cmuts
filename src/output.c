@@ -56,6 +56,24 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .absent  = OUT_ZERO,
         .detail  = "The number of reads that contributed nothing: rejected by at least one filter, or carrying something the pair HMM's rates give no alignment of.",
     },
+    [OUT_PAIRWISE_CORRELATION] = {
+        .name     = "pairwise/correlation",
+        .row      = shape_per_pair,
+        .per_ref  = true,
+        .stored   = OUT_F32,
+        .absent   = OUT_NAN,
+        .optional = true,
+        .detail   = "The correlation between two positions being modified in the same read, as the Pearson coefficient of the two binary variables. NaN where the reads are too few, and where either position is modified in all of them or in none.",
+    },
+    [OUT_PAIRWISE_COVERAGE] = {
+        .name     = "pairwise/coverage",
+        .row      = shape_per_pair,
+        .per_ref  = true,
+        .stored   = OUT_F32,
+        .absent   = OUT_ZERO,
+        .optional = true,
+        .detail   = "The evidence behind each correlation: the reads reaching both positions.",
+    },
     [OUT_UNMAPPED] = {
         .name    = "reads/unmapped",
         .row     = shape_none,
@@ -82,12 +100,22 @@ size_t out_values(out_field_id id, size_t len, size_t cap)
     return shape_values(OUT_FIELDS[id].row, len, cap);
 }
 
-size_t out_widest(size_t cap)
+const bool OUT_REQUIRED_ONLY[OUT_N_FIELDS] = { false };
+
+bool out_wanted(out_field_id id, const bool *wanted)
+{
+    return !OUT_FIELDS[id].optional || !wanted || wanted[id];
+}
+
+/* Gives the values the widest row of the run occupies. A field left out is not measured,
+ * so a run without the pairwise fields sizes its buffers from the per-base ones and pays
+ * nothing for the square it did not ask for. */
+size_t out_widest(size_t cap, const bool *wanted)
 {
     size_t widest = 0;
 
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        size_t width = out_values(id, cap, cap);
+        size_t width = out_wanted(id, wanted) ? out_values(id, cap, cap) : 0;
 
         widest = width > widest ? width : widest;
     }

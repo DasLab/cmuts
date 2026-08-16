@@ -8,6 +8,7 @@
 #include "accum.h"
 #include "bam.h"
 #include "fasta.h"
+#include "pairs.h"
 #include "phmm.h"
 #include "phred.h"
 
@@ -51,7 +52,9 @@ void           tally_scratch_destroy(tally_scratch *scratch);
  *
  * PHMM_NO_PATH counts the read as rejected and contributes nothing else, the model having
  * no alignment of it to score. Anything else but PHMM_OK ends the run: the marginal then
- * fails on what would fail again on every read after it. */
+ * fails on what would fail again on every read after it.
+ *
+ * target_pairs takes the read's co-modification, and is NULL for a run counting none. */
 phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
                   const tally_tables *tables, tally_scratch *scratch,
-                  accum *target);
+                  accum *target, pairs *target_pairs);

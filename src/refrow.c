@@ -15,9 +15,11 @@ struct refrow {
     double     *row;      /* scratch a derived field is computed into */
 };
 
-refrow *refrow_create(h5writer *out, rate_config rates, size_t ref_cap)
+refrow *refrow_create(h5writer *out, rate_config rates, size_t ref_cap,
+                      const bool *wanted)
 {
-    refrow *r = calloc(1, sizeof *r);
+    refrow *r      = calloc(1, sizeof *r);
+    size_t  widest = out_widest(ref_cap, wanted);
 
     if (!r) {
         return NULL;
@@ -25,7 +27,7 @@ refrow *refrow_create(h5writer *out, rate_config rates, size_t ref_cap)
 
     r->out   = out;
     r->rates = rates;
-    r->row   = calloc(ref_cap ? ref_cap : 1, sizeof *r->row);
+    r->row   = calloc(widest ? widest : 1, sizeof *r->row);
 
     if (!r->row) {
         refrow_destroy(r);
@@ -45,13 +47,29 @@ void refrow_destroy(refrow *r)
     free(r);
 }
 
+/* Fills the scratch with one value for every ordered pair, a row of the reference at a
+ * time. The square is written whole so that a reader finds the pair whichever way round
+ * it indexes; what is accumulated is the triangle. */
+static void pair_square(refrow *r, out_field_id id, const pairs *pr, size_t len)
+{
+    for (size_t i = 0; i < len; i++) {
+        double *row = r->row + i * len;
+
+        if (id == OUT_PAIRWISE_CORRELATION) {
+            pairs_correlation(pr, len, r->rates.min_depth, i, row);
+        } else {
+            pairs_coverage(pr, len, i, row);
+        }
+    }
+}
+
 /* Gives one output field's values, computed into the scratch row where they are derived
  * and read in place where they are not, or NULL for a field with no row.
  * The accumulated fields and the written ones do not correspond one to one, so every
  * field is listed here and none is defaulted: one added without a source of its own
  * draws a warning and is refused at the write. */
 static const double *values(refrow *r, out_field_id id, const accum *acc,
-                            size_t len)
+                            const pairs *pr, size_t len)
 {
     switch (id) {
         case OUT_COVERAGE:   return accum_const_data(acc, ACCUM_COVERAGE);
@@ -66,12 +84,27 @@ static const double *values(refrow *r, out_field_id id, const accum *acc,
         case OUT_ERROR:
             rate_error(&r->rates, acc, len, r->row);
             return r->row;
+        case OUT_PAIRWISE_CORRELATION:
+        case OUT_PAIRWISE_COVERAGE:
+            if (!pr) {
+                break;
+            }
+            pair_square(r, id, pr, len);
+            return r->row;
     }
 
     return NULL;
 }
 
-int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc)
+/* Whether a field's row spans more than one extent, and so is written as a block rather
+ * than as a row with a tail to mark. */
+static bool is_block(out_field_id id, size_t len)
+{
+    return shape_rank(OUT_FIELDS[id].row(len, len)) > 1;
+}
+
+int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc,
+                 const pairs *pr)
 {
     if (len == 0) {
         return 0;
@@ -80,13 +113,19 @@ int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc)
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
         const double *row;
 
-        if (!OUT_FIELDS[id].per_ref) {
+        if (!OUT_FIELDS[id].per_ref || !h5writer_holds(r->out, id)) {
             continue;
         }
 
-        row = values(r, id, acc, len);
+        row = values(r, id, acc, pr, len);
 
-        if (!row || h5writer_field(r->out, id, tid, len, row) < 0) {
+        if (!row) {
+            return -1;
+        }
+
+        if (is_block(id, len)
+            ? h5writer_block(r->out, id, tid, len, row) < 0
+            : h5writer_field(r->out, id, tid, len, row) < 0) {
             return -1;
         }
     }

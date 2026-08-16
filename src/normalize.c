@@ -402,7 +402,7 @@ static int transfer_reference(const transfer *t, int32_t tid, char *error,
                               size_t error_len)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (!OUT_FIELDS[id].per_ref) {
+        if (!OUT_FIELDS[id].per_ref || !h5reader_holds(t->in, id)) {
             continue;
         }
 
@@ -474,14 +474,14 @@ static int open_transfer(transfer *t, bool may_replace, char *error, size_t erro
 
     t->n_refs  = h5reader_refs(t->in);
     t->ref_cap = h5reader_capacity(t->in);
-    t->row     = calloc(out_widest(t->ref_cap), out_widest_bytes());
+    t->row     = calloc(out_widest(t->ref_cap, OUT_REQUIRED_ONLY), out_widest_bytes());
 
     if (!t->row) {
         return fail_memory(error, error_len);
     }
 
     t->out = h5writer_create(t->out_path, t->program, t->n_refs, t->ref_cap,
-                             may_replace);
+                             may_replace, OUT_REQUIRED_ONLY);
     if (!t->out) {
         return fail_memory(error, error_len);
     }

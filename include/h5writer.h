@@ -40,8 +40,20 @@ int h5writer_may_replace(const char *path, bool overwrite, bool *may_replace,
  *
  * program names what is writing the file, and is recorded on the root group alongside the
  * version, so that a result read back later can be traced to what produced it. */
+/* wanted names the optional fields the run writes, one entry per field, and may be NULL
+ * for a run writing every field there is. A field left out has no dataset and no buffer
+ * sized for it. */
 h5writer *h5writer_create(const char *path, const char *program, int32_t n_refs,
-                          size_t ref_cap, bool overwrite);
+                          size_t ref_cap, bool overwrite, const bool *wanted);
+
+/* Whether the writer holds a field, so a caller may skip deriving values for one that
+ * was left out. */
+bool h5writer_holds(const h5writer *w, out_field_id id);
+
+/* Writes one reference's block of a field whose row has two extents. The columns and rows
+ * past the reference keep the dataset's fill, so only the block itself is written. */
+int h5writer_block(h5writer *w, out_field_id id, int32_t tid, size_t len,
+                   const double *values);
 void      h5writer_close(h5writer *w);
 
 /* Writes one field's values for a reference of len bases, narrowing the accumulated doubles

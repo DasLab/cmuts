@@ -27,6 +27,7 @@ struct h5writer {
     int32_t n_refs;
     size_t  ref_cap;
     double *padding;    /* NaN, as wide as the longest tail a row can have */
+    const bool *wanted; /* the optional fields this run writes; NULL for all of them */
     char    error[CM_ERROR_MAX];
 };
 
@@ -234,6 +235,10 @@ static int create_field_groups(h5writer *w, const char *name)
 static int create_groups(h5writer *w)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (!out_wanted(id, w->wanted)) {
+            continue;
+        }
+
         if (create_field_groups(w, OUT_FIELDS[id].name) < 0) {
             return fail(w, "unable to create a group");
         }
@@ -329,7 +334,7 @@ static int build_padding(h5writer *w)
 /* Prepares the row every write is selected from. */
 static int build_memspace(h5writer *w)
 {
-    w->memspace = h5layout_row_space(w->ref_cap);
+    w->memspace = h5layout_row_space(w->ref_cap, w->wanted);
 
     return w->memspace < 0 ? fail(w, "unable to prepare the output") : 0;
 }
@@ -355,6 +360,10 @@ static int create_file(h5writer *w, const char *path, bool overwrite)
 static int create_fields(h5writer *w)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (!out_wanted(id, w->wanted)) {
+            continue;
+        }
+
         w->dataset[id] = create_field(w, id);
         if (w->dataset[id] < 0) {
             return fail(w, "unable to create a dataset");
@@ -370,13 +379,15 @@ static int create_fields(h5writer *w)
 }
 
 h5writer *h5writer_create(const char *path, const char *program, int32_t n_refs,
-                          size_t ref_cap, bool overwrite)
+                          size_t ref_cap, bool overwrite, const bool *wanted)
 {
     h5writer *w = writer_alloc(n_refs, ref_cap);
 
     if (!w) {
         return NULL;
     }
+
+    w->wanted = wanted;
 
     if (build_padding(w) == 0 &&
         build_memspace(w) == 0 &&
@@ -503,6 +514,30 @@ int h5writer_row(h5writer *w, out_field_id id, int32_t tid, const void *values)
                       w->filespace[id], H5P_DEFAULT, values);
 
     return status < 0 ? fail(w, "unable to write an output row") : 0;
+}
+
+bool h5writer_holds(const h5writer *w, out_field_id id)
+{
+    return out_wanted(id, w->wanted);
+}
+
+int h5writer_block(h5writer *w, out_field_id id, int32_t tid, size_t len,
+                   const double *values)
+{
+    herr_t status;
+
+    if (tid < 0 || tid >= w->n_refs) {
+        return fail(w, "reference index outside the output");
+    }
+
+    if (h5layout_select_block(w->filespace[id], w->memspace, id, tid, len) < 0) {
+        return fail(w, "unable to select an output block");
+    }
+
+    status = H5Dwrite(w->dataset[id], H5T_NATIVE_DOUBLE, w->memspace,
+                      w->filespace[id], H5P_DEFAULT, values);
+
+    return status < 0 ? fail(w, "unable to write an output block") : 0;
 }
 
 /* ------------------------------------------------------------------------ */

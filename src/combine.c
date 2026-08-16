@@ -50,8 +50,14 @@ const void *combine_row(const combine_rows *rows, size_t input, out_field_id id)
 
 /* Gives the values one field occupies in a row set. A field with no row holds one
  * value. */
+/* Values one input row of a field holds. A field this program does not read holds none,
+ * so no buffer is taken for it. */
 static size_t row_values(out_field_id id, size_t ref_cap)
 {
+    if (!out_wanted(id, OUT_REQUIRED_ONLY)) {
+        return 0;
+    }
+
     return OUT_FIELDS[id].per_ref ? out_values(id, ref_cap, ref_cap) : 1;
 }
 
@@ -133,7 +139,7 @@ static int read_reference(combination *c, int32_t tid, char *error, size_t error
 {
     for (size_t i = 0; i < c->spec->n_inputs; i++) {
         for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-            if (!OUT_FIELDS[id].per_ref) {
+            if (!OUT_FIELDS[id].per_ref || !h5reader_holds(c->input[i], id)) {
                 continue;
             }
 
@@ -159,7 +165,7 @@ static int combine_field(const combination *c, out_field_id id, size_t n, char *
 static int write_reference(combination *c, int32_t tid, char *error, size_t error_len)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (!OUT_FIELDS[id].per_ref) {
+        if (!OUT_FIELDS[id].per_ref || !out_wanted(id, OUT_REQUIRED_ONLY)) {
             continue;
         }
 
@@ -308,7 +314,13 @@ static int build_rows(combination *c, char *error, size_t error_len)
         for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
             void **slot = &c->rows.value[(i * OUT_N_FIELDS) + id];
 
-            *slot = calloc(row_values(id, c->ref_cap), out_stored_bytes(id));
+            size_t values = row_values(id, c->ref_cap);
+
+            if (values == 0) {
+                continue;
+            }
+
+            *slot = calloc(values, out_stored_bytes(id));
 
             if (!*slot) {
                 snprintf(error, error_len, "out of memory");
@@ -317,7 +329,7 @@ static int build_rows(combination *c, char *error, size_t error_len)
         }
     }
 
-    c->result = calloc(out_widest(c->ref_cap), out_widest_bytes());
+    c->result = calloc(out_widest(c->ref_cap, OUT_REQUIRED_ONLY), out_widest_bytes());
 
     if (!c->result) {
         snprintf(error, error_len, "out of memory");
@@ -330,7 +342,7 @@ static int build_rows(combination *c, char *error, size_t error_len)
 static int open_output(combination *c, bool may_replace, char *error, size_t error_len)
 {
     c->out = h5writer_create(c->spec->output, c->spec->program, c->n_refs, c->ref_cap,
-                             may_replace);
+                             may_replace, OUT_REQUIRED_ONLY);
     if (!c->out) {
         snprintf(error, error_len, "out of memory");
         return -1;

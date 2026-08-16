@@ -111,9 +111,9 @@ const void *h5layout_fill(out_field_id id)
 /* Dataspaces                                                                */
 /* ------------------------------------------------------------------------ */
 
-hid_t h5layout_row_space(size_t cap)
+hid_t h5layout_row_space(size_t cap, const bool *wanted)
 {
-    hsize_t widest = (hsize_t)out_widest(cap);
+    hsize_t widest = (hsize_t)out_widest(cap, wanted);
 
     return H5Screate_simple(1, &widest, NULL);
 }
@@ -135,6 +135,29 @@ int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
 
     return H5Sselect_hyperslab(memspace, H5S_SELECT_SET, &offset, NULL,
                                &extent, NULL);
+}
+
+int h5layout_select_block(hid_t filespace, hid_t memspace, out_field_id id,
+                          int32_t tid, size_t len)
+{
+    size_t  extents[OUT_RANK_MAX];
+    int     rank    = out_dims(id, 1, len, extents);
+    hsize_t start[OUT_RANK_MAX] = { (hsize_t)tid };
+    hsize_t count[OUT_RANK_MAX] = { 1 };
+    hsize_t offset              = 0;
+    hsize_t held                = 1;
+
+    for (int i = 1; i < rank; i++) {
+        start[i] = 0;
+        count[i] = (hsize_t)extents[i];
+        held    *= (hsize_t)extents[i];
+    }
+
+    if (H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, count, NULL) < 0) {
+        return -1;
+    }
+
+    return H5Sselect_hyperslab(memspace, H5S_SELECT_SET, &offset, NULL, &held, NULL);
 }
 
 /* ------------------------------------------------------------------------ */

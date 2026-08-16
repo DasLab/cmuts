@@ -35,10 +35,15 @@ bool refctx_release(refctx *ctx, int n)
 /* Contents                                                                  */
 /* ------------------------------------------------------------------------ */
 
-void refctx_merge(refctx *ctx, const accum *src)
+void refctx_merge(refctx *ctx, const accum *src, const pairs *src_pairs)
 {
     pthread_mutex_lock(&ctx->lock);
     accum_add(&ctx->acc, src, ctx->len);
+
+    if (src_pairs) {
+        pairs_add(&ctx->pr, src_pairs, ctx->len);
+    }
+
     pthread_mutex_unlock(&ctx->lock);
 }
 
@@ -77,6 +82,7 @@ static void release_storage(ctxpool *p, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
         pthread_mutex_destroy(&p->storage[i].lock);
+        pairs_free(&p->storage[i].pr);
         accum_free(&p->storage[i].acc);
         free(p->storage[i].seq);
     }
@@ -84,7 +90,7 @@ static void release_storage(ctxpool *p, size_t n)
     free(p->storage);
 }
 
-static int build_context(refctx *ctx, size_t ref_cap)
+static int build_context(refctx *ctx, size_t ref_cap, bool pairwise)
 {
     ctx->seq = malloc(ref_cap + 1);
     if (!ctx->seq) {
@@ -92,6 +98,13 @@ static int build_context(refctx *ctx, size_t ref_cap)
     }
 
     if (accum_alloc(&ctx->acc, ref_cap) < 0) {
+        free(ctx->seq);
+        ctx->seq = NULL;
+        return -1;
+    }
+
+    if (pairwise && pairs_alloc(&ctx->pr, ref_cap) < 0) {
+        accum_free(&ctx->acc);
         free(ctx->seq);
         ctx->seq = NULL;
         return -1;
@@ -119,7 +132,7 @@ static int stock_free_list(ctxpool *p)
     return pushed == p->capacity ? 0 : -1;
 }
 
-ctxpool *ctxpool_create(size_t capacity, size_t ref_cap)
+ctxpool *ctxpool_create(size_t capacity, size_t ref_cap, bool pairwise)
 {
     ctxpool *p = calloc(1, sizeof *p);
     if (!p) {
@@ -136,7 +149,7 @@ ctxpool *ctxpool_create(size_t capacity, size_t ref_cap)
     }
 
     for (size_t i = 0; i < capacity; i++) {
-        if (build_context(&p->storage[i], ref_cap) < 0) {
+        if (build_context(&p->storage[i], ref_cap, pairwise) < 0) {
             release_storage(p, i);
             p->storage = NULL;
             ctxpool_destroy(p);
@@ -183,6 +196,11 @@ void ctxpool_give(ctxpool *p, refctx *ctx)
     void *slot = ctx;
 
     accum_zero(&ctx->acc, ctx->len);
+
+    if (ctx->pr.cells) {
+        pairs_zero(&ctx->pr, ctx->len);
+    }
+
     ctx->len = 0;
     queue_push_all(p->available, &slot, 1);
 }

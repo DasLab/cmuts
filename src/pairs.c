@@ -1,0 +1,167 @@
+/* pairs.c -- co-modification of two reference positions, accumulated per read.
+ *
+ * Author: Hamish M. Blair <hmblair@stanford.edu>
+ */
+
+#include "pairs.h"
+
+#include <math.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* Pairs a reference of len bases holds, which is its upper triangle including the
+ * diagonal. */
+static size_t pair_count(size_t len)
+{
+    return len * (len + 1) / 2;
+}
+
+static size_t pair_values(size_t len)
+{
+    return pair_count(len) * PAIR_N_CELLS;
+}
+
+/* Offset of the pair (i, j), for i <= j, in a reference of len bases. Row i holds the
+ * len - i pairs from the diagonal rightwards, so the rows before it hold i * (2 * len -
+ * i + 1) / 2 pairs between them. */
+static size_t pair_at(size_t len, size_t i, size_t j)
+{
+    return (i * (2 * len - i + 1) / 2 + (j - i)) * PAIR_N_CELLS;
+}
+
+static double *cell(pairs *p, size_t len, size_t i, size_t j)
+{
+    return p->cells + pair_at(len, i, j);
+}
+
+static const double *const_cell(const pairs *p, size_t len, size_t i, size_t j)
+{
+    return p->cells + pair_at(len, i, j);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Storage                                                                   */
+/* ------------------------------------------------------------------------ */
+
+int pairs_alloc(pairs *p, size_t cap)
+{
+    p->cap   = cap;
+    p->cells = calloc(pair_values(cap) ? pair_values(cap) : 1, sizeof *p->cells);
+
+    return p->cells ? 0 : -1;
+}
+
+void pairs_free(pairs *p)
+{
+    free(p->cells);
+    p->cells = NULL;
+}
+
+void pairs_zero(pairs *p, size_t len)
+{
+    memset(p->cells, 0, pair_values(len) * sizeof *p->cells);
+}
+
+void pairs_add(pairs *dst, const pairs *src, size_t len)
+{
+    size_t n = pair_values(len);
+
+    for (size_t i = 0; i < n; i++) {
+        dst->cells[i] += src->cells[i];
+    }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Counting                                                                  */
+/* ------------------------------------------------------------------------ */
+
+/* Gives the window indices that fall inside the reference. A window is drawn around the
+ * band and so may reach past either end. */
+static void window_bounds(const phmm_window *window, size_t len,
+                          size_t *from, size_t *to)
+{
+    hts_pos_t low  = window->origin < 0 ? -window->origin : 0;
+    hts_pos_t high = (hts_pos_t)len - window->origin;
+
+    *from = (size_t)low;
+    *to   = high < 0 ? 0 : (size_t)high;
+
+    if (*to > window->len) {
+        *to = window->len;
+    }
+    if (*from > *to) {
+        *from = *to;
+    }
+}
+
+void pairs_count(pairs *p, size_t len, const phmm_window *window)
+{
+    size_t from;
+    size_t to;
+
+    window_bounds(window, len, &from, &to);
+
+    for (size_t a = from; a < to; a++) {
+        size_t i  = (size_t)(window->origin + (hts_pos_t)a);
+        double si = window->spanned[a];
+        double mi = window->mutations[a];
+
+        for (size_t b = a; b < to; b++) {
+            size_t  j  = (size_t)(window->origin + (hts_pos_t)b);
+            double  sj = window->spanned[b];
+            double  mj = window->mutations[b];
+            double *at = cell(p, len, i, j);
+
+            at[PAIR_SPAN]  += si * sj;
+            at[PAIR_LEFT]  += mi * sj;
+            at[PAIR_RIGHT] += si * mj;
+            at[PAIR_BOTH]  += mi * mj;
+        }
+    }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Reading                                                                   */
+/* ------------------------------------------------------------------------ */
+
+/* Gives the pair, whichever order it is asked for. */
+static const double *ordered(const pairs *p, size_t len, size_t i, size_t j)
+{
+    return i <= j ? const_cell(p, len, i, j) : const_cell(p, len, j, i);
+}
+
+/* Gives the correlation the four sums come to, or NaN where they support none. The
+ * marginals are the reads modified at each position and the reads not, and a coefficient
+ * needs all four to be positive. */
+static double coefficient(const double *at, double min_depth, bool swapped)
+{
+    double span  = at[PAIR_SPAN];
+    double left  = swapped ? at[PAIR_RIGHT] : at[PAIR_LEFT];
+    double right = swapped ? at[PAIR_LEFT] : at[PAIR_RIGHT];
+    double both  = at[PAIR_BOTH];
+    double scale = left * (span - left) * right * (span - right);
+
+    if (span <= 0.0 || span < min_depth || scale <= 0.0) {
+        return (double)NAN;
+    }
+
+    return (both * span - left * right) / sqrt(scale);
+}
+
+void pairs_correlation(const pairs *p, size_t len, double min_depth, size_t i,
+                       double *row)
+{
+    for (size_t j = 0; j < len; j++) {
+        row[j] = i == j
+               ? (double)NAN
+               : coefficient(ordered(p, len, i, j), min_depth, j < i);
+    }
+}
+
+void pairs_coverage(const pairs *p, size_t len, size_t i, double *row)
+{
+    for (size_t j = 0; j < len; j++) {
+        row[j] = ordered(p, len, i, j)[PAIR_SPAN];
+    }
+}

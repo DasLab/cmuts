@@ -30,6 +30,9 @@ typedef struct {
     size_t      queue_capacity;  /* reads that may be in transit at once */
     size_t      batch;           /* reads transferred per queue operation */
     size_t      live_refs;       /* references in flight at once */
+    bool        pairwise;        /* also count how often two positions are modified
+                                    together, which costs the square of the longest
+                                    reference in every accumulator */
 } pipeline_config;
 
 pipeline_config pipeline_defaults(void);

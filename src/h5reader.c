@@ -144,9 +144,16 @@ static int open_field(h5reader *r, out_field_id id)
     return r->filespace[id] < 0 ? fail_field(r, id, "cannot be described") : 0;
 }
 
+/* Opens the fields every output holds. An optional one is left alone: the programs
+ * reading an output work on the per-base fields, and a file written without the rest is
+ * as complete as one written with them. */
 static int open_fields(h5reader *r)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (!out_wanted(id, OUT_REQUIRED_ONLY)) {
+            continue;
+        }
+
         if (open_field(r, id) < 0) {
             return -1;
         }
@@ -195,7 +202,7 @@ static int open_file(h5reader *r, const char *path)
 /* Prepares the row every read is selected into, which the shape must be known to size. */
 static int build_memspace(h5reader *r)
 {
-    r->memspace = h5layout_row_space(r->ref_cap);
+    r->memspace = h5layout_row_space(r->ref_cap, OUT_REQUIRED_ONLY);
 
     return r->memspace < 0 ? fail(r, "unable to prepare the file for reading") : 0;
 }
@@ -269,6 +276,13 @@ size_t h5reader_capacity(const h5reader *r)
 /* ------------------------------------------------------------------------ */
 /* Rows                                                                      */
 /* ------------------------------------------------------------------------ */
+
+bool h5reader_holds(const h5reader *r, out_field_id id)
+{
+    (void)r;
+
+    return out_wanted(id, OUT_REQUIRED_ONLY);
+}
 
 int h5reader_field(h5reader *r, out_field_id id, int32_t tid, void *values)
 {
