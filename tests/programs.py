@@ -42,9 +42,20 @@ def _words(command) -> list:
     return [str(word) for word in command]
 
 
-def execute(command):
-    """Runs a command, raising where it fails."""
-    return subprocess.run(_words(command), check=True, capture_output=True, text=True)
+class ProgramFailed(subprocess.CalledProcessError):
+    """A run that exited non-zero. The base class names the status or the signal
+    and holds what the program wrote without showing it, which the message here
+    adds."""
+
+    def __str__(self) -> str:
+        return f"{super().__str__()}\n{self.stderr}"
+
+
+def _raise_on_failure(result) -> None:
+    """Raises where a finished run exited non-zero."""
+    if result.returncode != 0:
+        raise ProgramFailed(result.returncode, result.args, result.stdout,
+                            result.stderr)
 
 
 def attempt(command):
@@ -52,11 +63,24 @@ def attempt(command):
     return subprocess.run(_words(command), capture_output=True, text=True)
 
 
+def execute(command):
+    """Runs a command, raising where it fails."""
+    result = attempt(command)
+
+    _raise_on_failure(result)
+
+    return result
+
+
 def execute_into(path, command):
-    """Runs a command with its standard output written to a file."""
+    """Runs a command with its standard output written to a file. Standard error
+    is kept apart from it, so that a failure is still reported with what the
+    program wrote."""
     with open(path, "wb") as handle:
-        subprocess.run(_words(command), check=True, stdout=handle,
-                       stderr=subprocess.DEVNULL)
+        result = subprocess.run(_words(command), stdout=handle,
+                                stderr=subprocess.PIPE, text=True)
+
+    _raise_on_failure(result)
 
     return path
 
