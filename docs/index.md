@@ -50,7 +50,7 @@ apt install minimap2 samtools
 ## Installation
 
 ```sh
-git clone https://github.com/hmblair/cmuts
+git clone https://github.com/DasLab/cmuts
 cd cmuts
 make install
 ```

@@ -25,7 +25,7 @@ html_static_path = ["_static"]
 html_css_files = ["custom.css"]
 
 html_theme_options = {
-    "source_repository": "https://github.com/hmblair/cmuts",
+    "source_repository": "https://github.com/DasLab/cmuts",
     "source_branch": "main",
     "source_directory": "docs/",
 }

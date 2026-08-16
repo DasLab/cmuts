@@ -23,7 +23,7 @@ apt install libhts-dev libhdf5-dev
 ## Installing
 
 ```sh
-git clone https://github.com/hmblair/cmuts
+git clone https://github.com/DasLab/cmuts
 cd cmuts
 make install
 ```
