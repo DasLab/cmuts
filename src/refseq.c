@@ -103,12 +103,11 @@ static bool name_matches(refseq_source *src, size_t file, int32_t tid)
     return false;
 }
 
+/* Returns whether the record is the length its header declares. Always checked: the
+ * per-reference buffers are sized from those lengths before any record is read, so a
+ * longer record would overrun one. */
 static bool length_matches(refseq_source *src, size_t file, int32_t tid)
 {
-    if (!(src->verify & REFSEQ_VERIFY_LENGTH)) {
-        return true;
-    }
-
     hts_pos_t expected = cm_bam_reflen(header_of(src, file), tid);
 
     if ((hts_pos_t)src->record.len == expected) {

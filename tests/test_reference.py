@@ -12,6 +12,7 @@ import pytest
 
 from alignments import (
     SELF_CONTAINED,
+    lengthen_references,
     rename_references,
     replace_bases,
     replace_checksums,
@@ -48,7 +49,7 @@ def test_a_matching_checksum_changes_nothing_counted(data, falsifiable, tmp_path
 
     checked = read_summary(run_cmuts(data, tmp_path / "checked.h5"))
     unchecked = read_summary(
-        run_cmuts(data, tmp_path / "unchecked.h5", verify="name,length"))
+        run_cmuts(data, tmp_path / "unchecked.h5", verify="name"))
 
     assert checked == unchecked
     assert outputs_agree(tmp_path / "checked.h5", tmp_path / "unchecked.h5")
@@ -126,7 +127,7 @@ def test_names_go_unchecked_where_they_are_left_out(data, falsifiable, tmp_path)
 
     against_names = rename_references(data, tmp_path)
     attempt = try_cmuts(against_names, tmp_path / "renamed.h5",
-                        verify="length,checksum")
+                        verify="checksum")
 
     assert attempt.returncode == 0, attempt.stderr
 
@@ -143,7 +144,7 @@ def test_a_checksum_goes_unchecked_where_it_is_left_out(data, falsifiable, tmp_p
 
     wrong = replace_bases(data, tmp_path)
 
-    assert try_cmuts(wrong, tmp_path / "out.h5", verify="name,length").returncode == 0
+    assert try_cmuts(wrong, tmp_path / "out.h5", verify="name").returncode == 0
 
 
 def test_verifying_none_takes_the_fasta_on_trust(data, falsifiable, tmp_path):
@@ -154,6 +155,19 @@ def test_verifying_none_takes_the_fasta_on_trust(data, falsifiable, tmp_path):
     wrong = replace_bases(rename_references(data, tmp_path), tmp_path)
 
     assert try_cmuts(wrong, tmp_path / "out.h5", verify="none").returncode == 0
+
+
+@pytest.mark.parametrize("verify", ["name,checksum", "name", "checksum", "none"])
+def test_a_length_the_header_does_not_declare_is_refused(data, falsifiable, tmp_path,
+                                                         verify):
+    """A record must be the length its header declares, and --verify cannot turn
+    that off. The per-reference buffers are sized from the declared lengths
+    before any record is read, so a longer record would overrun one."""
+    falsifiable(has_references(data))
+
+    longer = lengthen_references(data, tmp_path)
+
+    assert try_cmuts(longer, tmp_path / "out.h5", verify=verify).returncode != 0
 
 
 # ---------------------------------------------------------------------------

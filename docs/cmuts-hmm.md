@@ -21,7 +21,11 @@ You may specify a subset of the parameters to modify only them.
 
 ## Error Checking
 
-`cmuts-hmm` verifies each FASTA sequence against the alignment header: its name and its length, and, where the header declares an MD5 checksum, the bases themselves. Any mismatch ends the run early. This behavior is configurable via the `--verify` flag.
+`cmuts-hmm` verifies the FASTA against the alignment header, by comparing each sequence's name and length, and its MD5 checksum when present. Any mismatch between the header and the FASTA ends the run early. This behavior is configurable via the `--verify` flag.
+
+```{note}
+The length check is required to avoid buffer overflows and cannot be disabled.
+```
 
 ## CLI Options
 
@@ -39,7 +43,7 @@ You may specify a subset of the parameters to modify only them.
 | `-f, --fasta FASTA` | reference sequences (required) |
 | `-o, --output HDF5` | write results to this file (required) |
 | `--overwrite` | replace the output file if it already exists |
-| `--verify CHECKS` | header fields to verify against the FASTA (name, length, checksum, none; default name,length,checksum) |
+| `--verify CHECKS` | identity checks to make against the FASTA (name, checksum, none; default name,checksum) |
 
 ### Filtering
 

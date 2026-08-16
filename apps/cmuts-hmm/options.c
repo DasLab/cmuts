@@ -14,7 +14,6 @@
 
 static const cli_choice VERIFY_CHOICES[] = {
     { "name",     REFSEQ_VERIFY_NAME     },
-    { "length",   REFSEQ_VERIFY_LENGTH   },
     { "checksum", REFSEQ_VERIFY_CHECKSUM },
     { "none",     0                      },
     { NULL,       0                      },
@@ -60,7 +59,7 @@ static const cli_option OPTIONS[] = {
         .type    = OPT_SET,
         .offset  = offsetof(cli_args, pipeline.verify),
         .metavar = "CHECKS",
-        .help    = "header fields to verify against the FASTA",
+        .help    = "identity checks to make against the FASTA",
         .choices = VERIFY_CHOICES,
     },
 

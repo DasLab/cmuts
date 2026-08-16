@@ -215,6 +215,16 @@ def replace_bases(data: Dataset, directory, only=None) -> Dataset:
     return replace(data, fasta=write_fasta(records, Path(directory) / "substituted.fasta"))
 
 
+def lengthen_references(data: Dataset, directory, extra: int = 500) -> Dataset:
+    """Extends every reference of the FASTA. The headers still declare the
+    original lengths, so every record is longer than its declaration."""
+    records = {
+        name: seq + ("A" * extra) for name, seq in sequences(data.fasta).items()
+    }
+
+    return replace(data, fasta=write_fasta(records, Path(directory) / "lengthened.fasta"))
+
+
 def rename_references(data: Dataset, directory) -> Dataset:
     """Renames every reference of the FASTA, leaving the bases and their order
     unchanged."""
