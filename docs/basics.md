@@ -49,10 +49,16 @@ cmuts-hmm -f references.fasta -o treated.h5 treated.bam
 cmuts-hmm -f references.fasta -o untreated.h5 untreated.bam
 ```
 
-The final step is background subtraction.
+With this done, perform background subtraction.
 
 ```sh
-cmuts-sub -o combined.h5 treated.h5 untreated.h5
+cmuts-sub -o reactivity.h5 treated.h5 untreated.h5
+```
+
+The final step is normalizing the reactivity.
+
+```sh
+cmuts-norm -o normalized-reactivity.h5 reactivity.h5
 ```
 
 All HDF5 files in cmuts have the same format, where `n` is the number of references and `l` the length of the longest of them.

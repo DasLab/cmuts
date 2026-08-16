@@ -6,9 +6,9 @@ cmuts is a software suite for processing MaP-seq datasets, as well as its cousin
 
 In order to build and run cmuts, you need
 
-- A C11 compiler (GCC 6 or newer, or Clang 9 or newer) and `make`
-- [htslib](https://github.com/samtools/htslib) 1.12 or newer
-- [HDF5](https://www.hdfgroup.org/solutions/hdf5/) 1.10 or newer
+- A C11 compiler (GCC 6 or newer, or Clang 9 or newer) and `make`,
+- [htslib](https://github.com/samtools/htslib) 1.12 or newer,
+- [HDF5](https://www.hdfgroup.org/solutions/hdf5/) 1.10 or newer.
 
 ::::{tab} macOS
 
@@ -30,8 +30,8 @@ Or load the appropriate modules for your cluster (examples [here](clusters.md)).
 
 To use the bundled alignment helper, you also need
 
-- [minimap2](https://github.com/lh3/minimap2)
-- [samtools](https://github.com/samtools/samtools)
+- [minimap2](https://github.com/lh3/minimap2),
+- [samtools](https://github.com/samtools/samtools).
 
 ::::{tab} macOS
 
