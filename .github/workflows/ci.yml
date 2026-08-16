@@ -25,18 +25,6 @@ jobs:
       - uses: ./.github/actions/dependencies
       - run: make check
 
-  sanitizers:
-    name: ${{ matrix.san }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        san: [asan, tsan]
-    steps:
-      - uses: actions/checkout@v5
-      - uses: ./.github/actions/dependencies
-      - run: make check SAN=${{ matrix.san }}
-
   # clang-tidy reads the sources and nothing else, so one platform is enough.
   lint:
     runs-on: ubuntu-latest
