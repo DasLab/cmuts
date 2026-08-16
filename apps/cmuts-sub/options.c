@@ -11,14 +11,22 @@
 /* The datasets a run leaves behind, which are those every output holds: what it was
  * given, less the background it was given. */
 static const out_written WRITTEN[] = {
-    { .id = OUT_COVERAGE },
-    { .id = OUT_REACTIVITY, .detail = "The mutation rate of the treated sample less that of the untreated one, so what remains is the signal the treatment added." },
-    { .id = OUT_ERROR },
-    { .id = OUT_LENGTHS },
-    { .id = OUT_READS },
-    { .id = OUT_REJECTED },
-    { .id = OUT_UNMAPPED },
+    { .id = OUT_COVERAGE,
+      .detail = "The number of reads in which this base was present, weighted by PHRED scores." },
+    { .id = OUT_REACTIVITY,
+      .detail = "The mutation rate of the treated sample less that of the untreated one, so what remains is the signal the treatment added." },
+    { .id = OUT_ERROR,
+      .detail = "Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors." },
+    { .id = OUT_LENGTHS,
+      .detail = "The number of reads passing all filters, binned by length." },
+    { .id = OUT_READS,
+      .detail = "The number of reads passing all filters." },
+    { .id = OUT_REJECTED,
+      .detail = "The number of reads that contributed nothing: rejected by at least one filter, or carrying something the pair HMM's rates give no alignment of." },
+    { .id = OUT_UNMAPPED,
+      .detail = "The number of reads not aligned to any reference." },
 };
+
 
 const out_manifest CMUTS_SUB_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTEN };
 

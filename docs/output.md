@@ -20,70 +20,9 @@ with h5py.File("output.h5") as f:
 
 ## Output Datasets
 
-<!-- BEGIN GENERATED cmuts-hmm FIELDS -->
-{.field}
-### `coverage`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `zero`
-
-The number of reads in which this base was present, weighted by PHRED scores.
-
-{.field}
-### `reactivity`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
-
-The mutation rate at this base, weighted by PHRED scores and in accordance with the HMM parameters.
-
-{.field}
-### `error`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
-
-Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors.
-
-{.field}
-### `reads/lengths`
-
-**Shape** `(n, 2l)` · **Type** `uint64` · **Fill** `zero`
-
-The number of reads passing all filters, binned by length.
-
-{.field}
-### `reads/counted`
-
-**Shape** `(n,)` · **Type** `uint64` · **Fill** `zero`
-
-The number of reads passing all filters.
-
-{.field}
-### `reads/rejected`
-
-**Shape** `(n,)` · **Type** `uint64` · **Fill** `zero`
-
-The number of reads that contributed nothing: rejected by at least one filter, or carrying something the pair HMM's rates give no alignment of.
-
-{.field}
-### `reads/unmapped`
-
-**Shape** `()` · **Type** `uint64` · **Fill** `zero`
-
-The number of reads not aligned to any reference.
-
-{.field}
-### `pairwise/correlation`
-
-**Shape** `(n, l, l)` · **Type** `float32` · **Fill** `NaN`
-
-Written when --pairwise is given. The correlation between two positions being modified in the same read, as the Pearson coefficient of the two binary variables. NaN where the reads are too few, and where either position is modified in all of them or in none. The diagonal is a position against itself, which falls short of one by however much of its variance the base calls leave unsettled; divide a correlation by the square root of the two diagonals to take that out.
-
-{.field}
-### `pairwise/coverage`
-
-**Shape** `(n, l, l)` · **Type** `float32` · **Fill** `zero`
-
-Written when --pairwise is given. The evidence behind each correlation: the reads reaching both positions.
-<!-- END GENERATED cmuts-hmm FIELDS -->
+Which datasets a file holds depends on what wrote it, and so does what the numbers in
+them mean. Each program's page lists the datasets it writes and describes them as they
+stand in its own output.
 
 ## Mixed-Length Libraries
 

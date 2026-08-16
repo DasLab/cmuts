@@ -115,9 +115,10 @@ def fields(program: str) -> str:
 
     for field in described(program, "--dump-layout")["fields"]:
         absent = ABSENT.get(field["absent"], field["absent"])
+        needs = f" · **Written with** `{field['condition']}`" if field["condition"] else ""
         written += [FIELD_CLASS, f"### `{field['name']}`", "",
                     f"**Shape** `{shape(field)}` · **Type** `{field['type']}` · "
-                    f"**Fill** `{absent}`", ""]
+                    f"**Fill** `{absent}`{needs}", ""]
 
         if field["detail"]:
             written += [field["detail"], ""]

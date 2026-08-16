@@ -14,7 +14,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_F32,
         .absent  = OUT_ZERO,
-        .detail  = "The number of reads in which this base was present, weighted by PHRED scores.",
     },
     [OUT_REACTIVITY] = {
         .name    = "reactivity",
@@ -22,7 +21,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_F32,
         .absent  = OUT_NAN,
-        .detail  = "The mutation rate at this base, weighted by PHRED scores and in accordance with the HMM parameters.",
     },
     [OUT_ERROR] = {
         .name    = "error",
@@ -30,7 +28,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_F32,
         .absent  = OUT_NAN,
-        .detail  = "Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors.",
     },
     [OUT_LENGTHS] = {
         .name    = "reads/lengths",
@@ -38,7 +35,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_U64,
         .absent  = OUT_ZERO,
-        .detail  = "The number of reads passing all filters, binned by length.",
     },
     [OUT_READS] = {
         .name    = "reads/counted",
@@ -46,7 +42,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_U64,
         .absent  = OUT_ZERO,
-        .detail  = "The number of reads passing all filters.",
     },
     [OUT_REJECTED] = {
         .name    = "reads/rejected",
@@ -54,7 +49,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_U64,
         .absent  = OUT_ZERO,
-        .detail  = "The number of reads that contributed nothing: rejected by at least one filter, or carrying something the pair HMM's rates give no alignment of.",
     },
     [OUT_PAIRWISE_CORRELATION] = {
         .name     = "pairwise/correlation",
@@ -62,7 +56,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref  = true,
         .stored   = OUT_F32,
         .absent   = OUT_NAN,
-        .detail   = "The correlation between two positions being modified in the same read, as the Pearson coefficient of the two binary variables. NaN where the reads are too few, and where either position is modified in all of them or in none. The diagonal is a position against itself, which falls short of one by however much of its variance the base calls leave unsettled; divide a correlation by the square root of the two diagonals to take that out.",
     },
     [OUT_PAIRWISE_COVERAGE] = {
         .name     = "pairwise/coverage",
@@ -70,7 +63,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref  = true,
         .stored   = OUT_F32,
         .absent   = OUT_ZERO,
-        .detail   = "The evidence behind each correlation: the reads reaching both positions.",
     },
     [OUT_NORM] = {
         .name     = "norm",
@@ -78,7 +70,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref  = false,
         .stored   = OUT_F32,
         .absent   = OUT_NAN,
-        .detail   = "The scale every rate in this file was divided by.",
     },
     [OUT_UNMAPPED] = {
         .name    = "reads/unmapped",
@@ -86,18 +77,15 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = false,
         .stored  = OUT_U64,
         .absent  = OUT_ZERO,
-        .detail  = "The number of reads not aligned to any reference.",
     },
 };
 
 const out_attribute OUT_ATTRIBUTES[OUT_N_ATTRS] = {
     [OUT_ATTR_PROGRAM] = {
         .name   = "program",
-        .detail = "The name of the program that produced this file.",
     },
     [OUT_ATTR_VERSION] = {
         .name   = "version",
-        .detail = "The version of cmuts that produced this file.",
     },
 };
 
@@ -279,8 +267,8 @@ void out_dump_layout(FILE *out, const char *program, const out_manifest *manifes
     for (size_t i = 0; i < manifest->n_fields; i++) {
         out_field_id     id     = manifest->fields[i].id;
         const out_field *field  = &OUT_FIELDS[id];
-        const char      *detail = manifest->fields[i].detail
-                                ? manifest->fields[i].detail : field->detail;
+        const char      *detail = manifest->fields[i].detail;
+        const char      *needs  = manifest->fields[i].condition;
 
         fprintf(out,
                 "    {\n"
@@ -288,11 +276,13 @@ void out_dump_layout(FILE *out, const char *program, const out_manifest *manifes
                 "      \"row\": \"%s\",\n"
                 "      \"per_reference\": %s,\n"
                 "      \"rank\": %d,\n"
+                "      \"condition\": %s%s%s,\n"
                 "      \"type\": \"%s\",\n"
                 "      \"absent\": \"%s\",\n"
                 "      \"detail\": ",
                 field->name, shape_name(field->row),
                 field->per_ref ? "true" : "false", out_rank(id),
+                needs ? "\"" : "", needs ? needs : "null", needs ? "\"" : "",
                 stored_name(field->stored), absent_name(field->absent));
 
         print_detail(out, detail);

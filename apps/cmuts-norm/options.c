@@ -22,16 +22,24 @@ static const cli_choice SCHEME_CHOICES[] = {
 /* The datasets a run leaves behind: what it was given, divided by one scale, and that
  * scale alongside it. */
 static const out_written WRITTEN[] = {
-    { .id = OUT_COVERAGE },
+    { .id = OUT_COVERAGE,
+      .detail = "The number of reads in which this base was present, weighted by PHRED scores." },
     { .id = OUT_REACTIVITY,
       .detail = "The mutation rate divided by the scale this file records, so a rate reads against the scale rather than as a raw frequency." },
-    { .id = OUT_ERROR },
-    { .id = OUT_LENGTHS },
-    { .id = OUT_READS },
-    { .id = OUT_REJECTED },
-    { .id = OUT_UNMAPPED },
-    { .id = OUT_NORM },
+    { .id = OUT_ERROR,
+      .detail = "Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors." },
+    { .id = OUT_LENGTHS,
+      .detail = "The number of reads passing all filters, binned by length." },
+    { .id = OUT_READS,
+      .detail = "The number of reads passing all filters." },
+    { .id = OUT_REJECTED,
+      .detail = "The number of reads that contributed nothing: rejected by at least one filter, or carrying something the pair HMM's rates give no alignment of." },
+    { .id = OUT_UNMAPPED,
+      .detail = "The number of reads not aligned to any reference." },
+    { .id = OUT_NORM,
+      .detail = "The scale every rate in this file was divided by." },
 };
+
 
 const out_manifest CMUTS_NORM_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTEN };
 

@@ -28,18 +28,28 @@ static const cli_choice STRAND_CHOICES[] = {
 /* The datasets a run leaves behind. Every output holds the first of them; the pairwise
  * squares are written only when they are asked for. */
 static const out_written WRITTEN[] = {
-    { .id = OUT_COVERAGE },
-    { .id = OUT_REACTIVITY },
-    { .id = OUT_ERROR },
-    { .id = OUT_LENGTHS },
-    { .id = OUT_READS },
-    { .id = OUT_REJECTED },
-    { .id = OUT_UNMAPPED },
+    { .id = OUT_COVERAGE,
+      .detail = "The number of reads in which this base was present, weighted by PHRED scores." },
+    { .id = OUT_REACTIVITY,
+      .detail = "The mutation rate at this base, weighted by PHRED scores and in accordance with the HMM parameters." },
+    { .id = OUT_ERROR,
+      .detail = "Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors." },
+    { .id = OUT_LENGTHS,
+      .detail = "The number of reads passing all filters, binned by length." },
+    { .id = OUT_READS,
+      .detail = "The number of reads passing all filters." },
+    { .id = OUT_REJECTED,
+      .detail = "The number of reads that contributed nothing: rejected by at least one filter, or carrying something the pair HMM's rates give no alignment of." },
+    { .id = OUT_UNMAPPED,
+      .detail = "The number of reads not aligned to any reference." },
     { .id = OUT_PAIRWISE_CORRELATION,
-      .detail = "Written when --pairwise is given. The correlation between two positions being modified in the same read, as the Pearson coefficient of the two binary variables. NaN where the reads are too few, and where either position is modified in all of them or in none. The diagonal is a position against itself, which falls short of one by however much of its variance the base calls leave unsettled; divide a correlation by the square root of the two diagonals to take that out." },
+      .detail = "The correlation between two positions being modified in the same read, as the Pearson coefficient of the two binary variables. NaN where the reads are too few, and where either position is modified in all of them or in none. The diagonal is a position against itself, which falls short of one by however much of its variance the base calls leave unsettled; divide a correlation by the square root of the two diagonals to take that out.",
+      .condition = "--pairwise" },
     { .id = OUT_PAIRWISE_COVERAGE,
-      .detail = "Written when --pairwise is given. The evidence behind each correlation: the reads reaching both positions." },
+      .detail = "The evidence behind each correlation: the reads reaching both positions.",
+      .condition = "--pairwise" },
 };
+
 
 const out_manifest CMUTS_HMM_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTEN };
 

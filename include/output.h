@@ -69,7 +69,6 @@ typedef struct {
     bool        per_ref;  /* whether there is one such row per reference */
     out_stored  stored;   /* the type its values are narrowed to */
     out_absent  absent;   /* what a value it was never given means */
-    const char *detail;   /* what the numbers are, in one sentence */
 } out_field;
 
 extern const out_field OUT_FIELDS[OUT_N_FIELDS];
@@ -108,7 +107,8 @@ size_t out_values(out_field_id id, size_t len, size_t cap);
  * here, and falls back to the field's own where the two agree. */
 typedef struct {
     out_field_id id;
-    const char  *detail;   /* NULL takes the description in OUT_FIELDS */
+    const char  *detail;     /* what the numbers are here, in one sentence */
+    const char  *condition;  /* what a run needs for it, where it is not written always */
 } out_written;
 
 /* The fields one program writes.
