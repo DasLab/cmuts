@@ -31,7 +31,10 @@
 #define INVOCATION_MAX   64  /* both forms of an option, and its placeholder */
 #define CEILING_MAX      32  /* an option's largest value, written out */
 #define SET_LIST_MAX     64  /* the choices a set holds, comma separated */
-#define DEFAULT_NOTE_MAX 64  /* the note giving an option's default */
+
+/* The note giving an option's default. Its longest form wraps a full set list,
+ * so it is sized from that. */
+#define DEFAULT_NOTE_MAX (SET_LIST_MAX + sizeof(" (default )"))
 
 /* A leading colon, a letter and possibly a colon per option, and the terminator. */
 #define SHORTOPTS_SIZE(options) (2 + (2 * (options)))
