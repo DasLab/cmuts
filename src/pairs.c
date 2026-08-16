@@ -107,6 +107,7 @@ void pairs_count(pairs *p, size_t len, const phmm_window *window)
         size_t i  = (size_t)(window->origin + (hts_pos_t)a);
         double si = window->spanned[a];
         double mi = window->mutations[a];
+        double ci = window->coverage[a];
 
         for (size_t b = a; b < to; b++) {
             size_t  j  = (size_t)(window->origin + (hts_pos_t)b);
@@ -114,10 +115,11 @@ void pairs_count(pairs *p, size_t len, const phmm_window *window)
             double  mj = window->mutations[b];
             double *at = cell(p, len, i, j);
 
-            at[PAIR_SPAN]  += si * sj;
-            at[PAIR_LEFT]  += mi * sj;
-            at[PAIR_RIGHT] += si * mj;
-            at[PAIR_BOTH]  += mi * mj;
+            at[PAIR_SPAN]    += si * sj;
+            at[PAIR_LEFT]    += mi * sj;
+            at[PAIR_RIGHT]   += si * mj;
+            at[PAIR_BOTH]    += mi * mj;
+            at[PAIR_COVERED] += ci * window->coverage[b];
         }
     }
 }
@@ -164,6 +166,6 @@ void pairs_correlation(const pairs *p, size_t len, double min_depth, size_t i,
 void pairs_coverage(const pairs *p, size_t len, size_t i, double *row)
 {
     for (size_t j = 0; j < len; j++) {
-        row[j] = ordered(p, len, i, j)[PAIR_SPAN];
+        row[j] = ordered(p, len, i, j)[PAIR_COVERED];
     }
 }

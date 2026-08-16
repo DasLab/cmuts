@@ -9,14 +9,18 @@
 
 #include "phmm.h"
 
-/* The sums one pair of positions carries, each a posterior expectation over reads. They
- * give the 2x2 table a correlation is taken from: n11 = BOTH, n10 = LEFT - BOTH,
- * n01 = RIGHT - BOTH, and n00 = whatever of SPAN is left. */
+/* The sums one pair of positions carries, each a posterior expectation over reads.
+ *
+ * The first four give the 2x2 table a correlation is taken from: n11 = BOTH,
+ * n10 = LEFT - BOTH, n01 = RIGHT - BOTH, and n00 = whatever of SPAN is left. The last is
+ * not part of it, and is what the output reports: the span is the evidence a coefficient
+ * rests on, as it is for a rate, and the coverage is what was read. */
 typedef enum {
-    PAIR_SPAN,    /* both positions reached */
-    PAIR_LEFT,    /* the lower modified, the upper reached */
-    PAIR_RIGHT,   /* the upper modified, the lower reached */
-    PAIR_BOTH,    /* both modified */
+    PAIR_SPAN,      /* both positions reached */
+    PAIR_LEFT,      /* the lower modified, the upper reached */
+    PAIR_RIGHT,     /* the upper modified, the lower reached */
+    PAIR_BOTH,      /* both modified */
+    PAIR_COVERED,   /* a base read at both, weighted by the quality of each */
     PAIR_N_CELLS,
 } pair_cell;
 
