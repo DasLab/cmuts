@@ -12,7 +12,8 @@
  * and one of many short references both land near this figure. */
 #define TARGET_CHUNK_BYTES (1u << 20)
 
-/* The slots are a hash table over chunk indices, hence a prime. */
+/* HDF5 indexes the cache by chunk number modulo the slot count, so a prime spreads a
+ * regular walk over every slot. Its guidance is a hundred slots per cached chunk. */
 #define CACHED_CHUNKS 4
 #define CACHE_SLOTS   521
 

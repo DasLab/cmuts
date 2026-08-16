@@ -126,7 +126,9 @@ void queue_push_all(queue *q, void *const *items, size_t n)
         return;
     }
 
-    fputs("cmuts-hmm: a closed queue refused work that had nowhere else to go\n", stderr);
+    /* An ordering error in the shutdown and not a failure a caller can report: work is
+     * being returned to a queue already closed, and there is nowhere else for it. */
+    fputs("cmuts: a closed queue refused work that had nowhere else to go\n", stderr);
     abort();
 }
 

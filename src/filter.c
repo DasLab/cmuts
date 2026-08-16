@@ -7,10 +7,15 @@
 
 #include "align.h"
 
+/* The mapping quality a read must reach by default. A MAPQ is the aligner's phred-scaled
+ * chance that a placement is wrong, so this admits a read placed with better than one
+ * chance in a hundred of being placed elsewhere. */
+#define DEFAULT_MIN_MAPQ 20
+
 filter_config filter_defaults(void)
 {
     return (filter_config){
-        .min_mapq   = 20,
+        .min_mapq   = DEFAULT_MIN_MAPQ,
         .strand     = FILTER_STRAND_FORWARD | FILTER_STRAND_REVERSE,
         .min_length = FILTER_LENGTH_UNBOUNDED,
         .max_length = FILTER_LENGTH_UNBOUNDED,
