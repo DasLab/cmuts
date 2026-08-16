@@ -83,9 +83,11 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
 const out_attribute OUT_ATTRIBUTES[OUT_N_ATTRS] = {
     [OUT_ATTR_PROGRAM] = {
         .name   = "program",
+        .detail = "The name of the program that produced this file.",
     },
     [OUT_ATTR_VERSION] = {
         .name   = "version",
+        .detail = "The version of cmuts that produced this file.",
     },
 };
 
