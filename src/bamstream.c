@@ -250,6 +250,21 @@ static bool select_source(cm_bam_stream *stream)
     return true;
 }
 
+/* Returns whether a record is one mate of a pair. Two mates read one molecule, so
+ * counting them as separate reads would count their overlap twice. Refused here rather
+ * than filtered per read, since the whole file is then wrong the same way: the mates
+ * were not merged before alignment. */
+static int refuse_paired(cm_bam_stream *stream, const source *src)
+{
+    if ((src->pending.flag & BAM_FPAIRED) == 0) {
+        return 0;
+    }
+
+    return fail(stream, src->path,
+                "carries paired reads; overlapping mates would count a molecule "
+                "twice, so merge mates before aligning");
+}
+
 int cm_bam_stream_next(cm_bam_stream *stream, cm_bam_record *out)
 {
     /* The record handed out last time belongs to the source, so it is overwritten only
@@ -262,6 +277,10 @@ int cm_bam_stream_next(cm_bam_stream *stream, cm_bam_record *out)
 
     if (!select_source(stream)) {
         return CM_ITER_EOF;
+    }
+
+    if (refuse_paired(stream, &stream->sources[stream->at]) < 0) {
+        return CM_ITER_ERROR;
     }
 
     stream->supplied = true;

@@ -80,7 +80,7 @@ See the [output](output.md) page for more detail on what each dataset contains.
 
 ## Pre-Aligned Data
 
-Skip running `cmuts-align`. Ensure your data is sorted, which can be done with `samtools sort`.
+Skip running `cmuts-align`. Ensure your data is sorted, which can be done with `samtools sort`. Paired-end mates must have been merged before alignment; `cmuts-hmm` refuses a paired read, since two mates would count their overlap twice.
 
 ## Split Alignments
 

@@ -34,7 +34,8 @@ const char *cm_bam_stream_error(const cm_bam_stream *stream);
 
 /* Fills out with the next alignment. Returns a cm_iter_status; on CM_ITER_ERROR the cause is
  * available from cm_bam_stream_error(). The record is invalidated by the next call, as
- * cm_bam_next()'s is. */
+ * cm_bam_next()'s is. A record carrying BAM_FPAIRED is an error: mates must be merged
+ * before alignment, or their overlap counts a molecule twice. */
 int cm_bam_stream_next(cm_bam_stream *stream, cm_bam_record *out);
 
 /* Gives the htslib record behind the most recent cm_bam_stream_next(), for callers that

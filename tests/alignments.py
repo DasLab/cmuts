@@ -23,6 +23,7 @@ from oracle import (
 from programs import run_generator, samtools, samtools_into
 
 # The bits of the SAM flag a transform sets or reads.
+PAIRED_BIT = 0x1
 SECONDARY_BIT = 0x100
 UNMAPPED_BIT = 0x4
 
@@ -154,9 +155,9 @@ def split_across_files(data: Dataset, directory, parts: int) -> Dataset:
     return replace(data, bams=tuple(written))
 
 
-def _marked_secondary(line: str) -> str:
+def _with_flag_bit(line: str, bit: int) -> str:
     columns = line.split("\t")
-    columns[FLAG_COLUMN] = str(int(columns[FLAG_COLUMN]) | SECONDARY_BIT)
+    columns[FLAG_COLUMN] = str(int(columns[FLAG_COLUMN]) | bit)
 
     return "\t".join(columns)
 
@@ -175,7 +176,7 @@ def mark_secondary(data: Dataset, directory, every: int):
 
     for i, line in enumerate(record_lines(data.bam)):
         if _is_mapped(line) and i % every == 0:
-            line = _marked_secondary(line)
+            line = _with_flag_bit(line, SECONDARY_BIT)
             marked += 1
 
         lines.append(line)
@@ -183,6 +184,18 @@ def mark_secondary(data: Dataset, directory, every: int):
     rebuilt = _rebuild(data, directory, "secondary", header_text(data.bam), lines)
 
     return replace(data, bams=(rebuilt,)), marked
+
+
+def mark_paired(data: Dataset, directory) -> Dataset:
+    """Marks every read as one mate of a pair.
+
+    Only the flag changes, so the totals and the sort order carry over.
+    """
+    lines = [_with_flag_bit(line, PAIRED_BIT) for line in record_lines(data.bam)]
+
+    rebuilt = _rebuild(data, directory, "paired", header_text(data.bam), lines)
+
+    return replace(data, bams=(rebuilt,))
 
 
 # ---------------------------------------------------------------------------
