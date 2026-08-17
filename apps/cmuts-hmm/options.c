@@ -9,6 +9,7 @@
 
 #include "filter.h"
 #include "output.h"
+#include "pairs.h"
 #include "params.h"
 #include "phmm.h"
 
@@ -17,6 +18,13 @@ static const cli_choice VERIFY_CHOICES[] = {
     { "checksum", REFSEQ_VERIFY_CHECKSUM },
     { "none",     0                      },
     { NULL,       0                      },
+};
+
+static const cli_choice PAIRWISE_CHOICES[] = {
+    { "correlation", PAIRS_CORRELATION },
+    { "conditional", PAIRS_CONDITIONAL },
+    { "none",        0                 },
+    { NULL,          0                 },
 };
 
 static const cli_choice STRAND_CHOICES[] = {
@@ -44,7 +52,10 @@ static const out_written WRITTEN[] = {
       .detail = "The number of reads not aligned to any reference." },
     { .id = OUT_PAIRWISE_CORRELATION,
       .detail = "The Pearson correlation of mutations between this pair of bases.",
-      .condition = "--pairwise" },
+      .condition = "--pairwise correlation" },
+    { .id = OUT_PAIRWISE_CONDITIONAL,
+      .detail = "The probability that the base on the first axis was mutated in a read, given that the base on the second axis was.",
+      .condition = "--pairwise conditional" },
     { .id = OUT_PAIRWISE_COVERAGE,
       .detail = "The number of reads in which this pair of bases was present, weighted by PHRED scores.",
       .condition = "--pairwise" },
@@ -151,11 +162,13 @@ static const cli_option OPTIONS[] = {
         .maximum = CLI_UNBOUNDED,
     },
     {
-        .group  = "Counting",
-        .name   = "pairwise",
-        .type   = OPT_FLAG,
-        .offset = offsetof(cli_args, pipeline.pairwise),
-        .help   = "also write how often two positions are modified together",
+        .group   = "Counting",
+        .name    = "pairwise",
+        .type    = OPT_SET,
+        .offset  = offsetof(cli_args, pipeline.pairwise),
+        .metavar = "STATS",
+        .help    = "write these statistics of how often two positions are modified together",
+        .choices = PAIRWISE_CHOICES,
     },
     {
         .group   = "Counting",

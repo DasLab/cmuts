@@ -48,8 +48,9 @@ void refrow_destroy(refrow *r)
 }
 
 /* Fills the scratch with one value for every ordered pair, a row of the reference at a
- * time. The square is written whole so that a reader finds the pair whichever way round
- * it indexes; what is accumulated is the triangle. */
+ * time. What is accumulated is the triangle; the square is written whole, so a reader
+ * indexes it either way round. Only the conditional differs with the order, an entry
+ * conditioning on the position of its column. */
 static void pair_square(refrow *r, out_field_id id, const pairs *pr, size_t len)
 {
     for (size_t i = 0; i < len; i++) {
@@ -57,6 +58,8 @@ static void pair_square(refrow *r, out_field_id id, const pairs *pr, size_t len)
 
         if (id == OUT_PAIRWISE_CORRELATION) {
             pairs_correlation(pr, len, r->rates.min_depth, i, row);
+        } else if (id == OUT_PAIRWISE_CONDITIONAL) {
+            pairs_conditional(pr, len, r->rates.min_depth, i, row);
         } else {
             pairs_coverage(pr, len, i, row);
         }
@@ -86,6 +89,7 @@ static const double *values(refrow *r, out_field_id id, const accum *acc,
             rate_error(&r->rates, acc, len, r->row);
             return r->row;
         case OUT_PAIRWISE_CORRELATION:
+        case OUT_PAIRWISE_CONDITIONAL:
         case OUT_PAIRWISE_COVERAGE:
             if (!pr) {
                 break;

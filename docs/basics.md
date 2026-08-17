@@ -110,4 +110,4 @@ With no control, skip background subtraction and use the output of `cmuts-hmm` d
 
 ## Correlation-Based Data
 
-To analyze M2-seq, RING-MaP, or MOHCA-seq data, pass the `--pairwise` flag to `cmuts-hmm`, which causes it to compute and store pairwise mutation correlations.
+To analyze M2-seq, RING-MaP, or MOHCA-seq data, pass `--pairwise` to `cmuts-hmm` with the statistics to compute, comma separated. `--pairwise correlation` stores the mutation correlation of every pair of positions, and `--pairwise conditional` stores the probability that one position was mutated in a read where the other was.

@@ -57,6 +57,13 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .stored   = OUT_F32,
         .absent   = OUT_NAN,
     },
+    [OUT_PAIRWISE_CONDITIONAL] = {
+        .name     = "pairwise/conditional",
+        .row      = shape_per_pair,
+        .per_ref  = true,
+        .stored   = OUT_F32,
+        .absent   = OUT_NAN,
+    },
     [OUT_PAIRWISE_COVERAGE] = {
         .name     = "pairwise/coverage",
         .row      = shape_per_pair,

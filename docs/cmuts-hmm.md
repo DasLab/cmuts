@@ -86,9 +86,16 @@ The number of reads not aligned to any reference.
 {.field}
 ### `pairwise/correlation`
 
-**Shape** `(n, l, l)` · **Type** `float32` · **Fill** `NaN` · **Written with** `--pairwise`
+**Shape** `(n, l, l)` · **Type** `float32` · **Fill** `NaN` · **Written with** `--pairwise correlation`
 
 The Pearson correlation of mutations between this pair of bases.
+
+{.field}
+### `pairwise/conditional`
+
+**Shape** `(n, l, l)` · **Type** `float32` · **Fill** `NaN` · **Written with** `--pairwise conditional`
+
+The probability that the base on the first axis was mutated in a read, given that the base on the second axis was.
 
 {.field}
 ### `pairwise/coverage`
@@ -130,7 +137,7 @@ The number of reads in which this pair of bases was present, weighted by PHRED s
 | Option | Description |
 | --- | --- |
 | `--band N` | reference positions the marginal may look either side of the CIGAR (default 2) |
-| `--pairwise` | also write how often two positions are modified together |
+| `--pairwise STATS` | write these statistics of how often two positions are modified together (correlation, conditional, none; default none) |
 | `--min-depth D` | evidence a position needs before its rate is written (default 1) |
 | `--params FILE` | read the pair HMM's rates from this file (default: built in) |
 | `--substitution-weight W` | what a substitution counts towards the mutation total (0 to 1; default 1) |

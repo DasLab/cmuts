@@ -24,6 +24,13 @@ typedef enum {
     PAIR_N_CELLS,
 } pair_cell;
 
+/* The statistics derived from the pairs, as bits so a run may ask for any subset. What
+ * is accumulated does not depend on the choice; only what is written does. */
+typedef enum {
+    PAIRS_CORRELATION = 1 << 0,   /* Pearson correlation of the two being modified */
+    PAIRS_CONDITIONAL = 1 << 1,   /* probability one was modified where the other was */
+} pairs_statistic;
+
 /* Co-modification accumulated for one reference.
  *
  * Only i <= j is held, a pair being unordered. The packing is over the reference's own
@@ -55,4 +62,14 @@ void pairs_count(pairs *p, size_t len, const phmm_window *window);
  * what every correlation involving that position is reduced by. */
 void pairs_correlation(const pairs *p, size_t len, double min_depth, size_t i,
                        double *row);
+
+/* Writes position i against every position: the probability i was modified in a read
+ * where that position was, over the reads spanning both.
+ *
+ * The square is not symmetric, an entry conditioning on the position it is indexed by. A
+ * pair whose reads are too few, or whose conditioned position was never modified, is not
+ * a number. */
+void pairs_conditional(const pairs *p, size_t len, double min_depth, size_t i,
+                       double *row);
+
 void pairs_coverage(const pairs *p, size_t len, size_t i, double *row);

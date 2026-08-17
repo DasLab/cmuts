@@ -144,6 +144,31 @@ void pairs_correlation(const pairs *p, size_t len, double min_depth, size_t i,
     }
 }
 
+/* Gives the probability the row's position was modified in a read where the conditioned
+ * position was, or NaN where the sums support none. */
+static double conditional(const double *at, double conditioned, double min_depth)
+{
+    double span = at[PAIR_SPAN];
+
+    if (span <= 0.0 || span < min_depth || conditioned <= 0.0) {
+        return (double)NAN;
+    }
+
+    return at[PAIR_BOTH] / conditioned;
+}
+
+void pairs_conditional(const pairs *p, size_t len, double min_depth, size_t i,
+                       double *row)
+{
+    for (size_t j = 0; j < len; j++) {
+        const double *at = ordered(p, len, i, j);
+
+        /* The conditioned position j is the upper of the stored pair where i is the
+         * lower, and its mutations sit in the cell accordingly. */
+        row[j] = conditional(at, i <= j ? at[PAIR_RIGHT] : at[PAIR_LEFT], min_depth);
+    }
+}
+
 void pairs_coverage(const pairs *p, size_t len, size_t i, double *row)
 {
     for (size_t j = 0; j < len; j++) {

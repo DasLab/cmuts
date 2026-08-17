@@ -655,14 +655,14 @@ static int pipeline_build_buffers(pipeline *p, const pipeline_config *cfg,
     size_t carriers = cfg->queue_capacity + (cfg->workers + 2) * cfg->batch;
 
     p->batch         = cfg->batch;
-    p->pairwise      = cfg->pairwise;
+    p->pairwise      = cfg->pairwise != 0;
     p->filter_config = cfg->filter_config;
     p->ref_cap       = (size_t)cm_bam_stream_max_reflen(p->bam);
 
     p->work      = queue_create(cfg->queue_capacity);
     p->completed = queue_create(cfg->live_refs);
     p->items     = itempool_create(carriers);
-    p->contexts  = ctxpool_create(cfg->live_refs, p->ref_cap, cfg->pairwise);
+    p->contexts  = ctxpool_create(cfg->live_refs, p->ref_cap, cfg->pairwise != 0);
 
     if (!p->work || !p->completed || !p->items || !p->contexts) {
         snprintf(error, error_len, "out of memory building the pipeline");
@@ -752,10 +752,12 @@ int pipeline_run(const pipeline_config *cfg, const char *program,
     }
 
     /* The manifest says what a run of this program writes; the squares among it are
-     * written only where they were asked for. */
+     * written only where they were asked for. The coverage backs whichever statistic was
+     * chosen, so it goes with any of them. */
     out_selection(writes, p.wanted);
-    p.wanted[OUT_PAIRWISE_CORRELATION] &= cfg->pairwise;
-    p.wanted[OUT_PAIRWISE_COVERAGE]    &= cfg->pairwise;
+    p.wanted[OUT_PAIRWISE_CORRELATION] &= (cfg->pairwise & PAIRS_CORRELATION) != 0;
+    p.wanted[OUT_PAIRWISE_CONDITIONAL] &= (cfg->pairwise & PAIRS_CONDITIONAL) != 0;
+    p.wanted[OUT_PAIRWISE_COVERAGE]    &= cfg->pairwise != 0;
 
     if (h5writer_may_replace(cfg->output_path, cfg->overwrite, &may_replace,
                              error, error_len) < 0 ||
