@@ -25,16 +25,6 @@ struct tally_scratch {
     size_t        rows;   /* rows it is sized for */
 };
 
-static void add_at(const context *ctx, accum_field_id field, hts_pos_t pos,
-                   double value)
-{
-    double *values = accum_data(ctx->target, field);
-
-    if (pos >= 0 && (size_t)pos < ctx->ref->len) {
-        values[pos] += value;
-    }
-}
-
 /* Counts the read in its length bin. Binned by stored length, as the length filters are
  * applied, so inserted and soft-clipped bases count. A read longer than the range the
  * bins cover falls in none of them; the reads total gives how many those were.
@@ -52,14 +42,24 @@ static void add_length(const context *ctx)
     }
 }
 
+/* Adds the window's stretch on the reference to the three per-base fields, clipping once
+ * rather than testing each position. */
 static void add_window(const context *ctx, const phmm_window *window)
 {
-    for (size_t i = 0; i < window->len; i++) {
-        hts_pos_t pos = window->origin + (hts_pos_t)i;
+    double *coverage  = accum_data(ctx->target, ACCUM_COVERAGE);
+    double *spanned   = accum_data(ctx->target, ACCUM_SPANNED);
+    double *mutations = accum_data(ctx->target, ACCUM_MUTATIONS);
+    size_t  begin;
+    size_t  end;
 
-        add_at(ctx, ACCUM_COVERAGE, pos, window->coverage[i]);
-        add_at(ctx, ACCUM_SPANNED, pos, window->spanned[i]);
-        add_at(ctx, ACCUM_MUTATIONS, pos, window->mutations[i]);
+    phmm_window_bounds(window, ctx->ref->len, &begin, &end);
+
+    for (size_t i = begin; i < end; i++) {
+        size_t pos = (size_t)(window->origin + (hts_pos_t)i);
+
+        coverage[pos]  += window->coverage[i];
+        spanned[pos]   += window->spanned[i];
+        mutations[pos] += window->mutations[i];
     }
 }
 

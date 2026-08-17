@@ -93,6 +93,12 @@ typedef struct {
     const double *mutations;   /* events attributed to that position */
 } phmm_window;
 
+/* Gives the window indices that fall inside a reference of len bases: from the first to
+ * one past the last, an empty range where none do. This is the clipping every consumer
+ * of a window applies. */
+void phmm_window_bounds(const phmm_window *window, size_t len,
+                        size_t *from, size_t *to);
+
 /* How a marginalization ended.
  *
  * PHMM_NO_PATH is the read, the rates and the band together: the rates give probability

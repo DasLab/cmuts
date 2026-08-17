@@ -77,31 +77,12 @@ void pairs_add(pairs *dst, const pairs *src, size_t len)
 /* Counting                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* Gives the window indices that fall inside the reference. A window is drawn around the
- * band and so may reach past either end. */
-static void window_bounds(const phmm_window *window, size_t len,
-                          size_t *from, size_t *to)
-{
-    hts_pos_t low  = window->origin < 0 ? -window->origin : 0;
-    hts_pos_t high = (hts_pos_t)len - window->origin;
-
-    *from = (size_t)low;
-    *to   = high < 0 ? 0 : (size_t)high;
-
-    if (*to > window->len) {
-        *to = window->len;
-    }
-    if (*from > *to) {
-        *from = *to;
-    }
-}
-
 void pairs_count(pairs *p, size_t len, const phmm_window *window)
 {
     size_t from;
     size_t to;
 
-    window_bounds(window, len, &from, &to);
+    phmm_window_bounds(window, len, &from, &to);
 
     for (size_t a = from; a < to; a++) {
         size_t i  = (size_t)(window->origin + (hts_pos_t)a);

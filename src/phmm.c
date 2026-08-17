@@ -1113,6 +1113,23 @@ static bool prepare(context *ctx)
     return true;
 }
 
+void phmm_window_bounds(const phmm_window *window, size_t len,
+                        size_t *from, size_t *to)
+{
+    hts_pos_t low  = window->origin < 0 ? -window->origin : 0;
+    hts_pos_t high = (hts_pos_t)len - window->origin;
+
+    *from = (size_t)low;
+    *to   = high < 0 ? 0 : (size_t)high;
+
+    if (*to > window->len) {
+        *to = window->len;
+    }
+    if (*from > *to) {
+        *from = *to;
+    }
+}
+
 phmm_status phmm_run(const phmm *model, const phred *quality,
                      const cm_bam_record *read, const cm_fasta_record *ref,
                      const int *half, phmm_scratch *scratch, phmm_window *out)
