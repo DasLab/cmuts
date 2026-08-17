@@ -1,4 +1,4 @@
-/* options.c -- cmuts-norm's command line, as one table.
+/* options.c -- cmuts norm's command line, as one table.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -44,7 +44,7 @@ const out_manifest CMUTS_NORM_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITT
 
 static void dump_layout(FILE *out)
 {
-    out_dump_layout(out, "cmuts-norm", &CMUTS_NORM_WRITES);
+    out_dump_layout(out, "cmuts norm", &CMUTS_NORM_WRITES);
 }
 
 static const cli_option OPTIONS[] = {
@@ -162,7 +162,7 @@ norm_args norm_defaults(void)
 cli_spec norm_spec(const norm_args *defaults)
 {
     return (cli_spec){
-        .program       = "cmuts-norm",
+        .program       = "cmuts norm",
         .version       = CMUTS_VERSION,
         .summary       = "divide cmuts outputs by one scale taken from their rates.",
         .options       = OPTIONS,

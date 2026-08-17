@@ -87,7 +87,7 @@ def test_a_file_that_is_not_an_output_is_left_intact(data, falsifiable, tmp_path
     notes = tmp_path / "notes.txt"
     notes.write_text(NOTES)
 
-    # cmuts-hmm refuses on the file already at the path and never reads the
+    # cmuts hmm refuses on the file already at the path and never reads the
     # alignments, so no dataset can leave this test with nothing to assert.
     falsifiable(True)
 
@@ -105,7 +105,7 @@ def test_outputs_are_labelled_with_the_program(data, falsifiable, tmp_path):
 
     run_cmuts(data, output)
 
-    assert attributes_of(output)["program"] == CMUTS_HMM
+    assert attributes_of(output)["program"] == " ".join(CMUTS_HMM)
 
 
 def test_outputs_are_versioned(data, falsifiable, tmp_path):

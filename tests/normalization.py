@@ -1,4 +1,4 @@
-"""Tools for computing the scale cmuts-norm should divide by, and what dividing
+"""Tools for computing the scale cmuts norm should divide by, and what dividing
 by it leaves.
 
 Both schemes pool the rates of every input and return one number. The pool is
@@ -71,7 +71,7 @@ def _outlier_factor(values) -> float:
 
 
 def factor(scheme, inputs, min_coverage=MIN_COVERAGE) -> float:
-    """The scale cmuts-norm should divide every input by. A scale that says
+    """The scale cmuts norm should divide every input by. A scale that says
     nothing leaves the rates as they are."""
     values = pool(scheme, inputs, min_coverage)
     found = _ubr_factor(values) if scheme == UBR else _outlier_factor(values)

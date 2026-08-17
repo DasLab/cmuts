@@ -14,8 +14,9 @@
 #include "dataset.h"
 #include "error.h"
 #include "options.h"
+#include "subcommands.h"
 
-int main(int argc, char **argv)
+int gen_main(int argc, char **argv)
 {
     gen_args       defaults = gen_defaults();
     cli_spec       spec     = gen_spec(&defaults);
@@ -23,7 +24,7 @@ int main(int argc, char **argv)
     dataset_config cfg;
     char           error[CM_ERROR_MAX];
 
-    /* Silenced for the reason cmuts-hmm silences it: everything htslib reports it also
+    /* Silenced for the reason cmuts hmm silences it: everything htslib reports it also
      * returns. */
     hts_set_log_level(HTS_LOG_OFF);
 

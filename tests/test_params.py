@@ -61,7 +61,7 @@ def write_params(path, **changed):
 def test_dumped_defaults_reproduce_a_default_run(data, falsifiable, tmp_path):
     """--dump-params writes the rates in the form --params reads, so a run given
     them back is a run given nothing."""
-    dumped = execute_into(tmp_path / "dumped.txt", [CMUTS_HMM, "--dump-params"])
+    dumped = execute_into(tmp_path / "dumped.txt", [*CMUTS_HMM, "--dump-params"])
 
     run_cmuts(data, tmp_path / "plain.h5")
     run_cmuts(data, tmp_path / "given.h5", params=dumped)

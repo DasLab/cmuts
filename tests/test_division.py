@@ -62,7 +62,7 @@ def divide(tmp_path):
 
 
 def wanted(name, *inputs):
-    """Returns the values cmuts-div should write for one field."""
+    """Returns the values cmuts div should write for one field."""
     return expected(DIV_RULES, name, *inputs)
 
 
@@ -83,7 +83,7 @@ def agrees(result, expectation, name):
 def test_the_result_names_the_program_that_wrote_it(build, divide):
     output = divide(build(), build())
 
-    assert attributes_of(output)["program"] == CMUTS_DIV
+    assert attributes_of(output)["program"] == " ".join(CMUTS_DIV)
     assert attributes_of(output)["version"] == reported_version(CMUTS_DIV)
 
 
@@ -360,7 +360,7 @@ def test_a_run_that_refuses_its_inputs_leaves_the_output_intact(build, divide,
 
 
 def test_both_inputs_are_required(build, tmp_path):
-    given = attempt([CMUTS_DIV, "-o", tmp_path / "out.h5", build()])
+    given = attempt([*CMUTS_DIV, "-o", tmp_path / "out.h5", build()])
 
     assert given.returncode == 2
     assert not (tmp_path / "out.h5").exists()

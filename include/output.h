@@ -103,8 +103,8 @@ size_t out_values(out_field_id id, size_t len, size_t cap);
 /* One field of one program's output.
  *
  * A field has the same shape, type and fill wherever it is written, so those stay in
- * OUT_FIELDS. What the numbers mean depends on what produced them -- a rate cmuts-hmm
- * counted is not a rate cmuts-sub took a background off -- so the description belongs
+ * OUT_FIELDS. What the numbers mean depends on what produced them -- a rate cmuts hmm
+ * counted is not a rate cmuts sub took a background off -- so the description belongs
  * here, and falls back to the field's own where the two agree. */
 typedef struct {
     out_field_id id;

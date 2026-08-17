@@ -42,7 +42,7 @@ def sample_references(data) -> list:
 
 
 def test_a_matching_checksum_changes_nothing_counted(data, falsifiable, tmp_path):
-    """cmuts-gen writes a matching checksum into every header, so every run in
+    """cmuts gen writes a matching checksum into every header, so every run in
     the suite already asserts that a matching one is accepted. This test
     asserts that checking it leaves the result unchanged."""
     falsifiable(has_references(data))
@@ -148,7 +148,7 @@ def test_a_checksum_goes_unchecked_where_it_is_left_out(data, falsifiable, tmp_p
 
 
 def test_verifying_none_takes_the_fasta_on_trust(data, falsifiable, tmp_path):
-    """The FASTA disagrees on every count a check could make: cmuts-gen wrote
+    """The FASTA disagrees on every count a check could make: cmuts gen wrote
     the checksums over the bases it held before either was changed."""
     falsifiable(has_references(data))
 

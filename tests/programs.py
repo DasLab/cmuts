@@ -13,12 +13,14 @@ from outputs import read_summary
 
 ROOT = Path(__file__).resolve().parent.parent
 
-CMUTS_HMM = "cmuts-hmm"
-CMUTS_GEN = "cmuts-gen"
-CMUTS_SUB = "cmuts-sub"
-CMUTS_DIV = "cmuts-div"
-CMUTS_NORM = "cmuts-norm"
-PROGRAMS = (CMUTS_HMM, CMUTS_GEN, CMUTS_SUB, CMUTS_DIV, CMUTS_NORM)
+CMUTS = "cmuts"
+
+CMUTS_HMM = (CMUTS, "hmm")
+CMUTS_GEN = (CMUTS, "gen")
+CMUTS_SUB = (CMUTS, "sub")
+CMUTS_DIV = (CMUTS, "div")
+CMUTS_NORM = (CMUTS, "norm")
+PROGRAMS = (CMUTS,)
 
 
 def locate(name: str) -> Path | None:
@@ -85,10 +87,10 @@ def execute_into(path, command):
     return path
 
 
-def reported_version(program: str) -> str:
+def reported_version(program) -> str:
     """Returns the version a program prints for --version, which it gives after
     its own name."""
-    return execute([program, "--version"]).stdout.split()[-1]
+    return execute([*program, "--version"]).stdout.split()[-1]
 
 
 def samtools(*arguments) -> str:
@@ -118,7 +120,7 @@ def _options(given: dict) -> list:
 
 
 def _cmuts_command(data, output, options: dict) -> list:
-    return [CMUTS_HMM, "-f", data.fasta, "-o", output, *_options(options), *data.bams]
+    return [*CMUTS_HMM, "-f", data.fasta, "-o", output, *_options(options), *data.bams]
 
 
 def run_cmuts(data, output, **options):
@@ -138,7 +140,7 @@ def try_cmuts(data, output, **options):
 
 
 def _subtract_command(treated, untreated, output, options: dict) -> list:
-    return [CMUTS_SUB, "-o", output, *_options(options), treated, untreated]
+    return [*CMUTS_SUB, "-o", output, *_options(options), treated, untreated]
 
 
 def run_subtract(treated, untreated, output, **options):
@@ -155,7 +157,7 @@ def try_subtract(treated, untreated, output, **options):
 
 
 def _divide_command(rates, control, output, options: dict) -> list:
-    return [CMUTS_DIV, "-o", output, *_options(options), rates, control]
+    return [*CMUTS_DIV, "-o", output, *_options(options), rates, control]
 
 
 def run_divide(rates, control, output, **options):
@@ -179,7 +181,7 @@ def _normalize_command(inputs, outputs, options: dict) -> list:
     for output in outputs:
         paired += ["-o", output]
 
-    return [CMUTS_NORM, *paired, *_options(options), *inputs]
+    return [*CMUTS_NORM, *paired, *_options(options), *inputs]
 
 
 def run_normalize(inputs, outputs, **options):
@@ -196,4 +198,4 @@ def try_normalize(inputs, outputs, **options):
 
 def run_generator(prefix, parameters: dict):
     """Writes an alignment and its reference, both named after the prefix."""
-    execute([CMUTS_GEN, "-o", prefix, *_options(parameters)])
+    execute([*CMUTS_GEN, "-o", prefix, *_options(parameters)])

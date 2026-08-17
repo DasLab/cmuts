@@ -1,4 +1,4 @@
-/* options.c -- cmuts-div's command line, as one table.
+/* options.c -- cmuts sub's command line, as one table.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -8,12 +8,12 @@
 #include <stddef.h>
 
 /* The datasets a run leaves behind, which are those every output holds: what it was
- * given, divided by the control it was given. */
+ * given, less the background it was given. */
 static const out_written WRITTEN[] = {
     { .id = OUT_COVERAGE,
       .detail = "The number of reads in which this base was present, weighted by PHRED scores." },
     { .id = OUT_REACTIVITY,
-      .detail = "The mutation rate of the sample divided by that of the control, so a position reads as its rate relative to the denatured state." },
+      .detail = "The mutation rate of the treated sample less that of the untreated one, so what remains is the signal the treatment added." },
     { .id = OUT_ERROR,
       .detail = "Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors." },
     { .id = OUT_LENGTHS,
@@ -27,11 +27,11 @@ static const out_written WRITTEN[] = {
 };
 
 
-const out_manifest CMUTS_DIV_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTEN };
+const out_manifest CMUTS_SUB_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTEN };
 
 static void dump_layout(FILE *out)
 {
-    out_dump_layout(out, "cmuts-div", &CMUTS_DIV_WRITES);
+    out_dump_layout(out, "cmuts sub", &CMUTS_SUB_WRITES);
 }
 
 static const cli_option OPTIONS[] = {
@@ -40,7 +40,7 @@ static const cli_option OPTIONS[] = {
         .name     = "output",
         .key      = 'o',
         .type     = OPT_STRING,
-        .offset   = offsetof(div_args, divide.output_path),
+        .offset   = offsetof(sub_args, subtract.output_path),
         .metavar  = "HDF5",
         .help     = "write results to this file",
         .required = true,
@@ -49,8 +49,16 @@ static const cli_option OPTIONS[] = {
         .group  = "Input and output",
         .name   = "overwrite",
         .type   = OPT_FLAG,
-        .offset = offsetof(div_args, divide.overwrite),
+        .offset = offsetof(sub_args, subtract.overwrite),
         .help   = "replace the output file if it already exists",
+    },
+
+    {
+        .group  = "Subtraction",
+        .name   = "clip",
+        .type   = OPT_FLAG,
+        .offset = offsetof(sub_args, subtract.clip),
+        .help   = "raise a negative reactivity to zero",
     },
 
     {
@@ -90,32 +98,32 @@ static const cli_option OPTIONS[] = {
 
 static const cli_positional POSITIONALS[] = {
     {
-        .name     = "rates",
-        .metavar  = "RATES",
-        .help     = "the reactivities to normalize",
-        .offset   = offsetof(div_args, divide.rates_path),
+        .name     = "treated",
+        .metavar  = "TREATED",
+        .help     = "the modified sample",
+        .offset   = offsetof(sub_args, subtract.treated_path),
         .required = true,
     },
     {
-        .name     = "control",
-        .metavar  = "CONTROL",
-        .help     = "the denatured control",
-        .offset   = offsetof(div_args, divide.control_path),
+        .name     = "untreated",
+        .metavar  = "UNTREATED",
+        .help     = "the background",
+        .offset   = offsetof(sub_args, subtract.untreated_path),
         .required = true,
     },
 };
 
-div_args div_defaults(void)
+sub_args sub_defaults(void)
 {
-    return (div_args){ 0 };
+    return (sub_args){ 0 };
 }
 
-cli_spec div_spec(const div_args *defaults)
+cli_spec sub_spec(const sub_args *defaults)
 {
     return (cli_spec){
-        .program       = "cmuts-div",
+        .program       = "cmuts sub",
         .version       = CMUTS_VERSION,
-        .summary       = "divide a cmuts output by a denatured control.",
+        .summary       = "subtract an untreated background from a cmuts output.",
         .options       = OPTIONS,
         .n_options     = sizeof OPTIONS / sizeof *OPTIONS,
         .positionals   = POSITIONALS,

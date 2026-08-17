@@ -13,8 +13,9 @@
 #include "options.h"
 #include "params.h"
 #include "pipeline.h"
+#include "subcommands.h"
 
-int main(int argc, char **argv)
+int hmm_main(int argc, char **argv)
 {
     cli_args defaults = cmuts_hmm_defaults();
     cli_spec spec     = cmuts_hmm_spec(&defaults);

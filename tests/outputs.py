@@ -120,7 +120,7 @@ def _values(field: Field, n_refs: int, cap: int, given) -> np.ndarray:
 
 
 def _storage(storage: str, wanted: tuple) -> dict:
-    """Returns the creation settings a dataset is written under. cmuts-hmm
+    """Returns the creation settings a dataset is written under. cmuts hmm
     writes chunked, shuffled and deflated, and a plainly written file holds the
     same values.
 

@@ -41,16 +41,17 @@ def table(headings: list, rows: list) -> str:
                      + [line(row) for row in rows])
 
 
-def described(program: str, flag: str) -> dict:
+def described(program: list, flag: str) -> dict:
     """Runs one of a program's dump flags and parses the JSON it prints.
 
     A non-zero exit usually means the page asked for a dump this program does
     not have, so the message it printed is shown instead of a traceback.
     """
-    told = subprocess.run([program, flag], capture_output=True, text=True)
+    told = subprocess.run([*program, flag], capture_output=True, text=True)
 
     if told.returncode != 0:
-        raise SystemExit(f"{program} {flag}: {told.stderr.strip() or 'refused'}")
+        raise SystemExit(f"{' '.join(program)} {flag}: "
+                         f"{told.stderr.strip() or 'refused'}")
 
     return json.loads(told.stdout)
 
@@ -73,7 +74,7 @@ def shape(field: dict) -> str:
     return f"({', '.join(extents)}{',' if len(extents) == 1 else ''})"
 
 
-def layout(program: str) -> str:
+def layout(program: list) -> str:
     """The datasets an output holds, one to a row.
 
     The last column is the dataset's HDF5 fill value, which h5py reports as
@@ -87,7 +88,7 @@ def layout(program: str) -> str:
     )
 
 
-def attributes(program: str) -> str:
+def attributes(program: list) -> str:
     """The attributes an output carries, one to a row.
 
     These sit on the root group and describe the run, so h5py reads them from
@@ -100,7 +101,7 @@ def attributes(program: str) -> str:
     )
 
 
-def fields(program: str) -> str:
+def fields(program: list) -> str:
     """The same datasets at length, each under a heading of its own.
 
     The heading gives every dataset a permalink and an entry in the table of
@@ -171,7 +172,7 @@ def option_rows(options: list) -> list:
             for option in options]
 
 
-def options(program: str) -> str:
+def options(program: list) -> str:
     """Every argument a program takes, under the headings the help groups them
     by.
 
@@ -213,6 +214,26 @@ WRITERS = {"LAYOUT": layout, "ATTRIBUTES": attributes, "FIELDS": fields,
 BLOCK = re.compile(r"<!-- BEGIN GENERATED (?P<program>[\w.-]+) (?P<kind>[A-Z]+) -->")
 
 
+def resolve(build: str, name: str) -> list | None:
+    """The command a block's program name stands for.
+
+    A name with a binary of its own under the build directory runs directly.
+    cmuts-<subcommand> has no binary and runs as that subcommand of cmuts.
+    """
+    binary = Path(build) / name
+
+    if binary.exists():
+        return [str(binary)]
+
+    prefix, _, subcommand = name.partition("-")
+    dispatcher = Path(build) / prefix
+
+    if subcommand and dispatcher.exists():
+        return [str(dispatcher), subcommand]
+
+    return None
+
+
 def spliced(text: str, program: str, kind: str, generated: str) -> str:
     """The page with what lies between one pair of markers replaced."""
     begin = f"<!-- BEGIN GENERATED {program} {kind} -->"
@@ -231,15 +252,15 @@ def main(build: str, docs: str) -> None:
         blocks = BLOCK.findall(text)
 
         for program, kind in blocks:
-            binary = Path(build) / program
+            command = resolve(build, program)
 
             if kind not in WRITERS:
                 raise SystemExit(f"{page}: no table named {kind}")
 
-            if not binary.exists():
-                raise SystemExit(f"{page}: {binary} is not built")
+            if command is None:
+                raise SystemExit(f"{page}: {program} is not built under {build}")
 
-            text = spliced(text, program, kind, WRITERS[kind](str(binary)))
+            text = spliced(text, program, kind, WRITERS[kind](command))
 
         if blocks:
             page.write_text(text)

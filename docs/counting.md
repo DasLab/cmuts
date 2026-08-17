@@ -28,7 +28,7 @@ The default of 1 is one whole observation. Below that, the standard error of a p
 
 ## What subtraction does to each dataset
 
-| Dataset | After `cmuts-sub` |
+| Dataset | After `cmuts sub` |
 | --- | --- |
 | `reactivity` | the treated rate less the untreated one |
 | `error` | the two errors added in quadrature |
@@ -39,7 +39,7 @@ A rate is missing wherever either input is missing one, since a difference needs
 
 ## What division does to each dataset
 
-| Dataset | After `cmuts-div` |
+| Dataset | After `cmuts div` |
 | --- | --- |
 | `reactivity` | the rate over the control's |
 | `error` | the two errors added in quadrature, the control's scaled by the rate, over the control's rate |
@@ -50,7 +50,7 @@ Where the control measured nothing at a position, there is nothing to divide by 
 
 ## What normalization does to each dataset
 
-| Dataset | After `cmuts-norm` |
+| Dataset | After `cmuts norm` |
 | --- | --- |
 | `reactivity` | the rate over the scale, then held within the clipping bounds |
 | `error` | the error over the same scale |

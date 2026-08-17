@@ -1,4 +1,4 @@
-"""The alignments every test is run against, as parameters for cmuts-gen.
+"""The alignments every test is run against, as parameters for cmuts gen.
 
 Each dataset is a case that is easy to get wrong, and none is written with any
 one test in mind. The comment on each describes what makes it awkward.
@@ -30,7 +30,7 @@ DATASETS = {
     "lowqual": dict(seed=107, references=15, reads_per_ref=20, mapq=0),
 
     # A mapping quality of 255 alongside one that passes and one that does not.
-    # 255 is the SAM spec's "unavailable", which cmuts-hmm rejects at every
+    # 255 is the SAM spec's "unavailable", which cmuts hmm rejects at every
     # threshold and samtools accepts at every threshold.
     "unavailable": dict(seed=112, references=15, reads_per_ref=20,
                         mapq="0,60,255"),

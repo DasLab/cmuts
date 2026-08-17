@@ -1,4 +1,4 @@
-/* options.c -- cmuts-gen's command line, as one table.
+/* options.c -- cmuts gen's command line, as one table.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -239,7 +239,7 @@ gen_args gen_defaults(void)
 cli_spec gen_spec(const gen_args *defaults)
 {
     return (cli_spec){
-        .program   = "cmuts-gen",
+        .program   = "cmuts gen",
         .version   = CMUTS_VERSION,
         .summary   = "generate alignments and the reference they came from",
         .options   = OPTIONS,

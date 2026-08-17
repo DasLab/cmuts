@@ -1,4 +1,4 @@
-"""cmuts-hmm requires merged reads and must refuse paired ones.
+"""cmuts hmm requires merged reads and must refuse paired ones.
 
 Two mates read one molecule, so counting them as separate reads would count
 their overlap twice. Merging happens before alignment, so a record still

@@ -92,7 +92,7 @@ def besides_the_scale(path) -> dict:
 def test_the_result_names_the_program_that_wrote_it(build, normalize):
     output, = normalize(build(covered()))
 
-    assert attributes_of(output)["program"] == CMUTS_NORM
+    assert attributes_of(output)["program"] == " ".join(CMUTS_NORM)
     assert attributes_of(output)["version"] == reported_version(CMUTS_NORM)
 
 
@@ -403,7 +403,7 @@ def test_more_outputs_than_inputs_is_refused(build, tmp_path):
 
 
 def test_an_input_is_required(tmp_path):
-    given = attempt([CMUTS_NORM, "-o", tmp_path / "out.h5"])
+    given = attempt([*CMUTS_NORM, "-o", tmp_path / "out.h5"])
 
     assert given.returncode == 2
     assert not (tmp_path / "out.h5").exists()

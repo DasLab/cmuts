@@ -1,4 +1,4 @@
-# cmuts-gen
+# cmuts gen
 
 ## CLI Options
 

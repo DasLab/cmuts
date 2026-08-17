@@ -1,4 +1,4 @@
-/* options.c -- cmuts-hmm's command line, as one table.
+/* options.c -- cmuts hmm's command line, as one table.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -66,7 +66,7 @@ const out_manifest CMUTS_HMM_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTE
 
 static void dump_layout(FILE *out)
 {
-    out_dump_layout(out, "cmuts-hmm", &CMUTS_HMM_WRITES);
+    out_dump_layout(out, "cmuts hmm", &CMUTS_HMM_WRITES);
 }
 
 static const cli_option OPTIONS[] = {
@@ -340,7 +340,7 @@ cli_args cmuts_hmm_defaults(void)
 cli_spec cmuts_hmm_spec(const cli_args *defaults)
 {
     return (cli_spec){
-        .program       = "cmuts-hmm",
+        .program       = "cmuts hmm",
         .version       = CMUTS_VERSION,
         .summary       = "Fast, multithreaded pair-HMM counting of MaP-seq mutations.",
         .options       = OPTIONS,

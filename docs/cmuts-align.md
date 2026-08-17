@@ -1,4 +1,4 @@
-# cmuts-align
+# cmuts align
 
 ## Purpose
 
@@ -16,13 +16,13 @@ As well as both `minimap2` and `samtools` on the path, and `fastp` for paired-en
 One invocation handles one sample. Pass a single FASTQ file for single-end reads,
 
 ```sh
-cmuts-align -f references.fasta -o treated.bam -x map-ont treated.fastq
+cmuts align -f references.fasta -o treated.bam -x map-ont treated.fastq
 ```
 
 or two for paired-end reads.
 
 ```sh
-cmuts-align -f references.fasta -o treated.bam -x sr treated_R1.fastq.gz treated_R2.fastq.gz
+cmuts align -f references.fasta -o treated.bam -x sr treated_R1.fastq.gz treated_R2.fastq.gz
 ```
 
 ## Merging

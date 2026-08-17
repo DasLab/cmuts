@@ -1,4 +1,4 @@
-# cmuts-div
+# cmuts div
 
 ## Purpose
 
@@ -6,7 +6,7 @@ Normalization of reactivity rates against a denatured control.
 
 ## Requires
 
-- Reactivity rates, usually the output of [cmuts-sub](cmuts-sub.md)
+- Reactivity rates, usually the output of [cmuts sub](cmuts-sub.md)
 - Denatured control reactivity rates
 
 Both must be in cmuts-compatible HDF5 files.
@@ -16,8 +16,8 @@ Both must be in cmuts-compatible HDF5 files.
 The control is applied after the background is subtracted.
 
 ```sh
-cmuts-sub -o difference.h5 treated.h5 untreated.h5
-cmuts-div -o normalized.h5 difference.h5 denatured.h5
+cmuts sub -o difference.h5 treated.h5 untreated.h5
+cmuts div -o normalized.h5 difference.h5 denatured.h5
 ```
 
 Each rate is divided by the control's rate at the same position. The result is NaN if either input is NaN there, or if the control's rate is not above zero.

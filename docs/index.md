@@ -56,7 +56,7 @@ cd cmuts
 make install
 ```
 
-This installs all cmuts binaries to `~/.local/bin`. Pass `BINDIR` to `make` to install them elsewhere.
+This installs the `cmuts` binary and the `cmuts-align` helper script to `~/.local/bin`. Pass `BINDIR` to `make` to install them elsewhere.
 
 ## Next Steps
 

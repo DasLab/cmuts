@@ -64,7 +64,7 @@ def test_every_format_gives_the_same_answer(data, falsifiable, tmp_path, target,
 
 
 def test_cram_decodes_against_the_reference_it_was_given(data, falsifiable, tmp_path):
-    """Renames the reference recorded in the CRAM header, leaving cmuts-hmm no
+    """Renames the reference recorded in the CRAM header, leaving cmuts hmm no
     source for the bases but --fasta."""
     converted = convert_format(data, tmp_path, CRAM)
 
@@ -77,7 +77,7 @@ def test_cram_decodes_against_the_reference_it_was_given(data, falsifiable, tmp_
     with moved_aside(converted.fasta):
         summary = read_summary(run_cmuts(hidden, tmp_path / "cram.h5"))
 
-    # The read counts agree whichever reference cmuts-hmm decoded against, so
+    # The read counts agree whichever reference cmuts hmm decoded against, so
     # only the per-base fields depend on which one it used, and those are
     # written from the reads.
     falsifiable(summary.kept > 0)

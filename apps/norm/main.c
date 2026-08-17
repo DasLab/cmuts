@@ -9,8 +9,9 @@
 #include "error.h"
 #include "normalize.h"
 #include "options.h"
+#include "subcommands.h"
 
-int main(int argc, char **argv)
+int norm_main(int argc, char **argv)
 {
     norm_args defaults = norm_defaults();
     cli_spec  spec     = norm_spec(&defaults);

@@ -1,4 +1,4 @@
-/* options.h -- what cmuts-hmm accepts on the command line.
+/* options.h -- what cmuts hmm accepts on the command line.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */

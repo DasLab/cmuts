@@ -22,7 +22,7 @@ from programs import samtools
 
 @pytest.fixture(params=[NATIVE])
 def fmt(request):
-    """cmuts-gen writes one format, so its output is read in the format it
+    """cmuts gen writes one format, so its output is read in the format it
     wrote. A conversion here would test samtools."""
     return request.param
 
@@ -41,8 +41,8 @@ def _alignment_count(data) -> int:
 
 
 def test_checksums_match_hashlib(data, falsifiable):
-    """hashlib computes the digests here, so agreement checks cmuts-gen against
-    something other than the code cmuts-hmm checks them with."""
+    """hashlib computes the digests here, so agreement checks cmuts gen against
+    something other than the code cmuts hmm checks them with."""
     written = {fields["SN"]: fields["M5"] for fields in _sq_fields(data)}
 
     falsifiable(len(written) > 0)

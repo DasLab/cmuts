@@ -58,7 +58,7 @@ CPATH_CFLAGS := $(addprefix -isystem ,$(subst :, ,$(CPATH)))
 CFLAGS    := -std=c11 $(OPT) $(WARNINGS) -pthread -Iinclude $(HTS_CFLAGS) $(HDF5_CFLAGS) $(CPATH_CFLAGS) -MMD -MP
 
 # A sanitizer has to reach both the compiler and the linker; what it adds to
-# the link is attached to each program's libraries, below. Halting on the first
+# the link is attached to the binary's libraries, below. Halting on the first
 # diagnostic is what makes one visible under the tests, which keep the output of
 # a program that exits cleanly; undefined behavior is otherwise reported and
 # stepped over.
@@ -78,10 +78,12 @@ INSTALL ?= install
 
 NAME     := cmuts
 
-# One directory under apps/ per program, named for the binary it builds. A
-# program is its own sources, its own private headers, and whichever members of
-# the library it refers to; adding one means adding a directory and a word here.
-PROGRAMS := cmuts-hmm cmuts-gen cmuts-sub cmuts-div cmuts-norm
+# One directory under apps/ per subcommand, plus one for the dispatcher, all
+# linked into the one binary. A subcommand is its own sources, its own private
+# headers, and whichever members of the library it refers to; adding one means
+# adding a directory, a word here, and an entry point in the dispatcher.
+SUBCOMMANDS := hmm gen sub div norm
+APPS        := $(NAME) $(SUBCOMMANDS)
 
 # Programs that are scripts rather than sources. One directory each, holding a
 # .in that the version is substituted into, so that no copy of the version is
@@ -92,39 +94,31 @@ VERSION  := $(shell sed -n 's/.*CMUTS_VERSION "\(.*\)".*/\1/p' include/version.h
 LIB      := $(BUILD)/lib$(NAME).a
 
 # Sources under src/ are the library and nothing else: no entry point lives
-# there, so every program can link the whole of it.
+# there, so the binary links the whole of it.
 LIB_SRC  := $(wildcard src/*.c)
 LIB_OBJ  := $(LIB_SRC:src/%.c=$(BUILD)/src/%.o)
 
 app_sources = $(wildcard apps/$(1)/*.c)
 app_objects = $(patsubst apps/$(1)/%.c,$(BUILD)/apps/$(1)/%.o,$(call app_sources,$(1)))
 
-APP_SRC  := $(foreach p,$(PROGRAMS),$(call app_sources,$(p)))
-APP_OBJ  := $(foreach p,$(PROGRAMS),$(call app_objects,$(p)))
-BINS     := $(addprefix $(BUILD)/,$(PROGRAMS) $(SCRIPTS))
+APP_SRC  := $(foreach p,$(APPS),$(call app_sources,$(p)))
+APP_OBJ  := $(foreach p,$(APPS),$(call app_objects,$(p)))
+BINS     := $(addprefix $(BUILD)/,$(NAME) $(SCRIPTS))
 SRC      := $(LIB_SRC) $(APP_SRC)
 DEP      := $(LIB_OBJ:.o=.d) $(APP_OBJ:.o=.d)
 
 # Additional libraries beyond libcmuts
-LIBS_cmuts-hmm := $(HTS_LIBS) $(HDF5_LIBS) -pthread -lm
-LIBS_cmuts-gen := $(HTS_LIBS)
-LIBS_cmuts-sub := $(HDF5_LIBS) -lm
-LIBS_cmuts-div := $(HDF5_LIBS) -lm
-LIBS_cmuts-norm := $(HDF5_LIBS) -lm
+LIBS     := $(HTS_LIBS) $(HDF5_LIBS) -pthread -lm
 
 ifdef SAN
-$(foreach p,$(PROGRAMS),$(eval LIBS_$(p) += $(SANFLAGS)))
+LIBS     += $(SANFLAGS)
 endif
 
 all: $(BINS)
 
 # Objects first and the archive last, which is the order a linker resolves in.
-define program_rule
-$(BUILD)/$(1): $(call app_objects,$(1)) $$(LIB)
-	$$(CC) $$^ -o $$@ $$(LIBS_$(1))
-endef
-
-$(foreach p,$(PROGRAMS),$(eval $(call program_rule,$(p))))
+$(BUILD)/$(NAME): $(APP_OBJ) $(LIB)
+	$(CC) $^ -o $@ $(LIBS)
 
 define script_rule
 $(BUILD)/$(1): apps/$(1)/$(1).in include/version.h
@@ -138,7 +132,7 @@ $(foreach s,$(SCRIPTS),$(eval $(call script_rule,$(s))))
 $(LIB): $(LIB_OBJ)
 	$(AR) rcs $@ $^
 
-# A program's own directory is on its include path, so a header beside its
+# An app's own directory is on its include path, so a header beside its
 # source is private to it and one in include/ is shared.
 $(BUILD)/apps/%.o: apps/%.c
 	@mkdir -p $(@D)
@@ -153,7 +147,7 @@ install: $(BINS)
 	$(INSTALL) -m 755 $^ $(DESTDIR)$(BINDIR)
 
 uninstall:
-	rm -f $(addprefix $(DESTDIR)$(BINDIR)/,$(PROGRAMS) $(SCRIPTS))
+	rm -f $(addprefix $(DESTDIR)$(BINDIR)/,$(NAME) $(SCRIPTS))
 
 # Defaults to a virtual environment in the current dir
 PYTHON ?= .venv/bin/python

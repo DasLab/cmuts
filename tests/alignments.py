@@ -31,7 +31,7 @@ BAM = "bam"
 SAM = "sam"
 CRAM = "cram"
 
-# The format cmuts-gen writes, which the others are converted from.
+# The format cmuts gen writes, which the others are converted from.
 NATIVE = BAM
 
 FORMATS = (BAM, SAM, CRAM)
@@ -47,7 +47,7 @@ class Dataset:
     """Alignments, the reference they were made against, and the totals that no
     filter can change.
 
-    The alignments may be spread over several files, which cmuts-hmm reads as
+    The alignments may be spread over several files, which cmuts hmm reads as
     one, so the totals are of them all. Every file is in the format fmt names,
     which a transform preserves.
     """
@@ -85,7 +85,7 @@ def measure_dataset(name: str, bams, fasta) -> Dataset:
 
 
 def generate(directory, name: str, **parameters) -> Dataset:
-    """Generates a dataset with cmuts-gen."""
+    """Generates a dataset with cmuts gen."""
     prefix = Path(directory) / name
     run_generator(prefix, parameters)
 
@@ -255,7 +255,7 @@ def replace_header(data: Dataset, directory, transform) -> Dataset:
     """Rewrites the header of the alignments with a transform over its text.
 
     Only the header changes, so the totals carry over and any difference in
-    what cmuts-hmm does follows from the header contents.
+    what cmuts hmm does follows from the header contents.
 
     samtools reheader reads a BAM or a CRAM. A SAM is rewritten here instead,
     which leaves the records untouched in the same way.
@@ -282,8 +282,8 @@ def replace_checksums(data: Dataset, directory, checksum) -> Dataset:
     """Replaces the M5 of each @SQ line with the value checksum returns, and
     removes the M5 where checksum returns None.
 
-    checksum is passed the reference name and the M5 that cmuts-gen wrote.
-    cmuts-gen writes a correct M5 for every reference, so a test alters what is
+    checksum is passed the reference name and the M5 that cmuts gen wrote.
+    cmuts gen writes a correct M5 for every reference, so a test alters what is
     already in the header and computes no digest of its own.
     """
     def replace_in_line(line):
@@ -323,7 +323,7 @@ def build_placements(directory, name, reference, read, cigars) -> Dataset:
     of the output differ only in how the alignment was written. Each reference
     takes the name of the CIGAR it holds, which a failure reports.
 
-    The file is written as SAM, which cmuts-hmm reads as it reads BAM. The
+    The file is written as SAM, which cmuts hmm reads as it reads BAM. The
     totals are declared here because this writes every record itself.
     """
     prefix = Path(directory) / name

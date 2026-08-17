@@ -1,7 +1,7 @@
 """Several files counted as one.
 
 Each reference has a single row in the output no matter how many files its
-reads came from, so cmuts-hmm merges the files on the reference. Running them
+reads came from, so cmuts hmm merges the files on the reference. Running them
 one after another would overwrite the first row with the second.
 """
 
@@ -63,7 +63,7 @@ def test_the_same_file_twice_counts_everything_twice(data, falsifiable, tmp_path
         run_cmuts(replace(data, bams=data.bams * 2), tmp_path / "twice.h5"))
 
     # Where the first run kept no reads, both totals are zero whether or not
-    # cmuts-hmm read the second file.
+    # cmuts hmm read the second file.
     falsifiable(once.kept > 0)
 
     assert twice.kept == 2 * once.kept

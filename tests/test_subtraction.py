@@ -59,18 +59,18 @@ def subtract(tmp_path):
 
 
 def wanted(name, *inputs):
-    """Returns the values cmuts-sub should write for one field."""
+    """Returns the values cmuts sub should write for one field."""
     return expected(SUB_RULES, name, *inputs)
 
 
 # ---------------------------------------------------------------------------
-# The layout, which is shared with cmuts-hmm
+# The layout, which is shared with cmuts hmm
 # ---------------------------------------------------------------------------
 
 
 def test_the_layout_written_here_is_the_one_cmuts_hmm_writes(data, falsifiable,
                                                              tmp_path):
-    """Checks the description in outputs.py against a real cmuts-hmm run.
+    """Checks the description in outputs.py against a real cmuts hmm run.
 
     Compares names, types and widths, which keeps the reactivity calculation
     out of the comparison.
@@ -98,7 +98,7 @@ def test_the_layout_written_here_is_the_one_cmuts_hmm_writes(data, falsifiable,
 def test_the_difference_names_the_program_that_wrote_it(build, subtract):
     output = subtract(build(), build())
 
-    assert attributes_of(output)["program"] == CMUTS_SUB
+    assert attributes_of(output)["program"] == " ".join(CMUTS_SUB)
     assert attributes_of(output)["version"] == reported_version(CMUTS_SUB)
 
 
@@ -396,7 +396,7 @@ def test_a_run_that_refuses_its_inputs_leaves_the_output_intact(build, subtract,
 
 
 def test_both_inputs_are_required(build, tmp_path):
-    given = attempt([CMUTS_SUB, "-o", tmp_path / "out.h5", build()])
+    given = attempt([*CMUTS_SUB, "-o", tmp_path / "out.h5", build()])
 
     assert given.returncode == 2
     assert not (tmp_path / "out.h5").exists()

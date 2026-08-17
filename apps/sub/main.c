@@ -8,9 +8,10 @@
 #include "cli.h"
 #include "error.h"
 #include "options.h"
+#include "subcommands.h"
 #include "subtract.h"
 
-int main(int argc, char **argv)
+int sub_main(int argc, char **argv)
 {
     sub_args defaults = sub_defaults();
     cli_spec spec     = sub_spec(&defaults);

@@ -9,8 +9,9 @@
 #include "divide.h"
 #include "error.h"
 #include "options.h"
+#include "subcommands.h"
 
-int main(int argc, char **argv)
+int div_main(int argc, char **argv)
 {
     div_args defaults = div_defaults();
     cli_spec spec     = div_spec(&defaults);

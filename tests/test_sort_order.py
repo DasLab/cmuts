@@ -1,4 +1,4 @@
-"""cmuts-hmm requires a coordinate-sorted file and must say so.
+"""cmuts hmm requires a coordinate-sorted file and must say so.
 
 A reference is finished the moment the reader moves past it, which holds only
 when reads arrive grouped by reference. The sort order is read from the header

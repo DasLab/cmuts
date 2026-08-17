@@ -1,4 +1,4 @@
-# cmuts-hmm
+# cmuts hmm
 
 ## Purpose
 
@@ -9,23 +9,23 @@ Computing reactivity rates from alignment files via the pair-HMM.
 - One or more coordinate-sorted alignment files of single-end or merged reads. SAM, BAM, and CRAM formats are all supported
 - The FASTA library
 
-Alignments must be single-end. Paired-end data is not supported; please merge upstream before passing data to `cmuts-hmm`.
+Alignments must be single-end. Paired-end data is not supported; please merge upstream before passing data to `cmuts hmm`.
 
 ## Model Parameters
 
 The pair HMM is configured by five internal parameters. `--dump-params` writes them in the form `--params` reads.
 
 ```sh
-cmuts-hmm --dump-params > params.txt
+cmuts hmm --dump-params > params.txt
 ```
 
 You may specify a subset of the parameters to modify only them.
 
 ## Error Checking
 
-`cmuts-hmm` verifies the FASTA against the alignment header, by comparing each sequence's name and length, and its MD5 checksum when present. Any mismatch between the header and the FASTA ends the run early. This behavior is configurable via the `--verify` flag.
+`cmuts hmm` verifies the FASTA against the alignment header, by comparing each sequence's name and length, and its MD5 checksum when present. Any mismatch between the header and the FASTA ends the run early. This behavior is configurable via the `--verify` flag.
 
-A read carrying the paired flag also ends the run. Two mates read one molecule, so counting them as separate reads would count their overlap twice. Merge the mates before aligning, which [cmuts-align](cmuts-align.md) does for paired-end input.
+A read carrying the paired flag also ends the run. Two mates read one molecule, so counting them as separate reads would count their overlap twice. Merge the mates before aligning, which [cmuts align](cmuts-align.md) does for paired-end input.
 
 ```{note}
 The length check is required to avoid buffer overflows and cannot be disabled.

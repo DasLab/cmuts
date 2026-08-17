@@ -1,4 +1,4 @@
-# cmuts-norm
+# cmuts norm
 
 ## Purpose
 
@@ -13,14 +13,14 @@ Experiment-independent normalization of reactivity rates.
 Every input given to one run shares a single scale, and each is written to an output of its own. `--output` is repeated once per input and paired with them in order.
 
 ```sh
-cmuts-norm -o apo-normalized.h5 -o holo-normalized.h5 apo.h5 holo.h5
+cmuts norm -o apo-normalized.h5 -o holo-normalized.h5 apo.h5 holo.h5
 ```
 
 Running the inputs separately gives each its own scale instead.
 
 ```sh
-cmuts-norm -o apo-normalized.h5 apo.h5
-cmuts-norm -o holo-normlized.h5 holo.h5
+cmuts norm -o apo-normalized.h5 apo.h5
+cmuts norm -o holo-normlized.h5 holo.h5
 ```
 
 Pool the inputs whenever the rates are to be compared across experiments, since a scale of its own puts each experiment on a different footing.

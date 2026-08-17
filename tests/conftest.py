@@ -74,7 +74,7 @@ def data(request, catalogue, fmt):
 
 @pytest.fixture(params=["plain", "chunked"])
 def storage(request):
-    """The two ways an input may be stored. cmuts-hmm writes chunked, shuffled
+    """The two ways an input may be stored. cmuts hmm writes chunked, shuffled
     and deflated, and the result must be the same either way, so every test
     that reads values runs against both."""
     return request.param

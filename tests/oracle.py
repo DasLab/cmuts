@@ -1,7 +1,7 @@
 """Tools for deriving the expected result of a run from its inputs.
 
 Every value here comes from the alignment and the FASTA alone, by way of
-samtools, so a test can compare cmuts-hmm against an independent count.
+samtools, so a test can compare cmuts hmm against an independent count.
 """
 
 from __future__ import annotations
@@ -27,13 +27,13 @@ STRAND_FLAGS = {
 }
 
 # The SAM spec's "unavailable" mapping quality. samtools accepts a read with
-# it at every -q, and cmuts-hmm rejects one at every threshold.
+# it at every -q, and cmuts hmm rejects one at every threshold.
 UNAVAILABLE_MAPQ = 255
 
 UNMAPPED_FLAG = ("-f", "4")
 MAPPED_FLAG = ("-F", "4")
 
-# Unmapped and secondary reads, which cmuts-hmm rejects under every criterion.
+# Unmapped and secondary reads, which cmuts hmm rejects under every criterion.
 NOT_COUNTED_FLAGS = ("-F", "0x104")
 
 
@@ -135,7 +135,7 @@ def surviving_records(data, min_mapq: int, strand: str) -> list:
     """Returns the records passing a mapping quality and a strand.
 
     Unmapped and secondary reads are excluded, as are the reads of unavailable
-    mapping quality. cmuts-hmm rejects all three under every criterion, so the
+    mapping quality. cmuts hmm rejects all three under every criterion, so the
     divergence from samtools is held here and not in each test.
     """
     flags = (*NOT_COUNTED_FLAGS, "-q", str(min_mapq), *STRAND_FLAGS[strand])
@@ -146,7 +146,7 @@ def surviving_records(data, min_mapq: int, strand: str) -> list:
 
 def _within_length(stored: int, min_length: int, max_length: int) -> bool:
     """Returns whether a stored length falls inside the bounds. A bound of zero
-    is left unapplied, matching an unset bound in cmuts-hmm."""
+    is left unapplied, matching an unset bound in cmuts hmm."""
     return ((min_length == 0 or stored >= min_length)
             and (max_length == 0 or stored <= max_length))
 
