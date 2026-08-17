@@ -1,8 +1,7 @@
 /* options.c -- cmuts-norm's command line, as one table.
- * Rows use designated initializers, so that a field added to cli_option takes its
- * default without being spelled out in every row.
+ *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
- * */
+ */
 
 #include "options.h"
 
@@ -175,8 +174,8 @@ cli_spec norm_spec(const norm_args *defaults)
     };
 }
 
-/* The count is checked before the pairing, so that a run of too many files is told which
- * limit it passed rather than that its two counts disagree. */
+/* Checks the count before the pairing, so that the error for too many files names the
+ * limit and not a count mismatch. */
 static int check_counts(const norm_args *args, char *error, size_t error_len)
 {
     if (args->normalize.n_files > NORM_MAX_FILES) {

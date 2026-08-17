@@ -1,8 +1,8 @@
 /* refrow.h -- writing one reference's row from its accumulator.
  *
- * The writer holds the file and the layout; a run holds an accumulator. Two of the fields
- * written are not accumulated: the reactivity and its error are derived here from the mutations
- * and the span, along with the settings governing that.
+ * The writer holds the file and the layout; a run holds an accumulator. The fields not
+ * accumulated directly are derived here: the reactivity and its error from the mutations
+ * and the span, and the pairwise statistics from the pair sums.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */

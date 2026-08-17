@@ -752,8 +752,8 @@ int pipeline_run(const pipeline_config *cfg, const char *program,
     }
 
     /* The manifest says what a run of this program writes; the squares among it are
-     * written only where they were asked for. The coverage backs whichever statistic was
-     * chosen, so it goes with any of them. */
+     * written only where they were asked for, and the pairwise coverage whenever any
+     * statistic is. */
     out_selection(writes, p.wanted);
     p.wanted[OUT_PAIRWISE_CORRELATION] &= (cfg->pairwise & PAIRS_CORRELATION) != 0;
     p.wanted[OUT_PAIRWISE_CONDITIONAL] &= (cfg->pairwise & PAIRS_CONDITIONAL) != 0;

@@ -134,8 +134,7 @@ bool out_wanted(out_field_id id, const bool *wanted)
 }
 
 /* Gives the values the widest row of the run occupies. A field left out is not measured,
- * so a run without the pairwise fields sizes its buffers from the per-base ones and pays
- * nothing for the square it did not ask for. */
+ * so a run without the pairwise fields sizes its buffers from the per-base ones. */
 size_t out_widest(size_t cap, const bool *wanted)
 {
     size_t widest = 0;

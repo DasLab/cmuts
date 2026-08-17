@@ -49,8 +49,8 @@ void refrow_destroy(refrow *r)
 
 /* Fills the scratch with one value for every ordered pair, a row of the reference at a
  * time. What is accumulated is the triangle; the square is written whole, so a reader
- * indexes it either way round. Only the conditional differs with the order, an entry
- * conditioning on the position of its column. */
+ * indexes it either way round. Only the conditional differs with the order: an entry
+ * conditions on the position of its column. */
 static void pair_square(refrow *r, out_field_id id, const pairs *pr, size_t len)
 {
     for (size_t i = 0; i < len; i++) {

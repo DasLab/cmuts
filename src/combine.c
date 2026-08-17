@@ -49,10 +49,8 @@ const void *combine_row(const combine_rows *rows, size_t input, out_field_id id)
     return row_at(rows, input, id);
 }
 
-/* Gives the values one field occupies in a row set. A field with no row holds one
- * value. */
-/* Values one input row of a field holds. A field this program does not read holds none,
- * so no buffer is taken for it. */
+/* Gives the values one row of a field holds: one for a field with no row, and none for a
+ * field this program does not write, so no buffer is taken for it. */
 static size_t row_values(const combination *c, out_field_id id, size_t ref_cap)
 {
     if (!out_wanted(id, c->writes)) {

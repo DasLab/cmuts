@@ -1,4 +1,4 @@
-/* version.h -- the version both programs report.
+/* version.h -- the version every program reports.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */

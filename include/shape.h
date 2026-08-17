@@ -19,11 +19,10 @@
 #include <stddef.h>
 
 /* Gives the bins a read-length histogram covers, given the longest reference in the run:
- * one for
- * every length from 1 to twice it, so that bin i holds the reads of length i + 1. The
- * range reaches past a reference because a read carrying insertions or soft-clipped ends
- * is longer than the one it aligns to. It starts at 1 because a read storing no sequence
- * is refused before it is counted, leaving no read of length zero to hold.
+ * one for every length from 1 to twice it, so that bin i holds the reads of length i + 1.
+ * The range reaches past a reference because a read carrying insertions or soft-clipped
+ * ends is longer than the one it aligns to. It starts at 1 because a read storing no
+ * sequence is refused before it is counted, leaving no read of length zero to hold.
  *
  * Every row is this wide, whatever its own reference measures. A read length is not a
  * position in a reference, so a column a short reference has no reads for is a count of

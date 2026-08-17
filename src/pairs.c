@@ -109,18 +109,16 @@ void pairs_count(pairs *p, size_t len, const phmm_window *window)
 /* Reading                                                                   */
 /* ------------------------------------------------------------------------ */
 
-/* Gives the pair, whichever order it is asked for. */
+/* Gives the pair (i, j) in either order. */
 static const double *ordered(const pairs *p, size_t len, size_t i, size_t j)
 {
     return i <= j ? const_cell(p, len, i, j) : const_cell(p, len, j, i);
 }
 
-/* Gives the correlation the four sums come to, or NaN where they support none. Both
- * halves of it are symmetric in the two marginals, so a pair reads the same either way
- * round and the order it was asked for does not enter.
- *
- * The marginals are the reads modified at each position and the reads not, and a
- * coefficient needs all four to be positive. */
+/* Gives the correlation of the four sums, or NaN where they support none: the marginals
+ * are the modified and unmodified reads at each position, and a coefficient needs all
+ * four positive. The formula is symmetric in the two positions, so the pair may be
+ * fetched in either order. */
 static double coefficient(const double *at, double min_depth)
 {
     double span  = at[PAIR_SPAN];
@@ -163,8 +161,8 @@ void pairs_conditional(const pairs *p, size_t len, double min_depth, size_t i,
     for (size_t j = 0; j < len; j++) {
         const double *at = ordered(p, len, i, j);
 
-        /* The conditioned position j is the upper of the stored pair where i is the
-         * lower, and its mutations sit in the cell accordingly. */
+        /* For i <= j the stored pair holds j as its upper, whose mutations are
+         * PAIR_RIGHT; otherwise j is the lower and they are PAIR_LEFT. */
         row[j] = conditional(at, i <= j ? at[PAIR_RIGHT] : at[PAIR_LEFT], min_depth);
     }
 }

@@ -64,7 +64,6 @@ hid_t h5layout_untimed_plist(hid_t class_id);
 hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank);
 
 /* Gives a dataset access property list whose chunk cache holds several chunks of this
- * shape. The
- * writer and the reader both work through rows in roughly ascending order, so caching a few
- * chunks avoids inflating a chunk again for each row in it. */
+ * shape. The writer and the reader both work through rows in roughly ascending order, so
+ * caching a few chunks avoids inflating a chunk again for each row in it. */
 hid_t h5layout_access_plist(out_field_id id, const hsize_t *chunk, int rank);

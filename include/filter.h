@@ -27,13 +27,14 @@ typedef enum {
 #define FILTER_MAPQ_UNAVAILABLE 255
 
 /* Criteria an alignment must meet to be processed.
+ *
  * Unmapped reads are excluded before any of this and counted separately, belonging to no
  * reference and so having nowhere to be accumulated. Secondary alignments, records storing
  * no sequence, records carrying no CIGAR and placements of unavailable mapping quality are
  * excluded whatever is set here.
+ *
  * The fields are int because the command line writes them directly, through a pointer of
  * the declared type. */
-
 typedef struct {
     int min_mapq;    /* 0 to 254; alignments scoring below it are discarded */
     int strand;      /* filter_strand bits; a read on neither strand is discarded */

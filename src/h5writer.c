@@ -433,8 +433,7 @@ static int write_part(h5writer *w, out_field_id id, int32_t tid, size_t from,
  *
  * The tail is written with the row. The two share a chunk, so marking it now writes to
  * a chunk already open, and returning to it later would mean inflating and deflating
- * that chunk again. A reference as long as
- * the longest has no tail. */
+ * that chunk again. A reference as long as the longest has no tail. */
 int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
                    const double *values)
 {
@@ -509,10 +508,7 @@ int h5writer_block(h5writer *w, out_field_id id, int32_t tid, size_t len,
 /* Totals                                                                    */
 /* ------------------------------------------------------------------------ */
 
-/* Writes the whole of a field that belongs to the run and not to a reference.
- *
- * Transferred as an unsigned and not through the double every row passes through, since
- * a run total is counted whole and never accumulated. */
+/* Writes the whole of a field that belongs to the run and not to a reference. */
 int h5writer_value(h5writer *w, out_field_id id, double value)
 {
     float  stored = (float)value;
@@ -528,6 +524,8 @@ int h5writer_value(h5writer *w, out_field_id id, double value)
     return status < 0 ? fail(w, "unable to write a value") : 0;
 }
 
+/* Transferred as an unsigned and not through the double every row passes through, since
+ * a run total is counted whole and never accumulated. */
 int h5writer_total(h5writer *w, out_field_id id, size_t value)
 {
     uint64_t stored = value;

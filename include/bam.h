@@ -84,8 +84,7 @@ int cm_bam_use_pool(cm_bam_reader *reader, htsThreadPool *pool);
 /* ------------------------------------------------------------------------ */
 
 /* Gives the htslib record behind the most recent cm_bam_next(), for callers that must
- * retain a
- * read past the next advance. Copy it with bam_copy1. */
+ * retain a read past the next advance. Copy it with bam_copy1. */
 const bam1_t *cm_bam_raw(const cm_bam_reader *reader);
 
 /* Presents an htslib record as a cm_bam_record. The view borrows from record, so it stays
@@ -97,8 +96,7 @@ void cm_bam_record_view(const bam1_t *record, cm_bam_record *out);
 /* ------------------------------------------------------------------------ */
 
 /* Gives the name of the reference with the given index, or NULL if there is no such
- * reference. The
- * returned string is owned by the reader's header. */
+ * reference. The returned string is owned by the reader's header. */
 const char *cm_bam_refname(const cm_bam_reader *reader, int32_t tid);
 
 /* Gives the length of the reference with the given index, or -1 if there is no such
@@ -132,9 +130,8 @@ typedef struct {
 void cm_bam_sq_open(cm_bam_sq_cursor *cursor, const cm_bam_reader *reader);
 
 /* Gives the M5 checksum declared for a reference, its length in len, or NULL where the
- * header
- * declares none -- the common case, many aligners omitting it. The result points into the
- * header text and lives as long as the reader does.
+ * header declares none -- the common case, many aligners omitting it. The result points
+ * into the header text and lives as long as the reader does.
  *
  * References must be requested in non-decreasing order, so one walk of the text serves a
  * whole run of them. */

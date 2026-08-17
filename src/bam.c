@@ -126,8 +126,8 @@ cm_bam_reader *cm_bam_open(const char *path, const char **why)
 
     limit_decoding(reader);
 
-    /* Where an unrecognized format is detected, the open itself succeeding on
-     * anything readable. */
+    /* sam_open succeeds on anything readable, so an unrecognized format fails here
+     * instead. */
     reader->header = sam_hdr_read(reader->file);
     if (!reader->header) {
         *why = "unable to read the header";

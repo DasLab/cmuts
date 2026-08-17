@@ -12,6 +12,7 @@
 #include "sample.h"
 
 /* How a read is drawn from a reference and made to differ from it.
+ *
  * Insertions and deletions are counted as events per read with their own length, and not as
  * the result of a per-base rate. A single rate produces many one and two base indels and
  * effectively never a long one, where real aligners emit both -- and it is the long

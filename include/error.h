@@ -1,9 +1,12 @@
 /* error.h -- how much room a failure gets to describe itself.
- * One size for every such buffer, since a message written into one is routinely copied into
- * another: a reason from the reference reader becomes part of the pipeline's message, which
- * becomes what the program prints. Sizes that drifted apart would truncate at the seam.
+ *
+ * One size for every such buffer, since a message written into one is routinely copied
+ * into another: a reason from the reference reader becomes part of the pipeline's message,
+ * which becomes what the program prints. Sizes that drifted apart would truncate at the
+ * seam.
+ *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
- * */
+ */
 
 #pragma once
 

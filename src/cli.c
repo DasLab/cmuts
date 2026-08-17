@@ -690,8 +690,8 @@ static void print_json_choices(FILE *out, const cli_option *opt)
     fputc(']', out);
 }
 
-/* JSON has no spelling for a value that is not a number, so a default of one is described
- * as having no default. */
+/* JSON has no spelling for a value that is not finite, so such a default is described as
+ * having no default. */
 static void print_json_double(FILE *out, double value)
 {
     if (isfinite(value)) {

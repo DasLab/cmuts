@@ -39,8 +39,9 @@ int h5writer_may_replace(const char *path, bool overwrite, bool *may_replace,
 /* Creates the file, failing where one is already at the path unless overwrite is set.
  *
  * program names what is writing the file, and is recorded on the root group alongside the
- * version, so that a result read back later can be traced to what produced it. */
-/* wanted names the optional fields the run writes, one entry per field, and may be NULL
+ * version, so that a result read back later can be traced to what produced it.
+ *
+ * wanted names the optional fields the run writes, one entry per field, and may be NULL
  * for a run writing every field there is. A field left out has no dataset and no buffer
  * sized for it. */
 h5writer *h5writer_create(const char *path, const char *program, int32_t n_refs,
