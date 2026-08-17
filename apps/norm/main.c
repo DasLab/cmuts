@@ -1,4 +1,4 @@
-/* main.c -- driver for normalization against a scale taken from the rates.
+/* main.c -- driver for normalization by one norm taken from the rates.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */

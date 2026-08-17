@@ -52,9 +52,9 @@ Where the control measured nothing at a position, there is nothing to divide by 
 
 | Dataset | After `cmuts norm` |
 | --- | --- |
-| `reactivity` | the rate over the scale, then held within the clipping bounds |
-| `error` | the error over the same scale |
+| `reactivity` | the rate over the norm, then held within the clipping bounds |
+| `error` | the error over the same norm |
 | `coverage` | unchanged |
 | `reads/*` | unchanged |
 
-The scale is one number drawn from the rates of every input given to the run, so a rate is comparable across those inputs and not across separate runs. A scale that comes out as zero, negative, or undefined leaves the rates as they are.
+The norm is one number drawn from the rates of every input given to the run, so a rate is comparable across those inputs and not across separate runs. A norm that comes out as zero, negative, or undefined leaves the rates as they are.

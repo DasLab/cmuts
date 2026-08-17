@@ -10,26 +10,26 @@ Experiment-independent normalization of reactivity rates.
 
 ## Usage
 
-Every input given to one run shares a single scale, and each is written to an output of its own. `--output` is repeated once per input and paired with them in order.
+Every input given to one run shares a single norm, and each is written to an output of its own. `--output` is repeated once per input and paired with them in order.
 
 ```sh
 cmuts norm -o apo-normalized.h5 -o holo-normalized.h5 apo.h5 holo.h5
 ```
 
-Running the inputs separately gives each its own scale instead.
+Running the inputs separately gives each its own norm instead.
 
 ```sh
 cmuts norm -o apo-normalized.h5 apo.h5
 cmuts norm -o holo-normlized.h5 holo.h5
 ```
 
-Pool the inputs whenever the rates are to be compared across experiments, since a scale of its own puts each experiment on a different footing.
+Pool the inputs whenever the rates are to be compared across experiments, since a norm of its own puts each experiment on a different footing.
 
 ## Normalization Schemes
 
 `--norm ubr` (the default) takes the 90th percentile of the pooled rates, counting only positions whose coverage exceeds `--min-coverage`. `--norm outlier` drops the highest 2% of the pooled rates as outliers and averages what lies between there and the highest 10%; it reads no coverage, so `--min-coverage` does not apply to it.
 
-A scale that comes out as zero, negative, or undefined is not applied and is recorded as NaN.
+A norm that comes out as zero, negative, or undefined is not applied and is recorded as NaN.
 
 ## Output
 
@@ -46,7 +46,7 @@ The number of reads in which this base was present, weighted by PHRED scores.
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
 
-The mutation rate divided by the scale this file records, so a rate reads against the scale rather than as a raw frequency.
+The mutation rate divided by the norm this file records, so a rate reads against the norm rather than as a raw frequency.
 
 {.field}
 ### `error`
@@ -88,7 +88,7 @@ The number of reads not aligned to any reference.
 
 **Shape** `()` · **Type** `float32` · **Fill** `NaN`
 
-The scale every rate in this file was divided by.
+The norm every rate in this file was divided by.
 <!-- END GENERATED cmuts-norm FIELDS -->
 
 ## CLI Options
@@ -111,8 +111,8 @@ The scale every rate in this file was divided by.
 
 | Option | Description |
 | --- | --- |
-| `--norm SCHEME` | how the scale is taken from the rates (ubr, outlier; default ubr) |
-| `--min-coverage N` | coverage a position needs before its rate sets the scale (ubr only) (default 500) |
+| `--norm SCHEME` | how the norm is taken from the rates (ubr, outlier; default ubr) |
+| `--min-coverage N` | coverage a position needs before its rate sets the norm (ubr only) (default 500) |
 
 ### Clipping
 

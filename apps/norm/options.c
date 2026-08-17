@@ -18,13 +18,13 @@ static const cli_choice SCHEME_CHOICES[] = {
     { NULL,      0            },
 };
 
-/* The datasets a run leaves behind: what it was given, divided by one scale, and that
- * scale alongside it. */
+/* The datasets a run leaves behind: what it was given, divided by one norm, and that
+ * norm alongside it. */
 static const out_written WRITTEN[] = {
     { .id = OUT_COVERAGE,
       .detail = "The number of reads in which this base was present, weighted by PHRED scores." },
     { .id = OUT_REACTIVITY,
-      .detail = "The mutation rate divided by the scale this file records, so a rate reads against the scale rather than as a raw frequency." },
+      .detail = "The mutation rate divided by the norm this file records, so a rate reads against the norm rather than as a raw frequency." },
     { .id = OUT_ERROR,
       .detail = "Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors." },
     { .id = OUT_LENGTHS,
@@ -36,7 +36,7 @@ static const out_written WRITTEN[] = {
     { .id = OUT_UNMAPPED,
       .detail = "The number of reads not aligned to any reference." },
     { .id = OUT_NORM,
-      .detail = "The scale every rate in this file was divided by." },
+      .detail = "The norm every rate in this file was divided by." },
 };
 
 
@@ -75,7 +75,7 @@ static const cli_option OPTIONS[] = {
         .type    = OPT_ENUM,
         .offset  = offsetof(norm_args, scheme),
         .metavar = "SCHEME",
-        .help    = "how the scale is taken from the rates",
+        .help    = "how the norm is taken from the rates",
         .choices = SCHEME_CHOICES,
     },
     {
@@ -84,7 +84,7 @@ static const cli_option OPTIONS[] = {
         .type    = OPT_DOUBLE,
         .offset  = offsetof(norm_args, normalize.min_coverage),
         .metavar = "N",
-        .help    = "coverage a position needs before its rate sets the scale (ubr only)",
+        .help    = "coverage a position needs before its rate sets the norm (ubr only)",
         .minimum = 0,
         .maximum = CLI_UNBOUNDED,
     },
@@ -164,7 +164,7 @@ cli_spec norm_spec(const norm_args *defaults)
     return (cli_spec){
         .program       = "cmuts norm",
         .version       = CMUTS_VERSION,
-        .summary       = "divide cmuts outputs by one scale taken from their rates.",
+        .summary       = "normalize reactivity values across experiments.",
         .options       = OPTIONS,
         .n_options     = sizeof OPTIONS / sizeof *OPTIONS,
         .positionals   = POSITIONALS,

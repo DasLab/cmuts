@@ -30,7 +30,7 @@ static const subcommand SUBCOMMANDS[] = {
     { "hmm",  hmm_main,  "count MaP-seq mutations via the pair-HMM" },
     { "sub",  sub_main,  "subtract an untreated background from an output" },
     { "div",  div_main,  "divide an output by a denatured control" },
-    { "norm", norm_main, "divide outputs by one scale taken from their rates" },
+    { "norm", norm_main, "normalize reactivity values across experiments" },
     { "gen",  gen_main,  "generate alignments and the reference they came from" },
 };
 
