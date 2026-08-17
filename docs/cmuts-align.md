@@ -9,7 +9,7 @@ Aligning raw sequencing data against the reference library.
 - One or more FASTQ files containing the sequenced reads
 - The FASTA library
 
-As well as both `minimap2` and `samtools` on the path.
+As well as both `minimap2` and `samtools` on the path, and `fastp` for paired-end input.
 
 ## Usage
 
@@ -24,6 +24,10 @@ or two for paired-end reads.
 ```sh
 cmuts-align -f references.fasta -o treated.bam -x sr treated_R1.fastq.gz treated_R2.fastq.gz
 ```
+
+## Merging
+
+Paired-end input is merged with `fastp` before alignment. A pair whose mates do not overlap cannot be merged and is discarded. `fastp` reports how many pairs it merged on standard error.
 
 ## Presets
 
@@ -45,7 +49,7 @@ Paired-end inputs are refused unless the preset is `sr`.
 | Argument | Description |
 | --- | --- |
 | `READS` | reads to align |
-| `MATE` | the second file of a pair |
+| `MATE` | the second file of a pair, merged with the first |
 
 ### Input and output
 
@@ -65,7 +69,7 @@ Paired-end inputs are refused unless the preset is `sr`.
 
 | Option | Description |
 | --- | --- |
-| `-t, --threads N` | threads for alignment and sorting (default 1) |
+| `-t, --threads N` | threads for merging, alignment and sorting (default 1) |
 
 ### Information
 

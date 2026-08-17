@@ -24,7 +24,10 @@ HELP_FASTA="reference sequences, or a minimap2 index"
 HELP_OUTPUT="write sorted alignments to this file"
 HELP_OVERWRITE="replace the output file if it already exists"
 HELP_PRESET="how minimap2 aligns"
-HELP_THREADS="threads for alignment and sorting"
+HELP_THREADS="threads for merging, alignment and sorting"
+
+# fastp accepts no more threads than this.
+MERGE_THREADS_MAX=16
 
 # The arguments as the usage line and the count message write them.
 ARGUMENTS="READS [MATE]"
@@ -50,7 +53,7 @@ usage() {
 
     printf '\nArguments\n'
     option "READS" "reads to align"
-    option "MATE" "the second file of a pair"
+    option "MATE" "the second file of a pair, merged with the first"
 
     printf '\nInput and output\n'
     option "-f, --fasta FASTA" "$HELP_FASTA"
@@ -142,7 +145,13 @@ fi
 
 [[ $threads =~ ^[1-9][0-9]*$ ]] || die "--threads: $threads is below 1"
 
-for tool in minimap2 samtools; do
+tools=(minimap2 samtools)
+
+if [[ ${#reads[@]} -eq 2 ]]; then
+    tools+=(fastp)
+fi
+
+for tool in "${tools[@]}"; do
     command -v "$tool" >/dev/null 2>&1 || die "$tool is not on PATH"
 done
 
@@ -165,7 +174,25 @@ directory=$(dirname "$output")
 partial="$output.partial.$$"
 trap 'rm -f "$partial"' EXIT
 
-minimap2 -a -x "$preset" --secondary=no -t "$threads" "$fasta" "${reads[@]}" \
+# Merges each pair of mates into one consensus read, so that their overlap
+# counts a molecule once; cmuts-hmm refuses an unmerged pair for that reason.
+# A pair fastp cannot merge is discarded, and its reports are not kept.
+merge() {
+    fastp --merge --stdout \
+        --in1 "${reads[0]}" --in2 "${reads[1]}" \
+        --thread "$(( threads < MERGE_THREADS_MAX ? threads : MERGE_THREADS_MAX ))" \
+        --json /dev/null --html /dev/null
+}
+
+align() {
+    if [[ ${#reads[@]} -eq 2 ]]; then
+        merge | minimap2 -a -x "$preset" --secondary=no -t "$threads" "$fasta" -
+    else
+        minimap2 -a -x "$preset" --secondary=no -t "$threads" "$fasta" "${reads[@]}"
+    fi
+}
+
+align \
     | awk -v limit="$NAME_LIMIT" '
         BEGIN { FS = OFS = "\t" }
         /^@/  { print; next }

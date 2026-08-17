@@ -31,19 +31,20 @@ Or load the appropriate modules for your cluster (examples [here](clusters.md)).
 To use the bundled alignment helper, you also need
 
 - [minimap2](https://github.com/lh3/minimap2),
-- [samtools](https://github.com/samtools/samtools).
+- [samtools](https://github.com/samtools/samtools),
+- [fastp](https://github.com/OpenGene/fastp), for paired-end input.
 
 ::::{tab} macOS
 
 ```sh
-brew install minimap2 samtools
+brew install minimap2 samtools fastp
 ```
 ::::
 
 ::::{tab} Debian & Ubuntu
 
 ```sh
-apt install minimap2 samtools
+apt install minimap2 samtools fastp
 ```
 ::::
 

@@ -13,18 +13,19 @@ Building and running the C-based programs requires
 The bundled alignment helper also requires
 
 - [minimap2](https://github.com/lh3/minimap2),
-- [samtools](https://github.com/samtools/samtools).
+- [samtools](https://github.com/samtools/samtools),
+- [fastp](https://github.com/OpenGene/fastp), for paired-end input.
 
 On macOS with [Homebrew](https://brew.sh):
 
 ```sh
-brew install htslib hdf5 minimap2 samtools
+brew install htslib hdf5 minimap2 samtools fastp
 ```
 
 On Debian and Ubuntu:
 
 ```sh
-apt install libhts-dev libhdf5-dev minimap2 samtools
+apt install libhts-dev libhdf5-dev minimap2 samtools fastp
 ```
 
 ## Installing
