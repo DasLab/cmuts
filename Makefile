@@ -50,6 +50,27 @@ HTS_LIBS    := $(shell pkg-config --libs   htslib 2>/dev/null || echo -lhts)
 HDF5_CFLAGS := $(subst -I,-isystem ,$(shell pkg-config --cflags hdf5   2>/dev/null))
 HDF5_LIBS   := $(shell pkg-config --libs   hdf5   2>/dev/null || echo -lhdf5)
 
+# Static archives under one prefix in place of the pkg-config discovery, so the
+# binary carries htslib, HDF5 and the compression libraries. The prefix must
+# hold libhts, libdeflate, liblzma, libz, libbz2 and libhdf5, each built
+# static. A musl toolchain takes the whole link static; glibc and macOS keep
+# their system libraries dynamic.
+ifdef STATIC_PREFIX
+MACHINE     := $(shell $(CC) -dumpmachine)
+HTS_CFLAGS  := -isystem $(STATIC_PREFIX)/include
+HDF5_CFLAGS := -isystem $(STATIC_PREFIX)/include
+HTS_LIBS    := $(STATIC_PREFIX)/lib/libhts.a $(STATIC_PREFIX)/lib/libdeflate.a \
+               $(STATIC_PREFIX)/lib/liblzma.a $(STATIC_PREFIX)/lib/libz.a \
+               $(STATIC_PREFIX)/lib/libbz2.a
+HDF5_LIBS   := $(STATIC_PREFIX)/lib/libhdf5.a $(STATIC_PREFIX)/lib/libz.a
+ifneq (,$(findstring musl,$(MACHINE)))
+HTS_LIBS    := -static $(HTS_LIBS)
+else ifneq (,$(findstring linux,$(MACHINE)))
+# libhdf5.a reaches filter plugins through dlopen, which glibc keeps in libdl.
+HDF5_LIBS   += -ldl
+endif
+endif
+
 # Where there is no .pc file the headers arrive through CPATH instead, which
 # the compiler treats as -I and so warns about. Restated as -isystem, which
 # wins for a directory named both ways.
