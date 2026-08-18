@@ -8,6 +8,8 @@
 #include <math.h>
 #include <stdbool.h>
 
+#include "codec.h"
+
 /* Chunks are sized in bytes and not rows, so that a file of few long references
  * and one of many short references both land near this figure. */
 #define TARGET_CHUNK_BYTES (1u << 20)
@@ -20,8 +22,6 @@
 /* HDF5's own default, restated because setting either of the other two means
  * passing all three. */
 #define CACHE_PREEMPTION 0.75
-
-#define DEFLATE_LEVEL 3
 
 /* ------------------------------------------------------------------------ */
 /* Shape                                                                     */
@@ -201,7 +201,7 @@ hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank)
         H5Pset_fill_value(dcpl, h5layout_type(id), fill) < 0 ||
         H5Pset_fill_time(dcpl, H5D_FILL_TIME_ALLOC) < 0 ||
         H5Pset_shuffle(dcpl) < 0 ||
-        H5Pset_deflate(dcpl, DEFLATE_LEVEL) < 0) {
+        H5Pset_deflate(dcpl, CODEC_DEFLATE_LEVEL) < 0) {
         H5Pclose(dcpl);
         return H5I_INVALID_HID;
     }

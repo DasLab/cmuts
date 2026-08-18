@@ -132,6 +132,18 @@ void queue_push_all(queue *q, void *const *items, size_t n)
     abort();
 }
 
+size_t queue_try_push(queue *q, void *const *items, size_t n)
+{
+    pthread_mutex_lock(&q->lock);
+    size_t pushed = q->closed ? 0 : fill(q, items, n);
+    if (pushed) {
+        pthread_cond_signal(&q->not_empty);
+    }
+    pthread_mutex_unlock(&q->lock);
+
+    return pushed;
+}
+
 size_t queue_pop(queue *q, void **items, size_t n)
 {
     pthread_mutex_lock(&q->lock);

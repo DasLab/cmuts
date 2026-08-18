@@ -341,7 +341,7 @@ static int build_rows(combination *c, char *error, size_t error_len)
 static int open_output(combination *c, bool may_replace, char *error, size_t error_len)
 {
     c->out = h5writer_create(c->spec->output, c->spec->program, c->n_refs, c->ref_cap,
-                             may_replace, c->writes);
+                             may_replace, c->writes, false);
     if (!c->out) {
         snprintf(error, error_len, "out of memory");
         return -1;

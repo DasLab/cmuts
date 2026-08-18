@@ -10,14 +10,20 @@
 #include <htslib/sam.h>
 
 struct refctx;
+struct h5chunk;
 
-/* One read on its way to a worker: the reference it belongs to, and a private copy of the
- * alignment, the reader overwriting its own record on every advance. The copy is made with
- * bam_copy1 into a record the pool keeps alive for the whole run, so a file of millions of
- * reads performs no per-read allocation. */
+/* One unit of work on its way to a worker. Almost always a read: the reference it belongs
+ * to, and a private copy of the alignment, the reader overwriting its own record on every
+ * advance. The copy is made with bam_copy1 into a record the pool keeps alive for the
+ * whole run, so a file of millions of reads performs no per-read allocation.
+ *
+ * An item with chunk set instead carries an output chunk to filter for the writing
+ * thread. Such an item never comes from the pool: it is allocated for its one trip and
+ * freed by the worker that takes it. */
 typedef struct {
-    struct refctx *ctx;
-    bam1_t        *rec;
+    struct refctx  *ctx;
+    bam1_t         *rec;
+    struct h5chunk *chunk;
 } workitem;
 
 typedef struct itempool itempool;

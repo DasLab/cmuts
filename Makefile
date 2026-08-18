@@ -49,6 +49,7 @@ HTS_CFLAGS  := $(subst -I,-isystem ,$(shell pkg-config --cflags htslib 2>/dev/nu
 HTS_LIBS    := $(shell pkg-config --libs   htslib 2>/dev/null || echo -lhts)
 HDF5_CFLAGS := $(subst -I,-isystem ,$(shell pkg-config --cflags hdf5   2>/dev/null))
 HDF5_LIBS   := $(shell pkg-config --libs   hdf5   2>/dev/null || echo -lhdf5)
+ZLIB_LIBS   := -lz
 
 # Static archives under one prefix in place of the pkg-config discovery, so the
 # binary carries htslib, HDF5 and the compression libraries. The prefix must
@@ -63,6 +64,7 @@ HTS_LIBS    := $(STATIC_PREFIX)/lib/libhts.a $(STATIC_PREFIX)/lib/libdeflate.a \
                $(STATIC_PREFIX)/lib/liblzma.a $(STATIC_PREFIX)/lib/libz.a \
                $(STATIC_PREFIX)/lib/libbz2.a
 HDF5_LIBS   := $(STATIC_PREFIX)/lib/libhdf5.a $(STATIC_PREFIX)/lib/libz.a
+ZLIB_LIBS   := $(STATIC_PREFIX)/lib/libz.a
 ifneq (,$(findstring musl,$(MACHINE)))
 HTS_LIBS    := -static $(HTS_LIBS)
 else ifneq (,$(findstring linux,$(MACHINE)))
@@ -129,7 +131,7 @@ SRC      := $(LIB_SRC) $(APP_SRC)
 DEP      := $(LIB_OBJ:.o=.d) $(APP_OBJ:.o=.d)
 
 # Additional libraries beyond libcmuts
-LIBS     := $(HTS_LIBS) $(HDF5_LIBS) -pthread -lm
+LIBS     := $(HTS_LIBS) $(HDF5_LIBS) $(ZLIB_LIBS) -pthread -lm
 
 ifdef SAN
 LIBS     += $(SANFLAGS)

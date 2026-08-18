@@ -30,6 +30,10 @@ size_t queue_push(queue *q, void *const *items, size_t n);
  * missing rows or a wait that never ends. */
 void queue_push_all(queue *q, void *const *items, size_t n);
 
+/* Appends up to n items without blocking. Returns the number accepted, which is short of n
+ * where the queue is full or closed. */
+size_t queue_try_push(queue *q, void *const *items, size_t n);
+
 /* Removes up to n items, blocking until at least one arrives. Returns 0 only once the queue
  * is both closed and drained. */
 size_t queue_pop(queue *q, void **items, size_t n);

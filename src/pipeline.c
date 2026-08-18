@@ -42,11 +42,18 @@
 #define DEFAULT_BATCH          64
 #define DEFAULT_LIVE_REFS      64
 
+/* Output chunks offered to the workers and not yet written back. The bound is what lets
+ * the workers hand filtered chunks over without ever blocking: the filtered queue holds
+ * this many, and the consumer offers no more until some come back. */
+#define CHUNKS_PER_WORKER 2
+
 typedef struct {
     cm_bam_stream *bam;
     refseq_source *refs;
     queue         *work;       /* loader -> workers */
     queue         *completed;  /* last handle dropped -> consumer */
+    queue         *filtered;   /* chunks the workers filtered -> consumer */
+    size_t         chunk_cap;  /* chunks out with the workers at once */
     itempool      *items;
     ctxpool       *contexts;
     h5writer      *out;
@@ -218,11 +225,28 @@ static void worker_process_run(worker *w, void **slots, size_t n)
     refctx_release(ctx, (int)n);
 }
 
+/* Filters an output chunk on behalf of the writing thread, which is how the compression
+ * shares the threads the run was given. The carrier was allocated for this one trip. */
+static void worker_filter_chunk(const pipeline *p, workitem *item)
+{
+    void *chunk = item->chunk;
+
+    h5chunk_filter(item->chunk);
+    queue_push_all(p->filtered, &chunk, 1);
+    free(item);
+}
+
 static void worker_process_batch(worker *w, void **slots, size_t n)
 {
     for (size_t i = 0; i < n; ) {
         const workitem *head = slots[i];
         size_t          run  = 1;
+
+        if (head->chunk) {
+            worker_filter_chunk(w->pipe, slots[i]);
+            i++;
+            continue;
+        }
 
         while (i + run < n && item_at(slots, i + run)->ctx == head->ctx) {
             run++;
@@ -354,6 +378,7 @@ static refctx *pipeline_open_reference(const pipeline *p, int32_t tid)
     }
 
     refctx_open(ctx, tid, cm_bam_stream_refname(p->bam, tid), seq);
+    h5writer_expect(p->out, tid);
     return ctx;
 }
 
@@ -559,9 +584,101 @@ static int loader_main(const pipeline *p, const failure_flag *f,
 
 typedef struct {
     const pipeline *pipe;
-    int       status;  /* first write failure, if any */
+    int       status;     /* first write failure, if any */
+    size_t    in_flight;  /* chunks with the workers, not yet written back */
     pthread_t thread;
 } consumer;
+
+static void consumer_fail(consumer *c)
+{
+    if (c->status == 0) {
+        c->status = -1;
+    }
+}
+
+/* Writes every chunk the workers have handed back so far. */
+static void consumer_collect_chunks(consumer *c)
+{
+    void *slot;
+
+    while (queue_try_pop(c->pipe->filtered, &slot, 1) == 1) {
+        if (h5writer_write_chunk(c->pipe->out, slot) < 0) {
+            consumer_fail(c);
+        }
+
+        c->in_flight--;
+    }
+}
+
+/* Offers one chunk to the workers, or filters it here. The workers refuse it where their
+ * queue is full or already closed, and the filtered queue has room promised only for
+ * chunk_cap at a time; a run whose chunks outpace the workers is one whose consumer has
+ * the spare time to filter its own. */
+static void consumer_send_chunk(consumer *c, h5chunk *chunk)
+{
+    if (c->in_flight < c->pipe->chunk_cap) {
+        workitem *item = malloc(sizeof *item);
+        void     *slot = item;
+
+        if (item) {
+            *item = (workitem){ .chunk = chunk };
+
+            if (queue_try_push(c->pipe->work, &slot, 1) == 1) {
+                c->in_flight++;
+                return;
+            }
+
+            free(item);
+        }
+    }
+
+    h5chunk_filter(chunk);
+    if (h5writer_write_chunk(c->pipe->out, chunk) < 0) {
+        consumer_fail(c);
+    }
+}
+
+static void consumer_send_settled(consumer *c)
+{
+    h5chunk *chunk;
+
+    while ((chunk = h5writer_take_chunk(c->pipe->out))) {
+        consumer_send_chunk(c, chunk);
+    }
+}
+
+/* Writes one reference's row and reports it to the writer. The report is made whatever
+ * refrow_write did: a chunk settles only once every reference opened in it is accounted
+ * for. */
+static void consumer_write_reference(consumer *c, refctx *ctx)
+{
+    /* Keep draining after a failure, or the loader and workers block on a queue
+     * nothing is emptying. */
+    if (c->status == 0 &&
+        refrow_write(c->pipe->rows, ctx->tid, ctx->len, &ctx->acc,
+                     ctx->pr.cells ? &ctx->pr : NULL) < 0) {
+        consumer_fail(c);
+    }
+
+    if (h5writer_wrote(c->pipe->out, ctx->tid) < 0) {
+        consumer_fail(c);
+    }
+}
+
+/* The chunks still with the workers have all been filtered: the workers are joined
+ * before the completed queue closes, and they drain their queue before exiting. */
+static void consumer_finish_chunks(consumer *c)
+{
+    void *slot;
+
+    while (c->in_flight > 0 && queue_pop(c->pipe->filtered, &slot, 1) == 1) {
+        if (h5writer_write_chunk(c->pipe->out, slot) < 0) {
+            consumer_fail(c);
+        }
+
+        c->in_flight--;
+    }
+}
 
 static void *consumer_main(void *arg)
 {
@@ -573,18 +690,14 @@ static void *consumer_main(void *arg)
         for (size_t i = 0; i < n; i++) {
             refctx *ctx = slots[i];
 
-            /* Keep draining after a failure, or the loader and workers block on a
-             * queue nothing is emptying. */
-            if (c->status == 0 &&
-                refrow_write(c->pipe->rows, ctx->tid, ctx->len, &ctx->acc,
-                             ctx->pr.cells ? &ctx->pr : NULL) < 0) {
-                c->status = -1;
-            }
-
+            consumer_write_reference(c, ctx);
             ctxpool_give(c->pipe->contexts, ctx);
+            consumer_collect_chunks(c);
+            consumer_send_settled(c);
         }
     }
 
+    consumer_finish_chunks(c);
     return NULL;
 }
 
@@ -614,6 +727,7 @@ static void pipeline_teardown(pipeline *p)
     h5writer_close(p->out);
     ctxpool_destroy(p->contexts);
     itempool_destroy(p->items);
+    queue_destroy(p->filtered);
     queue_destroy(p->completed);
     queue_destroy(p->work);
     refseq_close(p->refs);
@@ -659,12 +773,14 @@ static int pipeline_build_buffers(pipeline *p, const pipeline_config *cfg,
     p->filter_config = cfg->filter_config;
     p->ref_cap       = (size_t)cm_bam_stream_max_reflen(p->bam);
 
+    p->chunk_cap = cfg->workers * CHUNKS_PER_WORKER;
     p->work      = queue_create(cfg->queue_capacity);
     p->completed = queue_create(cfg->live_refs);
+    p->filtered  = queue_create(p->chunk_cap);
     p->items     = itempool_create(carriers);
     p->contexts  = ctxpool_create(cfg->live_refs, p->ref_cap, cfg->pairwise != 0);
 
-    if (!p->work || !p->completed || !p->items || !p->contexts) {
+    if (!p->work || !p->completed || !p->filtered || !p->items || !p->contexts) {
         snprintf(error, error_len, "out of memory building the pipeline");
         return -1;
     }
@@ -678,7 +794,7 @@ static int pipeline_open_output(pipeline *p, const pipeline_config *cfg,
 {
     p->out = h5writer_create(cfg->output_path, program,
                              cm_bam_stream_nref(p->bam), p->ref_cap, may_replace,
-                             p->wanted);
+                             p->wanted, true);
     if (!p->out) {
         snprintf(error, error_len, "out of memory");
         return -1;

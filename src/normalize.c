@@ -488,7 +488,7 @@ static int open_transfer(transfer *t, bool may_replace, char *error, size_t erro
     }
 
     t->out = h5writer_create(t->out_path, t->program, t->n_refs, t->ref_cap,
-                             may_replace, t->writes);
+                             may_replace, t->writes, false);
     if (!t->out) {
         return fail_memory(error, error_len);
     }

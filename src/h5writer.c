@@ -12,9 +12,40 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "chunktally.h"
+#include "codec.h"
 #include "error.h"
 #include "h5layout.h"
 #include "version.h"
+
+/* A chunk of one field being gathered. */
+typedef struct {
+    int64_t        index;   /* -1 while the slot holds nothing */
+    unsigned char *values;
+} chunk_stage;
+
+struct h5chunk {
+    out_field_id    id;
+    int64_t         index;
+    unsigned char  *values;
+    unsigned char  *bytes;      /* where the filtered form goes */
+    size_t          raw_bytes;
+    size_t          elem;
+    size_t          n_bytes;    /* zero until filtered; zero after, the deflate failed */
+    struct h5chunk *next;       /* the writer's line of chunks awaiting a taker */
+};
+
+/* One field written by whole chunks. Each field has its own chunk shape, since h5layout
+ * sizes chunks in bytes, so each keeps its own tally and its own stages. */
+typedef struct {
+    hsize_t      rows;       /* references per chunk */
+    size_t       width;      /* values one row holds */
+    size_t       elem;       /* bytes one value occupies */
+    size_t       raw_bytes;  /* rows * width * elem */
+    chunktally  *tally;      /* set only for a gathered field */
+    chunk_stage *stages;
+    size_t       n_stages;
+} chunkfield;
 
 struct h5writer {
     hid_t   file;
@@ -28,8 +59,18 @@ struct h5writer {
     size_t  ref_cap;
     double *padding;    /* NaN, as wide as the longest tail a row can have */
     const bool *wanted; /* the optional fields this run writes; NULL for all of them */
+
+    chunkfield gathered[OUT_N_FIELDS];
+    h5chunk   *ready;        /* finished chunks not yet taken, oldest first */
+    h5chunk   *ready_tail;
+
     char    error[CM_ERROR_MAX];
 };
+
+static bool gathers(const h5writer *w, out_field_id id)
+{
+    return w->gathered[id].tally != NULL;
+}
 
 static int fail(h5writer *w, const char *what)
 {
@@ -245,6 +286,336 @@ static hid_t create_field(h5writer *w, out_field_id id)
 }
 
 /* ------------------------------------------------------------------------ */
+/* Chunks in and out                                                         */
+/* ------------------------------------------------------------------------ */
+
+static h5chunk *chunk_open(const h5writer *w, out_field_id id, int64_t index,
+                           unsigned char *values)
+{
+    h5chunk *chunk = calloc(1, sizeof *chunk);
+
+    if (!chunk) {
+        return NULL;
+    }
+
+    chunk->id        = id;
+    chunk->index     = index;
+    chunk->values    = values;
+    chunk->raw_bytes = w->gathered[id].raw_bytes;
+    chunk->elem      = w->gathered[id].elem;
+    chunk->bytes     = malloc(codec_bound(chunk->raw_bytes));
+
+    if (!chunk->bytes) {
+        free(chunk);
+        return NULL;
+    }
+
+    return chunk;
+}
+
+static void chunk_free(h5chunk *chunk)
+{
+    free(chunk->bytes);
+    free(chunk->values);
+    free(chunk);
+}
+
+static void ready_append(h5writer *w, h5chunk *chunk)
+{
+    if (w->ready_tail) {
+        w->ready_tail->next = chunk;
+    } else {
+        w->ready = chunk;
+    }
+
+    w->ready_tail = chunk;
+}
+
+h5chunk *h5writer_take_chunk(h5writer *w)
+{
+    h5chunk *chunk = w->ready;
+
+    if (!chunk) {
+        return NULL;
+    }
+
+    w->ready = chunk->next;
+    if (!w->ready) {
+        w->ready_tail = NULL;
+    }
+
+    chunk->next = NULL;
+    return chunk;
+}
+
+void h5chunk_filter(h5chunk *chunk)
+{
+    unsigned char *scratch = malloc(codec_scratch(chunk->raw_bytes));
+
+    if (scratch) {
+        chunk->n_bytes = codec_encode(chunk->bytes, scratch, chunk->values,
+                                      chunk->raw_bytes, chunk->elem);
+    }
+
+    free(scratch);
+}
+
+int h5writer_write_chunk(h5writer *w, h5chunk *chunk)
+{
+    hsize_t offset[OUT_RANK_MAX] = { (hsize_t)chunk->index *
+                                     w->gathered[chunk->id].rows };
+    int     status               = 0;
+
+    if (chunk->n_bytes == 0) {
+        status = fail(w, "unable to compress an output chunk");
+    } else if (H5Dwrite_chunk(w->dataset[chunk->id], H5P_DEFAULT, 0, offset,
+                              chunk->n_bytes, chunk->bytes) < 0) {
+        status = fail(w, "unable to write an output chunk");
+    }
+
+    chunk_free(chunk);
+    return status;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Gathering rows into chunks                                                */
+/* ------------------------------------------------------------------------ */
+
+static chunk_stage *stage_holding(chunkfield *f, int64_t index)
+{
+    for (size_t i = 0; i < f->n_stages; i++) {
+        if (f->stages[i].index == index) {
+            return &f->stages[i];
+        }
+    }
+
+    return NULL;
+}
+
+static chunk_stage *stage_spare(chunkfield *f)
+{
+    for (size_t i = 0; i < f->n_stages; i++) {
+        if (f->stages[i].index < 0) {
+            return &f->stages[i];
+        }
+    }
+
+    return NULL;
+}
+
+/* How many chunks gather at once is bounded by the pipeline rather than by this file: a
+ * chunk stays open only while a reference it holds is still in flight, and the context
+ * pool bounds how many those can be. */
+static chunk_stage *stage_more(chunkfield *f)
+{
+    size_t       wanted = f->n_stages ? f->n_stages * 2 : 4;
+    chunk_stage *grown  = realloc(f->stages, wanted * sizeof *grown);
+
+    if (!grown) {
+        return NULL;
+    }
+
+    for (size_t i = f->n_stages; i < wanted; i++) {
+        grown[i] = (chunk_stage){ .index = -1 };
+    }
+
+    f->stages   = grown;
+    f->n_stages = wanted;
+
+    return stage_spare(f);
+}
+
+/* Fills a fresh chunk with the field's absence marker, value by value, so a row never
+ * written and the columns past a reference read as the fill would have left them. */
+static void prefill(const chunkfield *f, out_field_id id, unsigned char *values)
+{
+    const unsigned char *mark = h5layout_fill(id);
+
+    for (size_t i = 0; i < f->raw_bytes; i += f->elem) {
+        memcpy(values + i, mark, f->elem);
+    }
+}
+
+/* The stage gathering this chunk, begun on its first row. NULL only out of memory. */
+static chunk_stage *stage_for(chunkfield *f, out_field_id id, int64_t index)
+{
+    chunk_stage *s = stage_holding(f, index);
+
+    if (s) {
+        return s;
+    }
+
+    s = stage_spare(f);
+    if (!s) {
+        s = stage_more(f);
+    }
+
+    if (!s) {
+        return NULL;
+    }
+
+    s->values = malloc(f->raw_bytes);
+    if (!s->values) {
+        return NULL;
+    }
+
+    prefill(f, id, s->values);
+    s->index = index;
+    return s;
+}
+
+/* The row a reference occupies within its chunk's staged values. */
+static unsigned char *stage_row(const chunkfield *f, chunk_stage *s, int32_t tid)
+{
+    size_t row = (size_t)tid % (size_t)f->rows;
+
+    return s->values + row * f->width * f->elem;
+}
+
+/* Narrows accumulated doubles to the type the field is stored as, which the datatype
+ * conversion in H5Dwrite would otherwise do on the writing thread. */
+static void narrow(unsigned char *dst, out_stored stored, const double *src, size_t n)
+{
+    switch (stored) {
+        case OUT_F32: {
+            float *to = (float *)(void *)dst;
+
+            for (size_t i = 0; i < n; i++) {
+                to[i] = (float)src[i];
+            }
+            return;
+        }
+        case OUT_U64: {
+            uint64_t *to = (uint64_t *)(void *)dst;
+
+            for (size_t i = 0; i < n; i++) {
+                to[i] = (uint64_t)src[i];
+            }
+            return;
+        }
+        case OUT_N_STORED:
+            break;
+    }
+}
+
+/* Marks the columns past the reference, as write_part does with the padding row. An
+ * unsigned field has no NaN to mark with, and none needs it: every such row spans its
+ * full width whatever its reference measures. */
+static void mark_tail(unsigned char *row, out_stored stored, size_t from, size_t width)
+{
+    float *to;
+
+    if (stored != OUT_F32) {
+        return;
+    }
+
+    to = (float *)(void *)row;
+    for (size_t i = from; i < width; i++) {
+        to[i] = (float)NAN;
+    }
+}
+
+static int64_t gathered_chunk(const chunkfield *f, int32_t tid)
+{
+    return (int64_t)tid / (int64_t)f->rows;
+}
+
+/* Copies one reference's span of a gathered field into its chunk, tail marked. */
+static int gather_span(h5writer *w, out_field_id id, int32_t tid, size_t held,
+                       const double *values)
+{
+    chunkfield  *f     = &w->gathered[id];
+    chunk_stage *s     = stage_for(f, id, gathered_chunk(f, tid));
+    unsigned char *row;
+
+    if (!s) {
+        return fail(w, "out of memory gathering an output chunk");
+    }
+
+    row = stage_row(f, s, tid);
+    narrow(row, OUT_FIELDS[id].stored, values, held);
+    mark_tail(row, OUT_FIELDS[id].stored, held, f->width);
+    return 0;
+}
+
+/* Copies one reference's block of a gathered field into its chunk, a row of the block at
+ * a time, at the stride of the full-width row. The columns and rows past the block keep
+ * the fill the chunk was prefilled with. */
+static int gather_block(h5writer *w, out_field_id id, int32_t tid, size_t len,
+                        const double *values)
+{
+    chunkfield  *f = &w->gathered[id];
+    chunk_stage *s = stage_for(f, id, gathered_chunk(f, tid));
+    size_t       full[OUT_RANK_MAX];
+    size_t       part[OUT_RANK_MAX];
+    size_t       stride, rows, cols;
+    int          rank;
+    unsigned char *row;
+
+    if (!s) {
+        return fail(w, "out of memory gathering an output chunk");
+    }
+
+    /* A block spans two extents -- there is no other shape wider than one -- so its
+     * dataset has the reference dimension and those two, and rank is 3. */
+    rank   = out_dims(id, 1, len, part);
+    out_dims(id, 1, w->ref_cap, full);
+    stride = full[rank - 1];
+    cols   = part[rank - 1];
+    rows   = part[1];
+
+    row = stage_row(f, s, tid);
+    for (size_t i = 0; i < rows; i++) {
+        narrow(row + i * stride * f->elem, OUT_FIELDS[id].stored,
+               values + i * cols, cols);
+    }
+
+    return 0;
+}
+
+/* Lines up a finished chunk of one field for h5writer_take_chunk. The buffer travels
+ * with the chunk, so the stage is left empty. */
+static int send_chunk(h5writer *w, out_field_id id, int64_t index)
+{
+    chunkfield  *f = &w->gathered[id];
+    chunk_stage *s = stage_holding(f, index);
+    h5chunk     *chunk;
+
+    if (!s) {
+        return 0;
+    }
+
+    chunk = chunk_open(w, id, index, s->values);
+    if (!chunk) {
+        return fail(w, "out of memory sending an output chunk");
+    }
+
+    s->values = NULL;
+    s->index  = -1;
+    ready_append(w, chunk);
+    return 0;
+}
+
+static int send_settled(h5writer *w)
+{
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        int64_t index;
+
+        if (!gathers(w, id)) {
+            continue;
+        }
+
+        while ((index = chunktally_take_settled(w->gathered[id].tally)) >= 0) {
+            if (send_chunk(w, id, index) < 0) {
+                return -1;
+            }
+        }
+    }
+
+    return 0;
+}
+
+/* ------------------------------------------------------------------------ */
 /* Lifetime                                                                  */
 /* ------------------------------------------------------------------------ */
 
@@ -343,8 +714,39 @@ static int create_fields(h5writer *w)
     return 0;
 }
 
+/* Prepares the gathered form of every field whose row holds more than one value. The
+ * fields a value wide stay on the row path: their chunks span thousands of references,
+ * which would hold nearly the whole output in stages. */
+static int build_chunkfields(h5writer *w)
+{
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        hsize_t     dims[OUT_RANK_MAX], chunk[OUT_RANK_MAX];
+        chunkfield *f     = &w->gathered[id];
+        size_t      width = out_values(id, w->ref_cap, w->ref_cap);
+
+        if (!OUT_FIELDS[id].per_ref || !out_wanted(id, w->wanted) || width <= 1) {
+            continue;
+        }
+
+        h5layout_shape(id, w->n_refs, w->ref_cap, dims, chunk);
+
+        f->rows      = chunk[0];
+        f->width     = width;
+        f->elem      = out_stored_bytes(id);
+        f->raw_bytes = (size_t)f->rows * width * f->elem;
+        f->tally     = chunktally_create(w->n_refs, (size_t)f->rows);
+
+        if (!f->tally) {
+            return fail(w, "out of memory tracking the output chunks");
+        }
+    }
+
+    return 0;
+}
+
 h5writer *h5writer_create(const char *path, const char *program, int32_t n_refs,
-                          size_t ref_cap, bool overwrite, const bool *wanted)
+                          size_t ref_cap, bool overwrite, const bool *wanted,
+                          bool gather)
 {
     h5writer *w = writer_alloc(n_refs, ref_cap);
 
@@ -358,11 +760,45 @@ h5writer *h5writer_create(const char *path, const char *program, int32_t n_refs,
         build_memspace(w) == 0 &&
         create_file(w, path, overwrite) == 0 &&
         stamp_identity(w, program) == 0 &&
-        create_groups(w) == 0) {
-        create_fields(w);
+        create_groups(w) == 0 &&
+        create_fields(w) == 0 &&
+        gather) {
+        build_chunkfields(w);
     }
 
     return w;
+}
+
+/* Finishes every chunk still gathering and writes whatever was never taken, filtering it
+ * here, before HDF5 shuts down: a chunk written after the datasets closed would be lost.
+ * Chunks a caller took have all come back by now, as the interface requires. */
+static void finish_chunks(h5writer *w)
+{
+    h5chunk *chunk;
+
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (gathers(w, id)) {
+            chunktally_no_more(w->gathered[id].tally);
+        }
+    }
+
+    send_settled(w);
+
+    while ((chunk = h5writer_take_chunk(w))) {
+        h5chunk_filter(chunk);
+        h5writer_write_chunk(w, chunk);
+    }
+
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        chunkfield *f = &w->gathered[id];
+
+        for (size_t i = 0; i < f->n_stages; i++) {
+            free(f->stages[i].values);
+        }
+
+        free(f->stages);
+        chunktally_destroy(f->tally);
+    }
 }
 
 void h5writer_close(h5writer *w)
@@ -370,6 +806,8 @@ void h5writer_close(h5writer *w)
     if (!w) {
         return;
     }
+
+    finish_chunks(w);
 
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
         if (w->filespace[id] >= 0) {
@@ -444,6 +882,10 @@ int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
         return fail(w, "reference index outside the output");
     }
 
+    if (gathers(w, id)) {
+        return gather_span(w, id, tid, held, values);
+    }
+
     if (write_part(w, id, tid, 0, held, values) < 0) {
         return -1;
     }
@@ -480,6 +922,34 @@ int h5writer_row(h5writer *w, out_field_id id, int32_t tid, const void *values)
     return status < 0 ? fail(w, "unable to write an output row") : 0;
 }
 
+void h5writer_expect(h5writer *w, int32_t tid)
+{
+    if (tid < 0 || tid >= w->n_refs) {
+        return;
+    }
+
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (gathers(w, id)) {
+            chunktally_expect(w->gathered[id].tally, tid);
+        }
+    }
+}
+
+int h5writer_wrote(h5writer *w, int32_t tid)
+{
+    if (tid < 0 || tid >= w->n_refs) {
+        return 0;
+    }
+
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (gathers(w, id)) {
+            chunktally_wrote(w->gathered[id].tally, tid);
+        }
+    }
+
+    return send_settled(w);
+}
+
 bool h5writer_holds(const h5writer *w, out_field_id id)
 {
     return out_wanted(id, w->wanted);
@@ -492,6 +962,10 @@ int h5writer_block(h5writer *w, out_field_id id, int32_t tid, size_t len,
 
     if (tid < 0 || tid >= w->n_refs) {
         return fail(w, "reference index outside the output");
+    }
+
+    if (gathers(w, id)) {
+        return gather_block(w, id, tid, len, values);
     }
 
     if (h5layout_select_block(w->filespace[id], w->memspace, id, tid, len) < 0) {
