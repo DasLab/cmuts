@@ -2,41 +2,27 @@
 
 Fast, multithreaded pair-HMM counting of MaP-seq mutations.
 
-## Dependencies
+## Installing
 
-Building and running the C-based programs requires
+Each [release](https://github.com/DasLab/cmuts/releases) carries static `cmuts` binaries for Linux (x86_64, aarch64) and macOS (arm64). These are self-contained and have no dependencies. The bundled `cmuts-align` helper requires
 
-- A C11 compiler (GCC 6 or newer, or Clang 9 or newer) and `make`,
-- [htslib](https://github.com/samtools/htslib) 1.12 or newer,
-- [HDF5](https://www.hdfgroup.org/solutions/hdf5/) 1.10 or newer.
-
-The bundled alignment helper also requires
-
-- [minimap2](https://github.com/lh3/minimap2),
-- [samtools](https://github.com/samtools/samtools),
-- [fastp](https://github.com/OpenGene/fastp), for paired-end input.
+- [minimap2](https://github.com/lh3/minimap2)
+- [samtools](https://github.com/samtools/samtools)
+- [fastp](https://github.com/OpenGene/fastp) for paired-end input.
 
 On macOS with [Homebrew](https://brew.sh):
 
 ```sh
-brew install htslib hdf5 minimap2 samtools fastp
+brew install minimap2 samtools fastp
 ```
 
 On Debian and Ubuntu:
 
 ```sh
-apt install libhts-dev libhdf5-dev minimap2 samtools fastp
+apt install minimap2 samtools fastp
 ```
 
-## Installing
-
-```sh
-git clone https://github.com/DasLab/cmuts
-cd cmuts
-make install
-```
-
-This installs the `cmuts` binary and the `cmuts-align` helper script to `~/.local/bin`. Optionally pass `BINDIR` to `make` to change the install location.
+Alternatively, you can [build from source](https://daslab.stanford.edu/cmuts/from-source), which may provide marginal speedups.
 
 ## Usage
 

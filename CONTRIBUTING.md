@@ -63,11 +63,26 @@ make docs   # rewrite the generated blocks under docs/
 make site   # additionally render the site into site/
 ```
 
+If a program's arguments or output format changes, you must run `make docs` and include its changes in the commit.
+
 To preview the site locally:
 
 ```sh
 .venv/bin/sphinx-autobuild docs site
 ```
+
+## Static Binaries
+
+`scripts/static-deps.sh` builds htslib, HDF5 and their compression libraries as static archives under one prefix, with sources pinned by version and checksum:
+
+```sh
+scripts/static-deps.sh deps-static
+make STATIC_PREFIX=deps-static
+```
+
+On macOS system libraries stay dynamic; a musl compiler (`scripts/static-deps.sh deps-static musl-gcc`, or any Alpine gcc) makes the whole link static. `make check STATIC_PREFIX=deps-static` runs the tests against the result.
+
+Pushing a `v*` tag runs the `Release` workflow, which builds these binaries for Linux (x86_64, aarch64, via Alpine containers) and macOS (arm64), runs the test suite against each, and attaches `scripts/package.sh` tarballs to a draft GitHub release.
 
 # Contributing
 
@@ -85,4 +100,4 @@ Two workflows run on every push to `main` and on every pull request against it.
 
 `CI` runs `make check` under gcc and clang on Linux and under clang on macOS, and `make lint` on Linux. The sanitizers are not among them, taking longer than the rest of the run put together; run those locally.
 
-`Documentation` renders the site, and fails where `make docs` would rewrite a page. The generated blocks are read out of the binaries, so a change to a program's options or output leaves them behind until they are rebuilt: run `make docs` and commit what it writes alongside the change. A push to `main` deploys the rendered site as well.
+`Documentation` renders the site, and fails if the generated docs are not current, rather than automatically updating them for you. A push to `main` deploys the rendered site as well.

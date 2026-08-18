@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: linux, ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64,  runner: ubuntu-latest }
+          - { arch: aarch64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache the static dependencies
+        uses: actions/cache@v4
+        with:
+          path: deps-static
+          key: static-deps-linux-${{ matrix.arch }}-${{ hashFiles('scripts/static-deps.sh') }}
+
+      # Alpine's gcc targets musl natively, which static-deps.sh and the
+      # Makefile read from -dumpmachine and turn into a fully static link.
+      - name: Build the dependencies and the binary
+        run: |
+          docker run --rm -v "$PWD:/w" -w /w alpine:3.21 sh -euc '
+            apk add --no-cache build-base bash cmake curl linux-headers
+            bash scripts/static-deps.sh deps-static
+            make STATIC_PREFIX=deps-static
+            chown -R '"$(id -u):$(id -g)"' deps-static build
+          '
+
+      - name: Confirm the binary is static and runs
+        run: |
+          file build/release/cmuts | grep 'statically linked'
+          build/release/cmuts --version
+
+      - uses: ./.github/actions/dependencies
+
+      # The binary is self-contained, so the host's Python and samtools test
+      # what the container built.
+      - name: Run the test suite against the binary
+        run: PATH="$PWD/build/release:$PATH" .venv/bin/python -m pytest
+
+      - run: bash scripts/package.sh deps-static
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarball-linux-${{ matrix.arch }}
+          path: cmuts-*.tar.gz
+
+  macos:
+    name: macos, arm64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache the static dependencies
+        uses: actions/cache@v4
+        with:
+          path: deps-static
+          key: static-deps-macos-arm64-${{ hashFiles('scripts/static-deps.sh') }}
+
+      # htslib and HDF5 link in as archives; only macOS system libraries stay
+      # dynamic, so the binary runs without Homebrew.
+      - name: Build the dependencies and the binary
+        run: |
+          bash scripts/static-deps.sh deps-static
+          make STATIC_PREFIX=deps-static
+
+      - name: Confirm the binary carries the libraries and runs
+        run: |
+          otool -L build/release/cmuts
+          otool -L build/release/cmuts | tail -n +2 | grep -v '^\s*/usr/lib/' && exit 1
+          build/release/cmuts --version
+
+      - uses: ./.github/actions/dependencies
+
+      - name: Run the test suite against the binary
+        run: PATH="$PWD/build/release:$PATH" .venv/bin/python -m pytest
+
+      - run: bash scripts/package.sh deps-static
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tarball-macos-arm64
+          path: cmuts-*.tar.gz
+
+  # Draft, so the tarballs can be inspected before the release is published.
+  release:
+    needs: [linux, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --draft --verify-tag --title "$GITHUB_REF_NAME" cmuts-*.tar.gz
