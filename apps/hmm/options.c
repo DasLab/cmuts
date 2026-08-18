@@ -37,7 +37,7 @@ static const cli_choice STRAND_CHOICES[] = {
  * squares are written only when they are asked for. */
 static const out_written WRITTEN[] = {
     { .id = OUT_COVERAGE,
-      .detail = "The number of reads in which this base was present, weighted by PHRED scores." },
+      .detail = "The number of reads in which this base was present." },
     { .id = OUT_REACTIVITY,
       .detail = "The mutation rate at this base, weighted by PHRED scores and in accordance with the HMM parameters." },
     { .id = OUT_ERROR,
@@ -57,7 +57,7 @@ static const out_written WRITTEN[] = {
       .detail = "The probability that the base on the first axis was mutated in a read, given that the base on the second axis was.",
       .condition = "--pairwise conditional" },
     { .id = OUT_PAIRWISE_COVERAGE,
-      .detail = "The number of reads in which this pair of bases was present, weighted by PHRED scores.",
+      .detail = "The number of reads in which this pair of bases was present.",
       .condition = "--pairwise" },
 };
 

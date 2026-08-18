@@ -9,8 +9,7 @@
 #include <string.h>
 
 /* Coverage and span differ over what a read did not read: a deleted position is spanned
- * but not covered, and a poorly read one is spanned whole but covered in proportion to
- * the confidence in its base.
+ * but not covered, since no base was read there.
  *
  * The span is the evidence the mutations are taken against. A pairing and a deletion
  * contribute to it whole. An insertion contributes only as far as --insertion-weight

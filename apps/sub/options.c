@@ -11,7 +11,7 @@
  * given, less the background it was given. */
 static const out_written WRITTEN[] = {
     { .id = OUT_COVERAGE,
-      .detail = "The number of reads in which this base was present, weighted by PHRED scores." },
+      .detail = "The number of reads in which this base was present." },
     { .id = OUT_REACTIVITY,
       .detail = "The mutation rate of the treated sample less that of the untreated one, so what remains is the signal the treatment added." },
     { .id = OUT_ERROR,

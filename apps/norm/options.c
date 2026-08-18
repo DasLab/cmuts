@@ -22,7 +22,7 @@ static const cli_choice SCHEME_CHOICES[] = {
  * norm alongside it. */
 static const out_written WRITTEN[] = {
     { .id = OUT_COVERAGE,
-      .detail = "The number of reads in which this base was present, weighted by PHRED scores." },
+      .detail = "The number of reads in which this base was present." },
     { .id = OUT_REACTIVITY,
       .detail = "The mutation rate divided by the norm this file records, so a rate reads against the norm rather than as a raw frequency." },
     { .id = OUT_ERROR,

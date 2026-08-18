@@ -11,7 +11,7 @@
  * given, divided by the control it was given. */
 static const out_written WRITTEN[] = {
     { .id = OUT_COVERAGE,
-      .detail = "The number of reads in which this base was present, weighted by PHRED scores." },
+      .detail = "The number of reads in which this base was present." },
     { .id = OUT_REACTIVITY,
       .detail = "The mutation rate of the sample divided by that of the control, so a position reads as its rate relative to the denatured state." },
     { .id = OUT_ERROR,

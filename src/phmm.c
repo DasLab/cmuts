@@ -234,13 +234,6 @@ static cell_terms terms_at(const context *ctx, const row_terms *row,
     return theirs == row->ours ? row->agree : row->differ;
 }
 
-/* Confidence in the base a row pairs, regardless of what it was compared against: an
- * unnamed base was still read, at the quality its score gives. */
-static double confidence_at(const context *ctx, size_t i)
-{
-    return 1.0 - error_at(ctx, ctx->span.begin + (int32_t)i - 1);
-}
-
 /* ------------------------------------------------------------------------ */
 /* The band                                                                  */
 /* ------------------------------------------------------------------------ */
@@ -617,7 +610,6 @@ typedef struct {
     const cell_terms *terms;
     weighing          weight;
     landing           at;
-    double            confidence;
     hts_pos_t         up;           /* to the same position, one row up */
     hts_pos_t         above_width;
     /* Held from the cell to the right, without the insertion carried into its
@@ -635,7 +627,6 @@ static accumulation accumulation_of(const context *ctx, size_t i)
         .terms       = terms_of(ctx, i),
         .weight      = weighing_of(ctx, i),
         .at          = landing_of(ctx, i),
-        .confidence  = confidence_at(ctx, i),
         .up          = shift_between(ctx, i - 1, i),
         .above_width = width_at(ctx, i - 1),
     };
@@ -644,12 +635,12 @@ static accumulation accumulation_of(const context *ctx, size_t i)
 /* Writes the position completed by reaching cell k, and holds what this cell
  * contributes to the position to its left.
  *
- * A pairing spans the position it pairs with, covers it in proportion to the
- * confidence in the base, and contributes the part of its posterior belonging to
- * a real difference in the template. A deletion spans every position it passes
- * over and covers none, since no base was read there; it counts as a
- * modification only where it opened, one adduct having stopped one reverse
- * transcriptase whatever length was then skipped. An insertion counts the same
+ * A pairing spans and covers the position it pairs with, and contributes the
+ * part of its posterior belonging to a real difference in the template. A
+ * deletion spans every position it passes over and covers none, since no base
+ * was read there; it counts as a modification only where it opened, one adduct
+ * having stopped one reverse transcriptase whatever length was then skipped.
+ * An insertion counts the same
  * way, at the position it precedes, and covers nothing.
  *
  * A pairing and a deletion span their posterior unweighted. An insertion spans
@@ -685,7 +676,7 @@ static void accumulate_cell(accumulation *acc, hts_pos_t k,
     acc->at.spanned[k + 1]   += acc->spanned + carried;
     acc->at.mutations[k + 1] += acc->mutations + carried;
 
-    acc->coverage  = paired * acc->confidence;
+    acc->coverage  = paired;
     acc->spanned   = paired + passed;
     acc->mutations = acc->weight.substitution * paired
                    * acc->terms[k].modification
