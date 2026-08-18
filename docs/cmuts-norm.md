@@ -39,7 +39,7 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `zero`
 
-The number of reads in which this base was present, weighted by PHRED scores.
+The number of reads in which this base was present.
 
 {.field}
 ### `reactivity`

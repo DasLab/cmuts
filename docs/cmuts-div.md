@@ -38,7 +38,7 @@ High coverage in the output dataset does not imply high-quality data, since it i
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `zero`
 
-The number of reads in which this base was present, weighted by PHRED scores.
+The number of reads in which this base was present.
 
 {.field}
 ### `reactivity`

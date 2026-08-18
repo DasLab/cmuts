@@ -358,15 +358,19 @@ static double forward_first_row(const context *ctx)
     return total;
 }
 
-/* The transition weights into one forward row, with the row above's scale
- * factor and the insertion emission folded in. The folded scale factor is why
- * this is the one place a forward row is read without forward_at. */
+/* The row above one forward row and the transition weights out of it, with
+ * the row above's scale factor and the insertion emission folded into the
+ * weights. The folded scale factor is why this is the one place a forward row
+ * is read without forward_at. */
 typedef struct {
-    double match_to_match;
-    double insertion_to_match;
-    double deletion_to_match;
-    double match_to_insertion;
-    double insertion_to_insertion;
+    const band_cell *above;
+    hts_pos_t        width;
+    hts_pos_t        shift;
+    double           match_to_match;
+    double           insertion_to_match;
+    double           deletion_to_match;
+    double           match_to_insertion;
+    double           insertion_to_insertion;
 } descent;
 
 static descent descent_into(const context *ctx, size_t i)
@@ -375,6 +379,9 @@ static descent descent_into(const context *ctx, size_t i)
     double      scale = ctx->scratch->scale[i - 1];
 
     return (descent){
+        .above                  = read_row_of(ctx, i - 1),
+        .width                  = width_at(ctx, i - 1),
+        .shift                  = shift_between(ctx, i - 1, i),
         .match_to_match         = model->match_to_match * scale,
         .insertion_to_match     = model->insertion_to_match * scale,
         .deletion_to_match      = model->deletion_to_match * scale,
@@ -385,20 +392,32 @@ static descent descent_into(const context *ctx, size_t i)
     };
 }
 
-/* Returns a cell's match state, stepped from the row above. */
-static double paired_from(const descent *step, const double *above,
-                          double emission)
+/* Returns cell k's match state, stepped from the row above. */
+static double paired_from(const descent *step, hts_pos_t k, double emission)
 {
-    return (step->match_to_match     * above[STATE_MATCH]
-          + step->insertion_to_match * above[STATE_INSERTION]
-          + step->deletion_to_match  * above[STATE_DELETION]) * emission;
+    hts_pos_t diagonal = k - 1 + step->shift;  /* a position back, one row up */
+
+    if (!within(diagonal, step->width)) {
+        return 0.0;
+    }
+
+    return (step->match_to_match     * step->above[diagonal][STATE_MATCH]
+          + step->insertion_to_match * step->above[diagonal][STATE_INSERTION]
+          + step->deletion_to_match  * step->above[diagonal][STATE_DELETION])
+         * emission;
 }
 
-/* Returns a cell's insertion state, stepped from the row above. */
-static double inserted_from(const descent *step, const double *above)
+/* Returns cell k's insertion state, stepped from the row above. */
+static double inserted_from(const descent *step, hts_pos_t k)
 {
-    return step->match_to_insertion     * above[STATE_MATCH]
-         + step->insertion_to_insertion * above[STATE_INSERTION];
+    hts_pos_t straight = k + step->shift;      /* this position, one row up */
+
+    if (!within(straight, step->width)) {
+        return 0.0;
+    }
+
+    return step->match_to_insertion     * step->above[straight][STATE_MATCH]
+         + step->insertion_to_insertion * step->above[straight][STATE_INSERTION];
 }
 
 /* Returns a cell's deletion state, stepped from the cell to its left. */
@@ -420,41 +439,32 @@ static bool deletions_live(const context *ctx, size_t i)
  * for a row with a row above it. */
 static double forward_row(const context *ctx, size_t i)
 {
-    const phmm      *model = ctx->model;
-    descent          step  = descent_into(ctx, i);
-    band_cell       *row   = row_of(ctx, i);
-    const band_cell *above = read_row_of(ctx, i - 1);
-    cell_terms      *terms = terms_of(ctx, i);
-    row_terms        each  = row_terms_of(ctx, i);
-    hts_pos_t        shift = shift_between(ctx, i - 1, i);
-    hts_pos_t        width = width_at(ctx, i);
-    hts_pos_t        above_width = width_at(ctx, i - 1);
-    bool             live  = deletions_live(ctx, i);
+    const phmm *model = ctx->model;
+    descent     step  = descent_into(ctx, i);
+    band_cell  *row   = row_of(ctx, i);
+    cell_terms *terms = terms_of(ctx, i);
+    row_terms   each  = row_terms_of(ctx, i);
+    hts_pos_t   width = width_at(ctx, i);
+    bool        live  = deletions_live(ctx, i);
     /* The cell to the left, held in locals so each step of the deletion chain
      * does not wait on the preceding store. */
-    double           left_match    = 0.0;
-    double           left_deletion = 0.0;
+    double      left_match    = 0.0;
+    double      left_deletion = 0.0;
     /* One running sum per state keeps the addition chains short. */
-    double           total_paired   = 0.0;
-    double           total_inserted = 0.0;
-    double           total_deleted  = 0.0;
+    double      total_paired   = 0.0;
+    double      total_inserted = 0.0;
+    double      total_deleted  = 0.0;
 
     for (hts_pos_t k = 0; k < width; k++) {
-        hts_pos_t diagonal = k - 1 + shift;  /* a position back, one row up */
-        hts_pos_t straight = k + shift;      /* this position, one row up */
-        double    paired, inserted, deleted;
+        double paired, inserted, deleted;
 
         terms[k] = terms_at(ctx, &each, position_of(ctx, i, k));
 
-        paired = within(diagonal, above_width)
-               ? paired_from(&step, above[diagonal], terms[k].emission)
-               : 0.0;
-        inserted = within(straight, above_width)
-                 ? inserted_from(&step, above[straight])
+        paired   = paired_from(&step, k, terms[k].emission);
+        inserted = inserted_from(&step, k);
+        deleted  = live && k > 0
+                 ? deleted_from(model, left_match, left_deletion)
                  : 0.0;
-        deleted = live && k > 0
-                ? deleted_from(model, left_match, left_deletion)
-                : 0.0;
 
         row[k][STATE_MATCH]     = paired;
         row[k][STATE_INSERTION] = inserted;
@@ -640,6 +650,70 @@ static void accumulate_end(const accumulation *acc)
  * factor, so a forward cell times a backward cell is a posterior. Each row is
  * accumulated into the window as it is formed. */
 
+/* The row below one backward row: its cells, comparisons, scale factor,
+ * width, and the shift between the rows. */
+typedef struct {
+    const band_cell  *cell;
+    const cell_terms *terms;
+    double            scale;
+    hts_pos_t         width;
+    hts_pos_t         shift;
+} ascent;
+
+static ascent ascent_into(const context *ctx, size_t i)
+{
+    return (ascent){
+        .cell  = read_backward_row_of(ctx, i + 1),
+        .terms = terms_of(ctx, i + 1),
+        .scale = ctx->scratch->scale[i + 1],
+        .width = width_at(ctx, i + 1),
+        .shift = shift_between(ctx, i, i + 1),
+    };
+}
+
+/* Returns the chance of finishing through a pairing of the next read base,
+ * one position on and one row down from cell k. */
+static double pairing_below(const ascent *below, hts_pos_t k)
+{
+    hts_pos_t diagonal = k + 1 - below->shift;
+
+    if (!within(diagonal, below->width)) {
+        return 0.0;
+    }
+
+    return below->terms[diagonal].emission
+         * below->cell[diagonal][STATE_MATCH] * below->scale;
+}
+
+/* Returns the chance of finishing through an insertion of the next read base,
+ * at the same position one row down from cell k. */
+static double inserted_below(const ascent *below, hts_pos_t k)
+{
+    hts_pos_t straight = k - below->shift;
+
+    if (!within(straight, below->width)) {
+        return 0.0;
+    }
+
+    return UNINFORMATIVE
+         * below->cell[straight][STATE_INSERTION] * below->scale;
+}
+
+/* Forms a cell's three states from the transitions out of it. */
+static void backward_cell(const phmm *model, double pairing, double inserted,
+                          double deleted, double *cell)
+{
+    cell[STATE_MATCH] = model->match_to_match     * pairing
+                      + model->match_to_insertion * inserted
+                      + model->match_to_deletion  * deleted;
+
+    cell[STATE_INSERTION] = model->insertion_to_match     * pairing
+                          + model->insertion_to_insertion * inserted;
+
+    cell[STATE_DELETION] = model->deletion_to_match    * pairing
+                         + model->deletion_to_deletion * deleted;
+}
+
 /* Fills the last row of the backward pass and accumulates it. The alignment
  * ends on this row, so a match or insertion finishes with chance one and a
  * deletion cannot occur. */
@@ -669,47 +743,22 @@ static void backward_last_row(const context *ctx)
  * with a row above and a row below. */
 static void backward_row(const context *ctx, size_t i)
 {
-    const phmm *model = ctx->model;
-
-    band_cell        *row         = backward_row_of(ctx, i);
-    const band_cell  *below       = read_backward_row_of(ctx, i + 1);
-    const cell_terms *below_terms = terms_of(ctx, i + 1);
-    double            below_scale = ctx->scratch->scale[i + 1];
-    hts_pos_t         below_width = width_at(ctx, i + 1);
-    accumulation      acc         = accumulation_of(ctx, i);
-    hts_pos_t         shift       = shift_between(ctx, i, i + 1);
-    hts_pos_t         width       = width_at(ctx, i);
+    const phmm  *model = ctx->model;
+    band_cell   *row   = backward_row_of(ctx, i);
+    ascent       below = ascent_into(ctx, i);
+    accumulation acc   = accumulation_of(ctx, i);
+    hts_pos_t    width = width_at(ctx, i);
     /* The cell to the right, held in a local so each step of the deletion
      * chain does not wait on the preceding store. */
-    double            right_deletion = 0.0;
+    double       right_deletion = 0.0;
 
     for (hts_pos_t k = width; k-- > 0; ) {
-        hts_pos_t diagonal = k + 1 - shift;  /* a position on, one row down */
-        hts_pos_t straight = k - shift;      /* this position, one row down */
-        double    pairing  = 0.0;
-        double    inserted = 0.0;
-        double    deleted  = k + 1 < width ? right_deletion : 0.0;
-        double    cell[N_STATES];
+        double pairing  = pairing_below(&below, k);
+        double inserted = inserted_below(&below, k);
+        double deleted  = k + 1 < width ? right_deletion : 0.0;
+        double cell[N_STATES];
 
-        if (within(diagonal, below_width)) {
-            pairing = below_terms[diagonal].emission
-                    * below[diagonal][STATE_MATCH] * below_scale;
-        }
-
-        if (within(straight, below_width)) {
-            inserted = UNINFORMATIVE
-                     * below[straight][STATE_INSERTION] * below_scale;
-        }
-
-        cell[STATE_MATCH] = model->match_to_match     * pairing
-                          + model->match_to_insertion * inserted
-                          + model->match_to_deletion  * deleted;
-
-        cell[STATE_INSERTION] = model->insertion_to_match     * pairing
-                              + model->insertion_to_insertion * inserted;
-
-        cell[STATE_DELETION] = model->deletion_to_match    * pairing
-                             + model->deletion_to_deletion * deleted;
+        backward_cell(model, pairing, inserted, deleted, cell);
 
         row[k][STATE_MATCH]     = cell[STATE_MATCH];
         row[k][STATE_INSERTION] = cell[STATE_INSERTION];
@@ -729,30 +778,13 @@ static void backward_row(const context *ctx, size_t i)
 static void backward_first_row(const context *ctx)
 {
     const phmm *model = ctx->model;
-
-    band_cell        *row         = backward_row_of(ctx, 0);
-    const band_cell  *below       = read_backward_row_of(ctx, 1);
-    const cell_terms *below_terms = terms_of(ctx, 1);
-    double            below_scale = ctx->scratch->scale[1];
-    hts_pos_t         below_width = width_at(ctx, 1);
-    hts_pos_t         shift       = shift_between(ctx, 0, 1);
-    hts_pos_t         width       = width_at(ctx, 0);
+    band_cell  *row   = backward_row_of(ctx, 0);
+    ascent      below = ascent_into(ctx, 0);
+    hts_pos_t   width = width_at(ctx, 0);
 
     for (hts_pos_t k = 0; k < width; k++) {
-        hts_pos_t diagonal = k + 1 - shift;
-        hts_pos_t straight = k - shift;
-        double    pairing  = 0.0;
-        double    inserted = 0.0;
-
-        if (within(diagonal, below_width)) {
-            pairing = below_terms[diagonal].emission
-                    * below[diagonal][STATE_MATCH] * below_scale;
-        }
-
-        if (within(straight, below_width)) {
-            inserted = UNINFORMATIVE
-                     * below[straight][STATE_INSERTION] * below_scale;
-        }
+        double pairing  = pairing_below(&below, k);
+        double inserted = inserted_below(&below, k);
 
         row[k][STATE_MATCH] = model->match_to_match     * pairing
                             + model->match_to_insertion * inserted;
@@ -760,6 +792,7 @@ static void backward_first_row(const context *ctx)
         row[k][STATE_INSERTION] = model->insertion_to_match     * pairing
                                 + model->insertion_to_insertion * inserted;
 
+        /* No deletion occurs before the first placed base. */
         row[k][STATE_DELETION] = 0.0;
     }
 }

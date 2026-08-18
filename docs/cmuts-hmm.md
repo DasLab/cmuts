@@ -39,7 +39,7 @@ The length check is required to avoid buffer overflows and cannot be disabled.
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `zero`
 
-The number of reads in which this base was present, weighted by PHRED scores.
+The number of reads in which this base was present.
 
 {.field}
 ### `reactivity`
@@ -102,7 +102,7 @@ The probability that the base on the first axis was mutated in a read, given tha
 
 **Shape** `(n, l, l)` · **Type** `float32` · **Fill** `zero` · **Written with** `--pairwise`
 
-The number of reads in which this pair of bases was present, weighted by PHRED scores.
+The number of reads in which this pair of bases was present.
 <!-- END GENERATED cmuts-hmm FIELDS -->
 
 ## CLI Options
