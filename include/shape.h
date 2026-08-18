@@ -63,6 +63,11 @@ shape_extents shape_none(size_t len, size_t cap);
  * a name here too; one without gets "unknown". */
 const char *shape_name(shape_fn shape);
 
+/* Gives extent i of a shape as the documentation writes it, "l" standing for the longest
+ * reference. NULL where the extent does not vary with the run, so a caller prints the
+ * number the shape gives. */
+const char *shape_symbol(shape_fn shape, int extent);
+
 /* Gives the extents held: what was reported, or all there is room for, whichever is fewer.
  * Inline so that every loop over dim carries the bound with it. */
 static inline int shape_rank(shape_extents extents)

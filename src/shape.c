@@ -67,3 +67,18 @@ const char *shape_name(shape_fn shape)
 
     return "unknown";
 }
+
+const char *shape_symbol(shape_fn shape, int extent)
+{
+    (void)extent;
+
+    if (shape == shape_per_base || shape == shape_per_pair) {
+        return "l";
+    }
+
+    if (shape == shape_per_length) {
+        return "2l";
+    }
+
+    return NULL;
+}

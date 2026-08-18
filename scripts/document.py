@@ -14,13 +14,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-# The extents a row occupies, given the shape the program names. n is the
-# references and l the longest of them; a field indexed by read length reaches
-# twice that, a read being longer than what it aligns to, and one indexed by a
-# pair of positions is square.
-EXTENTS = {"per base": ("l",), "per length": ("2l",), "per pair": ("l", "l"),
-           "scalar": ()}
-
 # The value a dataset holds where the run wrote nothing, spelled as the pages
 # spell it. What it means differs by field, and the output page covers it.
 ABSENT = {"nan": "NaN", "zero": "zero"}
@@ -62,11 +55,8 @@ def described(program: list, flag: str) -> dict:
 
 
 def shape(field: dict) -> str:
-    """The dimensions of a field's dataset, as the documentation writes them."""
-    if field["row"] not in EXTENTS:
-        raise SystemExit(f"{field['name']}: unknown row shape {field['row']!r}")
-
-    extents = ["n"] * field["per_reference"] + list(EXTENTS[field["row"]])
+    """The dimensions of a field's dataset, as the dump spells them."""
+    extents = field["extents"]
 
     if not extents:
         return "()"

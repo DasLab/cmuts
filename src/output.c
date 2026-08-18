@@ -248,6 +248,37 @@ static void print_detail(FILE *out, const char *detail)
     fputc('"', out);
 }
 
+/* Writes the dataset's extents as a JSON array of strings: "n" for the reference
+ * dimension, then the row's extents, each as its symbol where it varies with the run and
+ * as its number where it does not. */
+static void print_extents(FILE *out, out_field_id id)
+{
+    shape_extents row  = OUT_FIELDS[id].row(0, 0);
+    int           rank = shape_rank(row);
+
+    fputc('[', out);
+
+    if (OUT_FIELDS[id].per_ref) {
+        fprintf(out, "\"n\"%s", rank > 0 ? ", " : "");
+    }
+
+    for (int i = 0; i < rank; i++) {
+        const char *symbol = shape_symbol(OUT_FIELDS[id].row, i);
+
+        if (symbol) {
+            fprintf(out, "\"%s\"", symbol);
+        } else {
+            fprintf(out, "\"%zu\"", row.dim[i]);
+        }
+
+        if (i + 1 < rank) {
+            fputs(", ", out);
+        }
+    }
+
+    fputc(']', out);
+}
+
 /* Every attribute the output carries, as the objects of a JSON array. */
 static void dump_attributes(FILE *out)
 {
@@ -284,12 +315,18 @@ void out_dump_layout(FILE *out, const char *program, const out_manifest *manifes
                 "      \"row\": \"%s\",\n"
                 "      \"per_reference\": %s,\n"
                 "      \"rank\": %d,\n"
+                "      \"extents\": ",
+                field->name, shape_name(field->row),
+                field->per_ref ? "true" : "false", out_rank(id));
+
+        print_extents(out, id);
+
+        fprintf(out,
+                ",\n"
                 "      \"condition\": %s%s%s,\n"
                 "      \"type\": \"%s\",\n"
                 "      \"absent\": \"%s\",\n"
                 "      \"detail\": ",
-                field->name, shape_name(field->row),
-                field->per_ref ? "true" : "false", out_rank(id),
                 needs ? "\"" : "", needs ? needs : "null", needs ? "\"" : "",
                 stored_name(field->stored), absent_name(field->absent));
 
