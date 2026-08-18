@@ -474,11 +474,11 @@ static unsigned char *stage_row(const chunkfield *f, chunk_stage *s, int32_t tid
 
 /* Narrows accumulated doubles to the type the field is stored as, which the datatype
  * conversion in H5Dwrite would otherwise do on the writing thread. */
-static void narrow(unsigned char *dst, out_stored stored, const double *src, size_t n)
+static void narrow(void *dst, out_stored stored, const double *src, size_t n)
 {
     switch (stored) {
         case OUT_F32: {
-            float *to = (float *)(void *)dst;
+            float *to = dst;
 
             for (size_t i = 0; i < n; i++) {
                 to[i] = (float)src[i];
@@ -486,7 +486,7 @@ static void narrow(unsigned char *dst, out_stored stored, const double *src, siz
             return;
         }
         case OUT_U64: {
-            uint64_t *to = (uint64_t *)(void *)dst;
+            uint64_t *to = dst;
 
             for (size_t i = 0; i < n; i++) {
                 to[i] = (uint64_t)src[i];
@@ -501,15 +501,14 @@ static void narrow(unsigned char *dst, out_stored stored, const double *src, siz
 /* Marks the columns past the reference, as write_part does with the padding row. An
  * unsigned field has no NaN to mark with, and none needs it: every such row spans its
  * full width whatever its reference measures. */
-static void mark_tail(unsigned char *row, out_stored stored, size_t from, size_t width)
+static void mark_tail(void *row, out_stored stored, size_t from, size_t width)
 {
-    float *to;
+    float *to = row;
 
     if (stored != OUT_F32) {
         return;
     }
 
-    to = (float *)(void *)row;
     for (size_t i = from; i < width; i++) {
         to[i] = (float)NAN;
     }
