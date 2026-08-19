@@ -57,7 +57,7 @@ struct h5writer {
     hid_t   memspace;   /* one row of the widest field, selected down to size */
     int32_t n_refs;
     size_t  ref_cap;
-    double *padding;    /* NaN, as wide as the longest tail a row can have */
+    double *padding;    /* NaN, as wide as the most a row can need */
     const bool *wanted; /* the optional fields this run writes; NULL for all of them */
 
     chunkfield gathered[OUT_N_FIELDS];
@@ -498,10 +498,10 @@ static void narrow(void *dst, out_stored stored, const double *src, size_t n)
     }
 }
 
-/* Marks the columns past the reference, as write_part does with the padding row. An
- * unsigned field has no NaN to mark with, and none needs it: every such row spans its
+/* Pads a staged row, as write_part does with the padding row for a row written directly.
+ * An unsigned field has no NaN to pad with, and none needs it: every such row spans its
  * full width whatever its reference measures. */
-static void mark_tail(void *row, out_stored stored, size_t from, size_t width)
+static void pad_row(void *row, out_stored stored, size_t from, size_t width)
 {
     float *to = row;
 
@@ -519,21 +519,18 @@ static int64_t gathered_chunk(const chunkfield *f, int32_t tid)
     return (int64_t)tid / (int64_t)f->rows;
 }
 
-/* Copies one reference's span of a gathered field into its chunk, tail marked. */
+/* Copies one reference's span of a gathered field into its chunk. */
 static int gather_span(h5writer *w, out_field_id id, int32_t tid, size_t held,
                        const double *values)
 {
-    chunkfield  *f     = &w->gathered[id];
-    chunk_stage *s     = stage_for(f, id, gathered_chunk(f, tid));
-    unsigned char *row;
+    chunkfield  *f = &w->gathered[id];
+    chunk_stage *s = stage_for(f, id, gathered_chunk(f, tid));
 
     if (!s) {
         return fail(w, "out of memory gathering an output chunk");
     }
 
-    row = stage_row(f, s, tid);
-    narrow(row, OUT_FIELDS[id].stored, values, held);
-    mark_tail(row, OUT_FIELDS[id].stored, held, f->width);
+    narrow(stage_row(f, s, tid), OUT_FIELDS[id].stored, values, held);
     return 0;
 }
 
@@ -865,17 +862,10 @@ static int write_part(h5writer *w, out_field_id id, int32_t tid, size_t from,
     return status < 0 ? fail(w, "unable to write an output row") : 0;
 }
 
-/* Writes one field's row: the reference's own values, then the mark for the columns
- * past them.
- *
- * The tail is written with the row. The two share a chunk, so marking it now writes to
- * a chunk already open, and returning to it later would mean inflating and deflating
- * that chunk again. A reference as long as the longest has no tail. */
 int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
                    const double *values)
 {
-    size_t held  = out_values(id, len, w->ref_cap);
-    size_t width = out_values(id, w->ref_cap, w->ref_cap);
+    size_t held = out_values(id, len, w->ref_cap);
 
     if (tid < 0 || tid >= w->n_refs) {
         return fail(w, "reference index outside the output");
@@ -885,11 +875,31 @@ int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
         return gather_span(w, id, tid, held, values);
     }
 
-    if (write_part(w, id, tid, 0, held, values) < 0) {
-        return -1;
+    return write_part(w, id, tid, 0, held, values);
+}
+
+int h5writer_pad(h5writer *w, out_field_id id, int32_t tid, size_t len)
+{
+    size_t held  = out_values(id, len, w->ref_cap);
+    size_t width = out_values(id, w->ref_cap, w->ref_cap);
+
+    if (tid < 0 || tid >= w->n_refs) {
+        return fail(w, "reference index outside the output");
     }
 
     if (held == width) {
+        return 0;
+    }
+
+    if (gathers(w, id)) {
+        chunkfield  *f = &w->gathered[id];
+        chunk_stage *s = stage_for(f, id, gathered_chunk(f, tid));
+
+        if (!s) {
+            return fail(w, "out of memory gathering an output chunk");
+        }
+
+        pad_row(stage_row(f, s, tid), OUT_FIELDS[id].stored, held, f->width);
         return 0;
     }
 

@@ -28,6 +28,7 @@ typedef struct refctx {
     char           *seq;   /* owned; the FASTA reader's buffer does not persist */
     size_t          len;
     accum           acc;
+    bool            accumulated;  /* whether any read reached it; guarded by lock */
     pairs           pr;    /* co-modification; held only under --pairwise */
     atomic_int      handles;
     pthread_mutex_t lock;  /* guards acc and pr */
@@ -50,6 +51,10 @@ void refctx_add_scalar(refctx *ctx, accum_field_id id, double value);
 
 /* Presents the reference sequence in the form the processing step expects. */
 void refctx_sequence(const refctx *ctx, cm_fasta_record *out);
+
+/* Whether any read reached a reference, which is whether its accumulator holds anything
+ * but zero. Read once the last handle is dropped, which orders it after every merge. */
+bool refctx_accumulated(const refctx *ctx);
 
 /* A fixed set of contexts. Its size caps how many references may be in flight, bounding
  * memory independently of how many references the file declares.

@@ -382,15 +382,6 @@ static refctx *pipeline_open_reference(const pipeline *p, int32_t tid)
     return ctx;
 }
 
-/* Returns whether the reference matches what every header declares for it. Takes no
- * context and writes no row. Every reference is checked, whether or not a read arrived on
- * it and whether or not its row needs writing: the FASTA must hold the sequences the
- * alignments were made against. */
-static bool pipeline_check_reference(const pipeline *p, int32_t tid)
-{
-    return refseq_advance(p->refs, tid) != NULL;
-}
-
 /* Opens and closes a reference the reader passed over, so that its row is written unread.
  * A reference that received nothing is zero everywhere, which is what the accumulator a
  * pooled context carries already holds. */
@@ -409,6 +400,15 @@ static bool loader_emit_empty(loader *l, int32_t tid)
     return true;
 }
 
+/* Returns whether the reference matches what every header declares for it. Takes no
+ * context and writes no row. Every reference is checked, whether or not a read arrived on
+ * it and whether or not its row needs writing: the FASTA must hold the sequences the
+ * alignments were made against. */
+static bool pipeline_check_reference(const pipeline *p, int32_t tid)
+{
+    return refseq_advance(p->refs, tid) != NULL;
+}
+
 /* Takes every reference the reader has passed since the last one it stopped at. Each is
  * checked against the headers, and one whose row the output needs is opened as well, which
  * writes it. */
@@ -417,8 +417,8 @@ static bool loader_account_through(loader *l, int32_t upto)
     const pipeline *p = l->pipe;
 
     while (l->owed < upto) {
-        int32_t tid  = l->owed++;
-        size_t  len  = (size_t)cm_bam_stream_reflen(p->bam, tid);
+        int32_t tid = l->owed++;
+        size_t  len = (size_t)cm_bam_stream_reflen(p->bam, tid);
 
         if (out_row_needed(len, p->ref_cap, p->wanted)) {
             if (!loader_emit_empty(l, tid)) {
@@ -647,16 +647,24 @@ static void consumer_send_settled(consumer *c)
     }
 }
 
+/* Gives one reference its row. A reference no read arrived on hands over no accumulator,
+ * having accumulated nothing for a field to be derived from. */
+static int consumer_row(consumer *c, refctx *ctx)
+{
+    const accum *acc = refctx_accumulated(ctx) ? &ctx->acc : NULL;
+
+    return refrow_write(c->pipe->rows, ctx->tid, ctx->len, acc,
+                        ctx->pr.cells ? &ctx->pr : NULL);
+}
+
 /* Writes one reference's row and reports it to the writer. The report is made whatever
- * refrow_write did: a chunk settles only once every reference opened in it is accounted
+ * the write did: a chunk settles only once every reference opened in it is accounted
  * for. */
 static void consumer_write_reference(consumer *c, refctx *ctx)
 {
     /* Keep draining after a failure, or the loader and workers block on a queue
      * nothing is emptying. */
-    if (c->status == 0 &&
-        refrow_write(c->pipe->rows, ctx->tid, ctx->len, &ctx->acc,
-                     ctx->pr.cells ? &ctx->pr : NULL) < 0) {
+    if (c->status == 0 && consumer_row(c, ctx) < 0) {
         consumer_fail(c);
     }
 

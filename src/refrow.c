@@ -12,6 +12,7 @@
 struct refrow {
     h5writer   *out;      /* borrowed */
     rate_config rates;
+    size_t      ref_cap;  /* the longest reference in the run */
     double     *row;      /* scratch a derived field is computed into */
 };
 
@@ -25,9 +26,10 @@ refrow *refrow_create(h5writer *out, rate_config rates, size_t ref_cap,
         return NULL;
     }
 
-    r->out   = out;
-    r->rates = rates;
-    r->row   = calloc(widest ? widest : 1, sizeof *r->row);
+    r->out     = out;
+    r->rates   = rates;
+    r->ref_cap = ref_cap;
+    r->row     = calloc(widest ? widest : 1, sizeof *r->row);
 
     if (!r->row) {
         refrow_destroy(r);
@@ -66,14 +68,21 @@ static void pair_square(refrow *r, out_field_id id, const pairs *pr, size_t len)
     }
 }
 
-/* Gives one output field's values, computed into the scratch row where they are derived
- * and read in place where they are not, or NULL for a field with no row.
- * The accumulated fields and the written ones do not correspond one to one, so every
- * field is listed here and none is defaulted: one added without a source of its own
- * draws a warning and is refused at the write. */
+/* Gives one output field's values for this reference, computed into the scratch row where
+ * they are derived and read in place where they are not, or NULL where the reference has
+ * none of them.
+ *
+ * Every field is taken from the reads, so a reference none reached has no values at all.
+ * The accumulated fields and the written ones do not correspond one to one, so every field
+ * is listed below and none is defaulted: one added without a source of its own is caught
+ * by the switch. */
 static const double *values(refrow *r, out_field_id id, const accum *acc,
                             const pairs *pr, size_t len)
 {
+    if (!acc) {
+        return NULL;
+    }
+
     switch (id) {
         case OUT_COVERAGE:   return accum_const_data(acc, ACCUM_COVERAGE);
         case OUT_LENGTHS:    return accum_const_data(acc, ACCUM_LENGTHS);
@@ -102,10 +111,18 @@ static const double *values(refrow *r, out_field_id id, const accum *acc,
 }
 
 /* Whether a field's row spans more than one extent, and so is written as a block rather
- * than as a row with a tail to mark. */
+ * than as a row. */
 static bool is_block(out_field_id id, size_t len)
 {
     return shape_rank(OUT_FIELDS[id].row(len, len)) > 1;
+}
+
+static int write_values(refrow *r, out_field_id id, int32_t tid, size_t len,
+                        const double *row)
+{
+    return is_block(id, len)
+         ? h5writer_block(r->out, id, tid, len, row)
+         : h5writer_field(r->out, id, tid, len, row);
 }
 
 int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc,
@@ -124,13 +141,12 @@ int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc,
 
         row = values(r, id, acc, pr, len);
 
-        if (!row) {
+        if (row && write_values(r, id, tid, len, row) < 0) {
             return -1;
         }
 
-        if (is_block(id, len)
-            ? h5writer_block(r->out, id, tid, len, row) < 0
-            : h5writer_field(r->out, id, tid, len, row) < 0) {
+        if (out_padding_needed(id, len, r->ref_cap)
+            && h5writer_pad(r->out, id, tid, len) < 0) {
             return -1;
         }
     }

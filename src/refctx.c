@@ -35,9 +35,15 @@ bool refctx_release(refctx *ctx, int n)
 /* Contents                                                                  */
 /* ------------------------------------------------------------------------ */
 
+bool refctx_accumulated(const refctx *ctx)
+{
+    return ctx->accumulated;
+}
+
 void refctx_merge(refctx *ctx, const accum *src, const pairs *src_pairs)
 {
     pthread_mutex_lock(&ctx->lock);
+    ctx->accumulated = true;
     accum_add(&ctx->acc, src, ctx->len);
 
     if (src_pairs) {
@@ -50,6 +56,7 @@ void refctx_merge(refctx *ctx, const accum *src, const pairs *src_pairs)
 void refctx_add_scalar(refctx *ctx, accum_field_id id, double value)
 {
     pthread_mutex_lock(&ctx->lock);
+    ctx->accumulated = true;
     *accum_data(&ctx->acc, id) += value;
     pthread_mutex_unlock(&ctx->lock);
 }
@@ -201,6 +208,7 @@ void ctxpool_give(ctxpool *p, refctx *ctx)
         pairs_zero(&ctx->pr, ctx->len);
     }
 
+    ctx->accumulated = false;
     ctx->len = 0;
     queue_push_all(p->available, &slot, 1);
 }

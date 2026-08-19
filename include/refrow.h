@@ -25,6 +25,11 @@ refrow *refrow_create(h5writer *out, rate_config rates, size_t ref_cap,
                       const bool *wanted);
 void    refrow_destroy(refrow *r);
 
-/* Writes every field of one reference's row. Values past len are left at the fill value. */
+/* Writes one reference's row: for every field, its values where the reference has any,
+ * and the region outside the reference where the field's fill does not already read as
+ * outside it. Anything else keeps the fill.
+ *
+ * acc is NULL for a reference no read arrived on, which has no accumulated values and so
+ * writes only what lies outside itself. */
 int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc,
                  const pairs *pr);

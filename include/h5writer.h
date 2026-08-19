@@ -98,13 +98,17 @@ int h5writer_block(h5writer *w, out_field_id id, int32_t tid, size_t len,
 void      h5writer_close(h5writer *w);
 
 /* Writes one field's values for a reference of len bases, narrowing the accumulated doubles
- * to the field's stored type. Columns past the values that reference occupies are marked
- * as not part of it.
+ * to the field's stored type, and nothing besides: the columns past them are
+ * h5writer_pad's.
  *
- * Pass ref_cap as len to write a full-width row, at which every field occupies its full
- * width and none has a tail to mark. */
+ * Pass ref_cap as len to write a full-width row. */
 int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
                    const double *values);
+
+/* Pads one field's row past a reference of len bases, marking those columns as outside it
+ * and writing none of its values. Does nothing for a reference as long as the longest,
+ * whose row has no room for padding. */
+int h5writer_pad(h5writer *w, out_field_id id, int32_t tid, size_t len);
 
 /* Writes one field's whole row for a reference, in the type the field is stored as. values
  * must hold out_values(id, ref_cap, ref_cap) of that type, every column being written. */
