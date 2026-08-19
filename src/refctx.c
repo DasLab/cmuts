@@ -198,17 +198,22 @@ refctx *ctxpool_take(ctxpool *p)
     return queue_pop(p->available, &slot, 1) == 1 ? slot : NULL;
 }
 
+/* A pooled context always has a zeroed accumulator, so one that never accumulated is
+ * already as the pool requires and is returned untouched. */
 void ctxpool_give(ctxpool *p, refctx *ctx)
 {
     void *slot = ctx;
 
-    accum_zero(&ctx->acc, ctx->len);
+    if (ctx->accumulated) {
+        accum_zero(&ctx->acc, ctx->len);
 
-    if (ctx->pr.cells) {
-        pairs_zero(&ctx->pr, ctx->len);
+        if (ctx->pr.cells) {
+            pairs_zero(&ctx->pr, ctx->len);
+        }
+
+        ctx->accumulated = false;
     }
 
-    ctx->accumulated = false;
     ctx->len = 0;
     queue_push_all(p->available, &slot, 1);
 }
