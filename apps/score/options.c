@@ -20,20 +20,13 @@ static const cli_option OPTIONS[] = {
     },
     {
         .group   = "Input",
-        .name    = "structures",
-        .key     = 's',
-        .type    = OPT_STRING,
-        .offset  = offsetof(score_args, score.structures_path),
-        .metavar = "FILE",
-        .help    = "dot bracket records, matched to the references by name",
-    },
-    {
-        .group   = "Input",
-        .name    = "structure",
-        .type    = OPT_STRING,
-        .offset  = offsetof(score_args, score.structure),
-        .metavar = "DOTBRACKET",
-        .help    = "one structure given in place of a file; needs --reference",
+        .name     = "structures",
+        .key      = 's',
+        .type     = OPT_STRING,
+        .offset   = offsetof(score_args, score.structures_path),
+        .metavar  = "FILE",
+        .help     = "dot bracket records, matched to the references by name",
+        .required = true,
     },
 
     {

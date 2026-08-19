@@ -30,10 +30,12 @@ GGCAUUAAGCCU
 
 A bracket marks a paired base and a dot an unpaired one. Any other character, such as a dash, marks a base the structure does not resolve, and it is left out of the scoring.
 
-One structure can be given in place of a file, which needs the reference it belongs to.
+A record that carries its sequence is checked against the reference, and the run stops at the first base where the two differ. U and T read as one another, so a structure written as RNA matches a reference written as DNA.
+
+`--reference` scores one reference out of the file and leaves the rest.
 
 ```sh
-cmuts score -f ref.fasta -r rool120 --structure '((((....))))...' reactivity.h5
+cmuts score -f ref.fasta -s structures.db -r rool120 reactivity.h5
 ```
 
 ## What is Scored
@@ -83,8 +85,7 @@ Each row covers one reference alone. Reactivity carries the depth and the scale 
 | Option | Description |
 | --- | --- |
 | `-f, --fasta FASTA` | the references the input was counted against, which name its rows (required) |
-| `-s, --structures FILE` | dot bracket records, matched to the references by name |
-| `--structure DOTBRACKET` | one structure given in place of a file; needs --reference |
+| `-s, --structures FILE` | dot bracket records, matched to the references by name (required) |
 
 ### Scoring
 
