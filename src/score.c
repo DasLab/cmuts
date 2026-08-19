@@ -30,6 +30,11 @@
 #define BRACKETS "()[]{}<>"
 #define UNPAIRED '.'
 
+/* The longest line a record may hold, which bounds the longest structure that can be
+ * read, and the longest name kept from a header. */
+#define LINE_MAX_LEN 4096
+#define NAME_MAX_LEN 256
+
 /* ------------------------------------------------------------------------ */
 /* The structures                                                            */
 /* ------------------------------------------------------------------------ */
@@ -89,17 +94,23 @@ static int structures_grow(structures *set)
     return 0;
 }
 
-/* Returns whether the line is a pairing and not a sequence. A sequence never carries a
- * bracket or a dot, so one character decides it. */
+/* Returns whether the line is a pairing and not a sequence. Every character of a
+ * pairing is a bracket, a dot or a gap, and a sequence carries none of them. */
 static bool is_pairing(const char *line)
 {
-    return line[strspn(line, BRACKETS ".-")] == '\0' && *line != '\0';
+    size_t len = strlen(line);
+
+    return len > 0 && strspn(line, BRACKETS ".-") == len;
 }
 
 /* Cuts the line at its first line ending. */
 static void trim(char *line)
 {
-    line[strcspn(line, "\r\n")] = '\0';
+    char *end = strpbrk(line, "\r\n");
+
+    if (end) {
+        *end = '\0';
+    }
 }
 
 /* Keeps one record, copying it, since the lines it came from are reused. */
@@ -132,10 +143,10 @@ static int structures_add(structures *set, const char *name, const char *pairing
 static int structures_read(structures *set, const char *path, char *error,
                            size_t error_len)
 {
-    char  line[4096];
-    char  name[256] = { 0 };
-    FILE *file      = fopen(path, "r");
-    int   number    = 0;
+    char  line[LINE_MAX_LEN];
+    char  name[NAME_MAX_LEN] = { 0 };
+    FILE *file               = fopen(path, "r");
+    int   number             = 0;
 
     if (!file) {
         snprintf(error, error_len, "%s: cannot be opened", path);
@@ -144,6 +155,13 @@ static int structures_read(structures *set, const char *path, char *error,
 
     while (fgets(line, sizeof line, file)) {
         number++;
+
+        if (!strchr(line, '\n') && !feof(file)) {
+            snprintf(error, error_len, "%s:%d: the line is too long", path, number);
+            fclose(file);
+            return -1;
+        }
+
         trim(line);
 
         if (line[0] == '>') {
@@ -521,9 +539,17 @@ int score_run(const score_config *cfg, char *error, size_t error_len)
 
     ctx.reader = h5reader_open(cfg->input_path);
 
-    if (!ctx.reader || h5reader_error(ctx.reader)) {
+    if (!ctx.reader) {
         structures_free(&set);
-        return h5reader_fail(ctx.reader, cfg->input_path, error, error_len);
+        snprintf(error, error_len, "out of memory");
+        return -1;
+    }
+
+    if (h5reader_error(ctx.reader)) {
+        status = h5reader_fail(ctx.reader, cfg->input_path, error, error_len);
+        h5reader_close(ctx.reader);
+        structures_free(&set);
+        return status;
     }
 
     if (allocate(&ctx, h5reader_capacity(ctx.reader), error, error_len) < 0) {
