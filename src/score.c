@@ -502,7 +502,7 @@ static int score_all(context *ctx, const structures *set, char *error, size_t er
             return -1;
         }
 
-        if (!known || (ctx->cfg->reference && strcmp(ctx->cfg->reference, ref.name) != 0)) {
+        if (!known) {
             tid++;
             continue;
         }

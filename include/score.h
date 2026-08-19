@@ -11,7 +11,6 @@ typedef struct {
     const char *input_path;       /* the output being scored */
     const char *fasta_path;       /* names the rows, in the order they were written */
     const char *structures_path;  /* dot bracket records, matched by name */
-    const char *reference;        /* one reference to score; NULL scores every one */
     const char *bases;            /* the bases a reagent reports on; NULL takes all */
     double      min_coverage;     /* reads a position needs before it is scored */
 } score_config;

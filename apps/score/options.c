@@ -15,7 +15,7 @@ static const cli_option OPTIONS[] = {
         .type     = OPT_STRING,
         .offset   = offsetof(score_args, score.fasta_path),
         .metavar  = "FASTA",
-        .help     = "the references the input was counted against, which name its rows",
+        .help     = "the references the input was counted against, in the order of its rows",
         .required = true,
     },
     {
@@ -31,22 +31,12 @@ static const cli_option OPTIONS[] = {
 
     {
         .group       = "Scoring",
-        .name        = "reference",
-        .key         = 'r',
-        .type        = OPT_STRING,
-        .offset      = offsetof(score_args, score.reference),
-        .metavar     = "NAME",
-        .help        = "score this reference alone",
-        .unset_label = "every reference a structure is held for",
-    },
-    {
-        .group       = "Scoring",
         .name        = "bases",
         .key         = 'b',
         .type        = OPT_STRING,
         .offset      = offsetof(score_args, score.bases),
         .metavar     = "BASES",
-        .help        = "score only these bases, as the reagent reports on them",
+        .help        = "score only the bases the reagent modifies",
         .unset_label = "every base",
     },
     {

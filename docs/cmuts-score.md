@@ -2,23 +2,23 @@
 
 ## Purpose
 
-Measure a set of reactivities against a structure that is already known.
+Measure reactivities against a known structure.
 
 ## Requires
 
 - A cmuts-compatible HDF5 file of reactivities
-- The FASTA the file was counted against
+- The FASTA that the file was counted against
 - The pairing of one or more of its references, as dot bracket records
 
 ## Usage
 
-An output file holds no reference names, and its rows follow the FASTA that produced it, so the same FASTA names them here. Each reference a structure is held for is written as one row of a table.
+An output file stores no reference names. Its rows are in the order of the FASTA that produced it, so `cmuts score` takes the names and the sequences from that FASTA. Each reference with a structure gives one row of the output table.
 
 ```sh
 cmuts score -f ref.fasta -s structures.db reactivity.h5
 ```
 
-The structures are read from a file of dot bracket records, matched to the references by name. A record may carry its sequence, which is checked against the reference.
+The structures file holds dot bracket records. Each record is matched to a reference by name. A record can also hold the sequence.
 
 ```
 >rool120
@@ -28,27 +28,23 @@ GGCAUUAAGCCU
 ((((....))))
 ```
 
-A bracket marks a paired base and a dot an unpaired one. Any other character, such as a dash, marks a base the structure does not resolve, and it is left out of the scoring.
+A bracket marks a paired base, and a dot marks an unpaired base. Any other character, such as a dash, marks a base that the structure does not resolve. Those positions are not scored.
 
-A record that carries its sequence is checked against the reference, and the run stops at the first base where the two differ. U and T read as one another, so a structure written as RNA matches a reference written as DNA.
+If a record holds a sequence, it is compared with the reference, and the run stops at the first base that differs. U and T are equivalent in this comparison, so an RNA structure matches a DNA reference.
 
-`--reference` scores one reference out of the file and leaves the rest.
-
-```sh
-cmuts score -f ref.fasta -s structures.db -r rool120 reactivity.h5
-```
+The file does not have to cover the whole library. A reference without a record is skipped, and a record whose name is not in the library is ignored. The rows are in the order of the FASTA, whatever order the records are in.
 
 ## What is Scored
 
-A reagent reports only on the bases it reacts with, so `--bases` restricts the scoring to them. DMS reads adenine and cytosine, and a SHAPE reagent reads all four.
+Each reagent modifies only some bases, so `--bases` limits the scoring to those bases. DMS modifies adenine and cytosine. A SHAPE reagent modifies all four bases.
 
 ```sh
 cmuts score -f ref.fasta -s structures.db -b AC dms.h5
 ```
 
-`--min-coverage` leaves out the positions too few reads cover to say anything about.
+`--min-coverage` removes the positions that too few reads cover.
 
-Score a treated sample against its untreated control, not a raw count: `cmuts sub` takes the background off first, and what remains is the signal the treatment added.
+Score a treated sample against its untreated control, and not a raw count. `cmuts sub` removes the background first, and the result is the signal that the treatment added.
 
 ```sh
 cmuts sub -o subtracted.h5 treated.h5 untreated.h5
@@ -57,19 +53,19 @@ cmuts score -f ref.fasta -s structures.db subtracted.h5
 
 ## Output
 
-One row per reference, as a tab separated table on standard output. A reference whose scored positions are all paired or all unpaired is left out, since a ranking needs both.
+One row for each reference, as a tab separated table on standard output. A reference is not scored if all of its scored positions are paired, or if all of them are unpaired, because a ranking needs both classes.
 
 | Column | Meaning |
 | --- | --- |
-| `reference` | the name the FASTA gives it |
-| `paired` | scored positions the structure pairs |
-| `unpaired` | scored positions the structure leaves open |
-| `auroc` | the chance a reactivity ranks an unpaired base above a paired one |
-| `auprc` | average precision, taking the unpaired bases as what is sought |
+| `reference` | the name in the FASTA |
+| `paired` | scored positions that the structure pairs |
+| `unpaired` | scored positions that the structure leaves unpaired |
+| `auroc` | the chance that an unpaired base has a higher reactivity than a paired base |
+| `auprc` | average precision, with the unpaired bases as the positive class |
 | `mean_paired` | mean reactivity of the paired positions |
 | `mean_unpaired` | mean reactivity of the unpaired positions |
 
-Each row covers one reference alone. Reactivity carries the depth and the scale of the sample it came from, so values from two references do not compare, and neither do their rows. Average the rows or resample over them downstream, as the question needs.
+Each row covers one reference. The reactivity of a position depends on the read depth and the scale of its sample, so values from two references are not comparable. Average the rows, or resample over them, in a later step.
 
 ## CLI Options
 
@@ -84,15 +80,14 @@ Each row covers one reference alone. Reactivity carries the depth and the scale 
 
 | Option | Description |
 | --- | --- |
-| `-f, --fasta FASTA` | the references the input was counted against, which name its rows (required) |
+| `-f, --fasta FASTA` | the references the input was counted against, in the order of its rows (required) |
 | `-s, --structures FILE` | dot bracket records, matched to the references by name (required) |
 
 ### Scoring
 
 | Option | Description |
 | --- | --- |
-| `-r, --reference NAME` | score this reference alone (default: every reference a structure is held for) |
-| `-b, --bases BASES` | score only these bases, as the reagent reports on them (default: every base) |
+| `-b, --bases BASES` | score only the bases the reagent modifies (default: every base) |
 | `--min-coverage D` | reads a position needs before it is scored (default 0) |
 
 ### Information
