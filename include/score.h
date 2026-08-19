@@ -6,6 +6,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdio.h>
 
 /* The bases a reagent modifies, as the set of them. T and U name one base, so a structure
  * written as RNA and a reference written as DNA give the same bit. */
@@ -26,6 +27,7 @@ typedef struct {
     double      min_coverage;     /* reads a position needs before it is scored */
 } score_config;
 
-/* Writes one row per reference, as comma separated values. Returns 0, or -1 with a
- * description in error. */
-int score_run(const score_config *cfg, char *error, size_t error_len);
+/* Writes one row per reference to out, as comma separated values, and a note on stderr
+ * for each structure that cannot be scored. Returns 0, or -1 with a description in
+ * error. */
+int score_run(const score_config *cfg, FILE *out, char *error, size_t error_len);

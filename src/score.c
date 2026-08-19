@@ -13,9 +13,9 @@
 
 #include "score.h"
 
-#include <ctype.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +23,7 @@
 #include "error.h"
 #include "fasta.h"
 #include "h5reader.h"
+#include "nuc.h"
 #include "output.h"
 
 /* What a dot bracket record may hold. A base is paired under any bracket, open under a
@@ -34,6 +35,9 @@
  * read, and the longest name kept from a header. */
 #define LINE_MAX_LEN 4096
 #define NAME_MAX_LEN 256
+
+/* Structures the set holds before it first grows. */
+#define STRUCTURES_INITIAL_CAPACITY 64
 
 /* ------------------------------------------------------------------------ */
 /* The structures                                                            */
@@ -81,7 +85,7 @@ static const structure *structure_named(const structures *set, const char *name)
 
 static int structures_grow(structures *set)
 {
-    size_t     cap = set->cap ? set->cap * 2 : 64;
+    size_t     cap = set->cap ? set->cap * 2 : STRUCTURES_INITIAL_CAPACITY;
     structure *at  = realloc(set->at, cap * sizeof *at);
 
     if (!at) {
@@ -320,6 +324,7 @@ static result measure(point *at, size_t n, size_t unpaired)
 /* Everything one run works from. */
 typedef struct {
     const score_config *cfg;
+    FILE               *out;
     h5reader           *reader;
     float              *reactivity;
     float              *coverage;
@@ -331,13 +336,12 @@ typedef struct {
  * as an ambiguous one. T and U give the same bit. */
 static int bit_of(char base)
 {
-    switch (toupper((unsigned char)base)) {
-        case 'A': return SCORE_BASE_A;
-        case 'C': return SCORE_BASE_C;
-        case 'G': return SCORE_BASE_G;
-        case 'T':
-        case 'U': return SCORE_BASE_U;
-        default:  return 0;
+    switch (nuc_from_char(base)) {
+        case NUC_A: return SCORE_BASE_A;
+        case NUC_C: return SCORE_BASE_C;
+        case NUC_G: return SCORE_BASE_G;
+        case NUC_T: return SCORE_BASE_U;
+        default:    return 0;
     }
 }
 
@@ -356,7 +360,8 @@ static size_t collect(context *ctx, const cm_fasta_record *ref,
 
     *unpaired = 0;
 
-    for (size_t i = 0; i < ref->len && i < known->len; i++) {
+    /* the structure and the reference are the same length, which score_all checks */
+    for (size_t i = 0; i < ref->len; i++) {
         char   mark  = known->pairing[i];
         bool   open  = mark == UNPAIRED;
         double value = (double)ctx->reactivity[i];
@@ -393,21 +398,28 @@ static int read_row(context *ctx, int32_t tid, char *error, size_t error_len)
     return 0;
 }
 
-/* Writes one reference's row, with the header before the first of them, so that a run
- * scoring nothing writes nothing. */
-static void print_result(const char *name, const result *r, size_t written)
+/* Names the columns. Written before the first row, so that a run scoring nothing
+ * writes nothing. */
+static void print_header(FILE *out)
 {
-    if (written == 0) {
-        printf("reference,paired,unpaired,auroc,auprc,mean_paired,mean_unpaired\n");
-    }
+    fprintf(out, "reference,paired,unpaired,auroc,auprc,mean_paired,mean_unpaired\n");
+}
 
-    printf("%s,%zu,%zu,%.5f,%.5f,%.6g,%.6g\n", name, r->paired, r->unpaired,
-           r->auroc, r->auprc, r->mean_paired, r->mean_unpaired);
+static void print_result(FILE *out, const char *name, const result *r)
+{
+    fprintf(out, "%s,%zu,%zu,%.5f,%.5f,%.6g,%.6g\n", name, r->paired, r->unpaired,
+            r->auroc, r->auprc, r->mean_paired, r->mean_unpaired);
 }
 
 /* ------------------------------------------------------------------------ */
 /* The run                                                                   */
 /* ------------------------------------------------------------------------ */
+
+static int fail_memory(char *error, size_t error_len)
+{
+    snprintf(error, error_len, "out of memory");
+    return -1;
+}
 
 static int allocate(context *ctx, size_t cap, char *error, size_t error_len)
 {
@@ -417,8 +429,7 @@ static int allocate(context *ctx, size_t cap, char *error, size_t error_len)
     ctx->points     = malloc(cap * sizeof *ctx->points);
 
     if (!ctx->reactivity || !ctx->coverage || !ctx->points) {
-        snprintf(error, error_len, "out of memory");
-        return -1;
+        return fail_memory(error, error_len);
     }
 
     return 0;
@@ -431,6 +442,25 @@ static void release(context *ctx)
     free(ctx->points);
 }
 
+/* Refuses a run that scored nothing, naming the lengths where they are the cause. */
+static int check_scored(size_t scored, size_t skipped, char *error, size_t error_len)
+{
+    if (scored > 0) {
+        return 0;
+    }
+
+    if (skipped > 0) {
+        snprintf(error, error_len,
+                 "no reference could be scored; %zu structures are the wrong length",
+                 skipped);
+        return -1;
+    }
+
+    snprintf(error, error_len, "no reference could be scored");
+
+    return -1;
+}
+
 /* Walks the FASTA, scoring each reference that a structure is held for. */
 static int score_all(context *ctx, const structures *set, char *error, size_t error_len)
 {
@@ -440,6 +470,7 @@ static int score_all(context *ctx, const structures *set, char *error, size_t er
     size_t           scored  = 0;
     size_t           skipped = 0;   /* structures whose length is not the reference's */
     int32_t          tid     = 0;
+    int              status  = -1;
 
     if (!reader) {
         snprintf(error, error_len, "%s: %s", ctx->cfg->fasta_path, why);
@@ -456,8 +487,7 @@ static int score_all(context *ctx, const structures *set, char *error, size_t er
             snprintf(error, error_len, "%s holds %d references, fewer than %s",
                      ctx->cfg->input_path, h5reader_refs(ctx->reader),
                      ctx->cfg->fasta_path);
-            cm_fasta_close(reader);
-            return -1;
+            goto done;
         }
 
         if (!known) {
@@ -480,13 +510,11 @@ static int score_all(context *ctx, const structures *set, char *error, size_t er
         if (ref.len > ctx->cap) {
             snprintf(error, error_len, "%s is %zu long, wider than the rows of %s",
                      ref.name, ref.len, ctx->cfg->input_path);
-            cm_fasta_close(reader);
-            return -1;
+            goto done;
         }
 
         if (read_row(ctx, tid, error, error_len) < 0) {
-            cm_fasta_close(reader);
-            return -1;
+            goto done;
         }
 
         n = collect(ctx, &ref, known, &unpaired);
@@ -498,37 +526,32 @@ static int score_all(context *ctx, const structures *set, char *error, size_t er
         }
 
         one = measure(ctx->points, n, unpaired);
-        print_result(ref.name, &one, scored);
+
+        if (scored == 0) {
+            print_header(ctx->out);
+        }
+
+        print_result(ctx->out, ref.name, &one);
         scored++;
     }
 
     if (cm_fasta_error(reader)) {
         snprintf(error, error_len, "%s: %s", ctx->cfg->fasta_path,
                  cm_fasta_error(reader));
-        cm_fasta_close(reader);
-        return -1;
+        goto done;
     }
 
+    status = check_scored(scored, skipped, error, error_len);
+
+done:
     cm_fasta_close(reader);
 
-    if (scored == 0 && skipped > 0) {
-        snprintf(error, error_len,
-                 "no reference could be scored; %zu structures are the wrong length",
-                 skipped);
-        return -1;
-    }
-
-    if (scored == 0) {
-        snprintf(error, error_len, "no reference could be scored");
-        return -1;
-    }
-
-    return 0;
+    return status;
 }
 
-int score_run(const score_config *cfg, char *error, size_t error_len)
+int score_run(const score_config *cfg, FILE *out, char *error, size_t error_len)
 {
-    context    ctx = { .cfg = cfg };
+    context    ctx = { .cfg = cfg, .out = out };
     structures set = { 0 };
     int        status;
 
@@ -541,8 +564,7 @@ int score_run(const score_config *cfg, char *error, size_t error_len)
 
     if (!ctx.reader) {
         structures_free(&set);
-        snprintf(error, error_len, "out of memory");
-        return -1;
+        return fail_memory(error, error_len);
     }
 
     if (h5reader_error(ctx.reader)) {

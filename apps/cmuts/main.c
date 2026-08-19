@@ -26,13 +26,13 @@ typedef struct {
 /* In pipeline order, which is the order the help lists them in. align has no
  * entry point here and is dispatched by name. */
 static const subcommand SUBCOMMANDS[] = {
-    { ALIGN,  NULL,      "align reads to a reference and sort the resulting alignments" },
-    { "hmm",  hmm_main,  "count MaP-seq mutations via the pair-HMM" },
-    { "sub",  sub_main,  "subtract an untreated background from an output" },
-    { "div",  div_main,  "divide an output by a denatured control" },
-    { "norm", norm_main, "normalize reactivity values across experiments" },
+    { ALIGN,   NULL,       "align reads to a reference and sort the resulting alignments" },
+    { "hmm",   hmm_main,   "count MaP-seq mutations via the pair-HMM" },
+    { "sub",   sub_main,   "subtract an untreated background from an output" },
+    { "div",   div_main,   "divide an output by a denatured control" },
+    { "norm",  norm_main,  "normalize reactivity values across experiments" },
     { "score", score_main, "measure an output against a known structure" },
-    { "gen",  gen_main,  "generate alignments and the reference they came from" },
+    { "gen",   gen_main,   "generate alignments and the reference they came from" },
 };
 
 #define N_SUBCOMMANDS (sizeof SUBCOMMANDS / sizeof *SUBCOMMANDS)

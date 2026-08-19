@@ -29,7 +29,7 @@ static const cli_option OPTIONS[] = {
         .required = true,
     },
     {
-        .group   = "Input",
+        .group    = "Input",
         .name     = "structures",
         .key      = 's',
         .type     = OPT_STRING,
@@ -54,7 +54,7 @@ static const cli_option OPTIONS[] = {
         .name    = "min-coverage",
         .type    = OPT_DOUBLE,
         .offset  = offsetof(score_args, score.min_coverage),
-        .metavar = "D",
+        .metavar = "N",
         .help    = "reads a position needs before it is scored",
         .minimum = 0,
         .maximum = CLI_UNBOUNDED,

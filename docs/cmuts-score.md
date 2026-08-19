@@ -66,7 +66,7 @@ Each row covers one reference. The reactivity of a position depends on the read 
 | Option | Description |
 | --- | --- |
 | `-b, --bases BASES` | score only at these bases (A, C, G, U; default A,C,G,U) |
-| `--min-coverage D` | reads a position needs before it is scored (default 0) |
+| `--min-coverage N` | reads a position needs before it is scored (default 0) |
 
 ### Information
 

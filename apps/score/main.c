@@ -24,7 +24,7 @@ int score_main(int argc, char **argv)
         case CLI_OK:    break;
     }
 
-    if (score_run(&args.score, error, sizeof error) < 0) {
+    if (score_run(&args.score, stdout, error, sizeof error) < 0) {
         fprintf(stderr, "%s: %s\n", spec.program, error);
         return 1;
     }
