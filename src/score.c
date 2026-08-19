@@ -1,0 +1,543 @@
+/* score.c -- reactivity measured against a known structure.
+ *
+ * A reagent reports on the bases a structure leaves open, so a reactivity should rank an
+ * unpaired base above a paired one. Every metric here measures how well it does that,
+ * within one reference: reactivity carries the depth and the scale of the sample it came
+ * from, so values from two references do not compare.
+ *
+ * The HDF5 file holds no names. Its rows follow the FASTA that produced it, so the FASTA
+ * names them and gives the sequence each is scored on.
+ *
+ * Author: Hamish M. Blair <hmblair@stanford.edu>
+ */
+
+#include "score.h"
+
+#include <ctype.h>
+#include <math.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "error.h"
+#include "fasta.h"
+#include "h5reader.h"
+#include "output.h"
+
+/* What a dot bracket record may hold. A base is paired under any bracket, open under a
+ * dot, and unknown under anything else, which is left out of the scoring. */
+#define BRACKETS "()[]{}<>"
+#define UNPAIRED '.'
+
+/* ------------------------------------------------------------------------ */
+/* The structures                                                            */
+/* ------------------------------------------------------------------------ */
+
+/* One reference's structure. The name and the pairing own their memory. */
+typedef struct {
+    char  *name;
+    char  *pairing;
+    size_t len;
+} structure;
+
+/* Every structure read, sorted by name so that a reference is found by search. */
+typedef struct {
+    structure *at;
+    size_t     n;
+    size_t     cap;
+} structures;
+
+static void structures_free(structures *set)
+{
+    for (size_t i = 0; i < set->n; i++) {
+        free(set->at[i].name);
+        free(set->at[i].pairing);
+    }
+
+    free(set->at);
+}
+
+static int by_name(const void *a, const void *b)
+{
+    return strcmp(((const structure *)a)->name, ((const structure *)b)->name);
+}
+
+static const structure *structure_named(const structures *set, const char *name)
+{
+    /* bsearch takes a key of the element's type, so the name is copied into one. The
+     * copy is read from and never written through. */
+    structure key;
+
+    memcpy(&key.name, &name, sizeof key.name);
+
+    return bsearch(&key, set->at, set->n, sizeof *set->at, by_name);
+}
+
+static int structures_grow(structures *set)
+{
+    size_t     cap = set->cap ? set->cap * 2 : 64;
+    structure *at  = realloc(set->at, cap * sizeof *at);
+
+    if (!at) {
+        return -1;
+    }
+
+    set->at  = at;
+    set->cap = cap;
+
+    return 0;
+}
+
+/* Returns whether the line is a pairing and not a sequence. A sequence never carries a
+ * bracket or a dot, so one character decides it. */
+static bool is_pairing(const char *line)
+{
+    return line[strspn(line, BRACKETS ".-")] == '\0' && *line != '\0';
+}
+
+/* Cuts the line at its first line ending. */
+static void trim(char *line)
+{
+    line[strcspn(line, "\r\n")] = '\0';
+}
+
+/* Keeps one record. The name owns a copy, since the line it came from is reused. */
+static int structures_add(structures *set, const char *name, const char *pairing)
+{
+    if (set->n == set->cap && structures_grow(set) < 0) {
+        return -1;
+    }
+
+    set->at[set->n].name    = strdup(name);
+    set->at[set->n].pairing = strdup(pairing);
+    set->at[set->n].len     = strlen(pairing);
+
+    if (!set->at[set->n].name || !set->at[set->n].pairing) {
+        free(set->at[set->n].name);
+        free(set->at[set->n].pairing);
+        return -1;
+    }
+
+    set->n++;
+
+    return 0;
+}
+
+/* Reads a file of dot bracket records: a header naming the reference, then the pairing,
+ * with a sequence line before it where the file carries one. */
+static int structures_read(structures *set, const char *path, char *error,
+                           size_t error_len)
+{
+    char  line[4096];
+    char  name[256] = { 0 };
+    FILE *file      = fopen(path, "r");
+    int   number    = 0;
+
+    if (!file) {
+        snprintf(error, error_len, "%s: cannot be opened", path);
+        return -1;
+    }
+
+    while (fgets(line, sizeof line, file)) {
+        number++;
+        trim(line);
+
+        if (line[0] == '>') {
+            snprintf(name, sizeof name, "%s", line + 1 + strspn(line + 1, " \t"));
+            name[strcspn(name, " \t")] = '\0';
+            continue;
+        }
+
+        if (line[0] == '\0' || !is_pairing(line)) {
+            continue;
+        }
+
+        if (name[0] == '\0') {
+            snprintf(error, error_len, "%s:%d: a pairing before any name", path, number);
+            fclose(file);
+            return -1;
+        }
+
+        if (structures_add(set, name, line) < 0) {
+            snprintf(error, error_len, "%s: out of memory", path);
+            fclose(file);
+            return -1;
+        }
+
+        name[0] = '\0';
+    }
+
+    fclose(file);
+    qsort(set->at, set->n, sizeof *set->at, by_name);
+
+    return 0;
+}
+
+/* ------------------------------------------------------------------------ */
+/* The metrics                                                               */
+/* ------------------------------------------------------------------------ */
+
+/* One position kept for scoring. */
+typedef struct {
+    double value;
+    bool   open;   /* whether the structure leaves the base unpaired */
+} point;
+
+/* What one reference scored. */
+typedef struct {
+    size_t paired;
+    size_t unpaired;
+    double auroc;
+    double auprc;
+    double mean_paired;
+    double mean_unpaired;
+} result;
+
+static int by_value(const void *a, const void *b)
+{
+    double left  = ((const point *)a)->value;
+    double right = ((const point *)b)->value;
+
+    return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/* Returns the chance an unpaired base outranks a paired one, with ties counted as half.
+ * The points must be sorted by value. */
+static double auroc_of(const point *at, size_t n, size_t unpaired)
+{
+    double sum = 0.0;
+    size_t i   = 0;
+
+    while (i < n) {
+        size_t j = i;
+        double rank;
+        size_t open = 0;
+
+        while (j < n && at[j].value == at[i].value) {
+            open += at[j].open ? 1 : 0;
+            j++;
+        }
+
+        /* every tied value takes the middle of the ranks the run covers */
+        rank = ((double)i + 1.0 + (double)j) / 2.0;
+        sum += rank * (double)open;
+        i = j;
+    }
+
+    sum -= (double)unpaired * ((double)unpaired + 1.0) / 2.0;
+
+    return sum / ((double)unpaired * (double)(n - unpaired));
+}
+
+/* Returns the average precision, taking the unpaired bases as what is sought. The points
+ * must be sorted by value, so the walk runs from the highest reactivity down. */
+static double auprc_of(const point *at, size_t n, size_t unpaired)
+{
+    double found = 0.0;
+    double seen  = 0.0;
+    double sum   = 0.0;
+
+    for (size_t i = n; i-- > 0; ) {
+        seen += 1.0;
+
+        if (at[i].open) {
+            found += 1.0;
+            sum   += found / seen;
+        }
+    }
+
+    return sum / (double)unpaired;
+}
+
+static double mean_of(const point *at, size_t n, bool open)
+{
+    double sum   = 0.0;
+    size_t count = 0;
+
+    for (size_t i = 0; i < n; i++) {
+        if (at[i].open == open) {
+            sum += at[i].value;
+            count++;
+        }
+    }
+
+    return count ? sum / (double)count : (double)NAN;
+}
+
+/* Measures the points kept for one reference. Valid only where both classes are held. */
+static result measure(point *at, size_t n, size_t unpaired)
+{
+    qsort(at, n, sizeof *at, by_value);
+
+    return (result){
+        .paired        = n - unpaired,
+        .unpaired      = unpaired,
+        .auroc         = auroc_of(at, n, unpaired),
+        .auprc         = auprc_of(at, n, unpaired),
+        .mean_paired   = mean_of(at, n, false),
+        .mean_unpaired = mean_of(at, n, true),
+    };
+}
+
+/* ------------------------------------------------------------------------ */
+/* One reference                                                             */
+/* ------------------------------------------------------------------------ */
+
+/* Everything one run works from. */
+typedef struct {
+    const score_config *cfg;
+    h5reader           *reader;
+    bool                wanted[256];  /* the bases scored, by character */
+    float              *reactivity;
+    float              *coverage;
+    point              *points;
+    size_t              cap;
+} context;
+
+/* Returns whether the base at this position is scored, which the reagent decides. */
+static bool base_wanted(const context *ctx, char base)
+{
+    return ctx->wanted[(unsigned char)base];
+}
+
+/* Fills the points from one reference's row, and gives how many are unpaired. Returns the
+ * count kept. */
+static size_t collect(context *ctx, const cm_fasta_record *ref,
+                      const structure *known, size_t *unpaired)
+{
+    size_t n = 0;
+
+    *unpaired = 0;
+
+    for (size_t i = 0; i < ref->len && i < known->len; i++) {
+        char   mark  = known->pairing[i];
+        bool   open  = mark == UNPAIRED;
+        double value = (double)ctx->reactivity[i];
+
+        if (!open && !strchr(BRACKETS, mark)) {
+            continue;
+        }
+        if (!base_wanted(ctx, ref->seq[i]) || !isfinite(value)) {
+            continue;
+        }
+        if ((double)ctx->coverage[i] < ctx->cfg->min_coverage) {
+            continue;
+        }
+
+        ctx->points[n].value = value;
+        ctx->points[n].open  = open;
+        *unpaired += open ? 1 : 0;
+        n++;
+    }
+
+    return n;
+}
+
+/* Reads one reference's row into the context. */
+static int read_row(context *ctx, int32_t tid, char *error, size_t error_len)
+{
+    if (h5reader_field(ctx->reader, OUT_REACTIVITY, tid, ctx->reactivity) < 0
+        || h5reader_field(ctx->reader, OUT_COVERAGE, tid, ctx->coverage) < 0) {
+        snprintf(error, error_len, "%s: %s", ctx->cfg->input_path,
+                 h5reader_error(ctx->reader));
+        return -1;
+    }
+
+    return 0;
+}
+
+/* Writes one reference's row, with the header before the first of them, so that a run
+ * scoring nothing writes nothing. */
+static void print_result(const char *name, const result *r, size_t written)
+{
+    if (written == 0) {
+        printf("reference\tpaired\tunpaired\tauroc\tauprc\tmean_paired\tmean_unpaired\n");
+    }
+
+    printf("%s\t%zu\t%zu\t%.5f\t%.5f\t%.6g\t%.6g\n", name, r->paired, r->unpaired,
+           r->auroc, r->auprc, r->mean_paired, r->mean_unpaired);
+}
+
+/* ------------------------------------------------------------------------ */
+/* The run                                                                   */
+/* ------------------------------------------------------------------------ */
+
+/* Marks the bases a reagent reports on. An empty list takes every base. */
+static void want_bases(context *ctx, const char *bases)
+{
+    if (!bases || *bases == '\0') {
+        memset(ctx->wanted, 1, sizeof ctx->wanted);
+        return;
+    }
+
+    for (const char *at = bases; *at; at++) {
+        ctx->wanted[(unsigned char)*at]                  = true;
+        ctx->wanted[(unsigned char)tolower((int)*at)]    = true;
+        ctx->wanted[(unsigned char)toupper((int)*at)]    = true;
+    }
+
+    /* a reagent that reads A also reads it written as T or U */
+    if (ctx->wanted['T'] || ctx->wanted['U']) {
+        ctx->wanted['T'] = ctx->wanted['U'] = true;
+        ctx->wanted['t'] = ctx->wanted['u'] = true;
+    }
+}
+
+static int allocate(context *ctx, size_t cap, char *error, size_t error_len)
+{
+    ctx->cap        = cap;
+    ctx->reactivity = malloc(out_values(OUT_REACTIVITY, cap, cap) * sizeof *ctx->reactivity);
+    ctx->coverage   = malloc(out_values(OUT_COVERAGE, cap, cap) * sizeof *ctx->coverage);
+    ctx->points     = malloc(cap * sizeof *ctx->points);
+
+    if (!ctx->reactivity || !ctx->coverage || !ctx->points) {
+        snprintf(error, error_len, "out of memory");
+        return -1;
+    }
+
+    return 0;
+}
+
+static void release(context *ctx)
+{
+    free(ctx->reactivity);
+    free(ctx->coverage);
+    free(ctx->points);
+}
+
+/* Walks the FASTA, scoring each reference that a structure is held for. */
+static int score_all(context *ctx, const structures *set, char *error, size_t error_len)
+{
+    const char      *why    = NULL;
+    cm_fasta_reader *reader = cm_fasta_open(ctx->cfg->fasta_path, &why);
+    cm_fasta_record  ref;
+    size_t           scored = 0;
+    int32_t          tid    = 0;
+
+    if (!reader) {
+        snprintf(error, error_len, "%s: %s", ctx->cfg->fasta_path, why);
+        return -1;
+    }
+
+    while (cm_fasta_next(reader, &ref) == CM_ITER_OK) {
+        const structure *known = structure_named(set, ref.name);
+        size_t           unpaired;
+        size_t           n;
+        result           one;
+
+        if (tid >= h5reader_refs(ctx->reader)) {
+            snprintf(error, error_len, "%s holds %d references, fewer than %s",
+                     ctx->cfg->input_path, h5reader_refs(ctx->reader),
+                     ctx->cfg->fasta_path);
+            cm_fasta_close(reader);
+            return -1;
+        }
+
+        /* the rows are as wide as the longest reference the file was written for, so a
+         * longer one means this is not the FASTA it was counted against */
+        if (ref.len > ctx->cap) {
+            snprintf(error, error_len, "%s is %zu long, wider than the rows of %s",
+                     ref.name, ref.len, ctx->cfg->input_path);
+            cm_fasta_close(reader);
+            return -1;
+        }
+
+        if (!known || (ctx->cfg->reference && strcmp(ctx->cfg->reference, ref.name) != 0)) {
+            tid++;
+            continue;
+        }
+
+        if (read_row(ctx, tid, error, error_len) < 0) {
+            cm_fasta_close(reader);
+            return -1;
+        }
+
+        n = collect(ctx, &ref, known, &unpaired);
+        tid++;
+
+        /* a reference holding one class alone gives no ranking to measure */
+        if (unpaired == 0 || unpaired == n) {
+            continue;
+        }
+
+        one = measure(ctx->points, n, unpaired);
+        print_result(ref.name, &one, scored);
+        scored++;
+    }
+
+    if (cm_fasta_error(reader)) {
+        snprintf(error, error_len, "%s: %s", ctx->cfg->fasta_path,
+                 cm_fasta_error(reader));
+        cm_fasta_close(reader);
+        return -1;
+    }
+
+    cm_fasta_close(reader);
+
+    if (scored == 0) {
+        snprintf(error, error_len, "no reference could be scored");
+        return -1;
+    }
+
+    return 0;
+}
+
+/* Holds the structure given on the command line, so that one reference is scored without
+ * a file. */
+static int one_structure(structures *set, const score_config *cfg, char *error,
+                         size_t error_len)
+{
+    if (!cfg->reference) {
+        snprintf(error, error_len, "--structure needs --reference, to name what it is");
+        return -1;
+    }
+
+    if (structures_add(set, cfg->reference, cfg->structure) < 0) {
+        snprintf(error, error_len, "out of memory");
+        return -1;
+    }
+
+    return 0;
+}
+
+int score_run(const score_config *cfg, char *error, size_t error_len)
+{
+    context    ctx = { .cfg = cfg };
+    structures set = { 0 };
+    int        status;
+
+    if (!cfg->structures_path == !cfg->structure) {
+        snprintf(error, error_len, "give either a file of structures or --structure");
+        return -1;
+    }
+
+    status = cfg->structure ? one_structure(&set, cfg, error, error_len)
+                            : structures_read(&set, cfg->structures_path, error, error_len);
+
+    if (status < 0) {
+        structures_free(&set);
+        return -1;
+    }
+
+    ctx.reader = h5reader_open(cfg->input_path);
+
+    if (!ctx.reader || h5reader_error(ctx.reader)) {
+        structures_free(&set);
+        return h5reader_fail(ctx.reader, cfg->input_path, error, error_len);
+    }
+
+    want_bases(&ctx, cfg->bases);
+
+    if (allocate(&ctx, h5reader_capacity(ctx.reader), error, error_len) < 0) {
+        status = -1;
+    } else {
+        status = score_all(&ctx, &set, error, error_len);
+    }
+
+    release(&ctx);
+    h5reader_close(ctx.reader);
+    structures_free(&set);
+
+    return status;
+}

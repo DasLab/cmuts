@@ -31,6 +31,7 @@ static const subcommand SUBCOMMANDS[] = {
     { "sub",  sub_main,  "subtract an untreated background from an output" },
     { "div",  div_main,  "divide an output by a denatured control" },
     { "norm", norm_main, "normalize reactivity values across experiments" },
+    { "score", score_main, "measure an output against a known structure" },
     { "gen",  gen_main,  "generate alignments and the reference they came from" },
 };
 

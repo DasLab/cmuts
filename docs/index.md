@@ -52,6 +52,7 @@ cmuts-hmm
 cmuts-sub
 cmuts-div
 cmuts-norm
+cmuts-score
 cmuts-gen
 ```
 

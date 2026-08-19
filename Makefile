@@ -105,7 +105,7 @@ NAME     := cmuts
 # linked into the one binary. A subcommand is its own sources, its own private
 # headers, and whichever members of the library it refers to; adding one means
 # adding a directory, a word here, and an entry point in the dispatcher.
-SUBCOMMANDS := hmm gen sub div norm
+SUBCOMMANDS := hmm gen sub div norm score
 APPS        := $(NAME) $(SUBCOMMANDS)
 
 # Programs that are scripts rather than sources. One directory each, holding a
