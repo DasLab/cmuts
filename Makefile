@@ -78,7 +78,7 @@ endif
 # wins for a directory named both ways.
 CPATH_CFLAGS := $(addprefix -isystem ,$(subst :, ,$(CPATH)))
 
-CFLAGS    := -std=c11 $(OPT) $(WARNINGS) -pthread -Iinclude $(HTS_CFLAGS) $(HDF5_CFLAGS) $(CPATH_CFLAGS) -MMD -MP
+CFLAGS    := -std=c11 -D_POSIX_C_SOURCE=200809L $(OPT) $(WARNINGS) -pthread -Iinclude $(HTS_CFLAGS) $(HDF5_CFLAGS) $(CPATH_CFLAGS) -MMD -MP
 
 # A sanitizer has to reach both the compiler and the linker; what it adds to
 # the link is attached to the binary's libraries, below. Halting on the first
