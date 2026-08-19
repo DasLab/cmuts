@@ -369,10 +369,10 @@ static int read_row(context *ctx, int32_t tid, char *error, size_t error_len)
 static void print_result(const char *name, const result *r, size_t written)
 {
     if (written == 0) {
-        printf("reference\tpaired\tunpaired\tauroc\tauprc\tmean_paired\tmean_unpaired\n");
+        printf("reference,paired,unpaired,auroc,auprc,mean_paired,mean_unpaired\n");
     }
 
-    printf("%s\t%zu\t%zu\t%.5f\t%.5f\t%.6g\t%.6g\n", name, r->paired, r->unpaired,
+    printf("%s,%zu,%zu,%.5f,%.5f,%.6g,%.6g\n", name, r->paired, r->unpaired,
            r->auroc, r->auprc, r->mean_paired, r->mean_unpaired);
 }
 

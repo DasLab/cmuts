@@ -26,6 +26,6 @@ typedef struct {
     double      min_coverage;     /* reads a position needs before it is scored */
 } score_config;
 
-/* Writes one row per reference and a last row averaging them. Returns 0, or -1 with a
+/* Writes one row per reference, as comma separated values. Returns 0, or -1 with a
  * description in error. */
 int score_run(const score_config *cfg, char *error, size_t error_len);

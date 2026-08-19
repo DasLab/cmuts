@@ -31,7 +31,7 @@ Positions containing neither dots nor brackets are not scored.
 
 ## Output
 
-One row for each reference, as a tab separated table on standard output. A reference is not scored if all of its scored positions are paired, or if all of them are unpaired, because a ranking needs both classes.
+One row for each reference, as comma separated values on standard output. A reference is not scored if all of its scored positions are paired, or if all of them are unpaired, because a ranking needs both classes.
 
 | Column | Meaning |
 | --- | --- |
