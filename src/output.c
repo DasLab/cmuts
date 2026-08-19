@@ -173,17 +173,6 @@ bool out_padding_needed(out_field_id id, size_t len, size_t cap)
 }
 
 
-bool out_row_needed(size_t len, size_t cap, const bool *wanted)
-{
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (wanted[id] && out_padding_needed(id, len, cap)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 size_t out_stored_bytes(out_field_id id)
 {
     switch (OUT_FIELDS[id].stored) {

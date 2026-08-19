@@ -142,10 +142,6 @@ size_t out_widest(size_t cap, const bool *wanted);
  * at the origin, and everything outside the block keeps the fill. */
 bool out_padding_needed(out_field_id id, size_t len, size_t cap);
 
-/* Whether any field the run writes needs padding at a reference of len bases, which is
- * whether a reference no read arrived on has anything written for it at all. */
-bool out_row_needed(size_t len, size_t cap, const bool *wanted);
-
 
 /* Give the bytes one of a field's values occupies, and the most any field's value
  * occupies. A buffer taking a row of any field is as long as out_widest values of

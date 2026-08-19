@@ -400,31 +400,13 @@ static bool loader_emit_empty(loader *l, int32_t tid)
     return true;
 }
 
-/* Returns whether the reference matches what every header declares for it. Takes no
- * context and writes no row. Every reference is checked, whether or not a read arrived on
- * it and whether or not its row needs writing: the FASTA must hold the sequences the
- * alignments were made against. */
-static bool pipeline_check_reference(const pipeline *p, int32_t tid)
-{
-    return refseq_advance(p->refs, tid) != NULL;
-}
-
-/* Takes every reference the reader has passed since the last one it stopped at. Each is
- * checked against the headers, and one whose row the output needs is opened as well, which
- * writes it. */
+/* Opens and closes every reference the reader has passed since the last one it stopped at,
+ * which checks each against the headers and writes whatever its fields need. A reference
+ * that needs nothing written costs the open and no more. */
 static bool loader_account_through(loader *l, int32_t upto)
 {
-    const pipeline *p = l->pipe;
-
     while (l->owed < upto) {
-        int32_t tid = l->owed++;
-        size_t  len = (size_t)cm_bam_stream_reflen(p->bam, tid);
-
-        if (out_row_needed(len, p->ref_cap, p->wanted)) {
-            if (!loader_emit_empty(l, tid)) {
-                return false;
-            }
-        } else if (!pipeline_check_reference(p, tid)) {
+        if (!loader_emit_empty(l, l->owed++)) {
             return false;
         }
     }
