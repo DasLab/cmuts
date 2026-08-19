@@ -238,20 +238,31 @@ static double auroc_of(const point *at, size_t n, size_t unpaired)
  * must be sorted by value, so the walk runs from the highest reactivity down. */
 static double auprc_of(const point *at, size_t n, size_t unpaired)
 {
-    double found = 0.0;
-    double seen  = 0.0;
-    double sum   = 0.0;
+    double found    = 0.0;   /* unpaired bases at or above the value */
+    double seen     = 0.0;   /* bases at or above it */
+    double previous = 0.0;   /* recall before this run */
+    double sum      = 0.0;
+    size_t i        = n;
 
-    for (size_t i = n; i-- > 0; ) {
-        seen += 1.0;
+    while (i > 0) {
+        size_t j = i;
+        double recall;
 
-        if (at[i].open) {
-            found += 1.0;
-            sum   += found / seen;
+        /* a whole run of one value is taken at once, so the order within it, which the
+         * sort does not fix, cannot reach the result */
+        while (j > 0 && at[j - 1].value == at[i - 1].value) {
+            found += at[j - 1].open ? 1.0 : 0.0;
+            seen  += 1.0;
+            j--;
         }
+
+        recall = found / (double)unpaired;
+        sum   += (recall - previous) * (found / seen);
+        previous = recall;
+        i = j;
     }
 
-    return sum / (double)unpaired;
+    return sum;
 }
 
 static double mean_of(const point *at, size_t n, bool open)
@@ -408,8 +419,9 @@ static int score_all(context *ctx, const structures *set, char *error, size_t er
     const char      *why    = NULL;
     cm_fasta_reader *reader = cm_fasta_open(ctx->cfg->fasta_path, &why);
     cm_fasta_record  ref;
-    size_t           scored = 0;
-    int32_t          tid    = 0;
+    size_t           scored  = 0;
+    size_t           skipped = 0;   /* structures whose length is not the reference's */
+    int32_t          tid     = 0;
 
     if (!reader) {
         snprintf(error, error_len, "%s: %s", ctx->cfg->fasta_path, why);
@@ -430,6 +442,21 @@ static int score_all(context *ctx, const structures *set, char *error, size_t er
             return -1;
         }
 
+        if (!known) {
+            tid++;
+            continue;
+        }
+
+        /* a structure of another length describes another molecule, so scoring the part
+         * that overlaps would give a number that means nothing */
+        if (known->len != ref.len) {
+            fprintf(stderr, "%s: the structure is %zu long and the reference %zu; "
+                            "not scored\n", ref.name, known->len, ref.len);
+            skipped++;
+            tid++;
+            continue;
+        }
+
         /* the rows are as wide as the longest reference the file was written for, so a
          * longer one means this is not the FASTA it was counted against */
         if (ref.len > ctx->cap) {
@@ -437,11 +464,6 @@ static int score_all(context *ctx, const structures *set, char *error, size_t er
                      ref.name, ref.len, ctx->cfg->input_path);
             cm_fasta_close(reader);
             return -1;
-        }
-
-        if (!known) {
-            tid++;
-            continue;
         }
 
         if (read_row(ctx, tid, error, error_len) < 0) {
@@ -470,6 +492,13 @@ static int score_all(context *ctx, const structures *set, char *error, size_t er
     }
 
     cm_fasta_close(reader);
+
+    if (scored == 0 && skipped > 0) {
+        snprintf(error, error_len,
+                 "no reference could be scored; %zu structures are the wrong length",
+                 skipped);
+        return -1;
+    }
 
     if (scored == 0) {
         snprintf(error, error_len, "no reference could be scored");
