@@ -20,6 +20,7 @@ CMUTS_GEN = (CMUTS, "gen")
 CMUTS_SUB = (CMUTS, "sub")
 CMUTS_DIV = (CMUTS, "div")
 CMUTS_NORM = (CMUTS, "norm")
+CMUTS_SCORE = (CMUTS, "score")
 PROGRAMS = (CMUTS,)
 
 
@@ -194,6 +195,21 @@ def run_normalize(inputs, outputs, **options):
 def try_normalize(inputs, outputs, **options):
     """Normalizes whether or not the run succeeds."""
     return attempt(_normalize_command(inputs, outputs, options))
+
+
+def _score_command(rates, fasta, structures, options: dict) -> list:
+    return [*CMUTS_SCORE, "-f", fasta, "-s", structures, *_options(options), rates]
+
+
+def run_score(rates, fasta, structures, **options) -> str:
+    """Scores an output against a structure file, returning the table it
+    wrote."""
+    return execute(_score_command(rates, fasta, structures, options)).stdout
+
+
+def try_score(rates, fasta, structures, **options):
+    """Scores whether or not the run succeeds."""
+    return attempt(_score_command(rates, fasta, structures, options))
 
 
 def run_generator(prefix, parameters: dict):
