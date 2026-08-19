@@ -134,6 +134,11 @@ bool out_wanted(out_field_id id, const bool *wanted);
  * any of them. */
 size_t out_widest(size_t cap, const bool *wanted);
 
+/* Whether a reference of len bases needs its row written when no read arrived on it, in a
+ * run whose longest reference is cap and which writes the fields in wanted. Where nothing
+ * is needed, the fill every dataset already holds reads as the row would have. */
+bool out_row_needed(size_t len, size_t cap, const bool *wanted);
+
 /* Give the bytes one of a field's values occupies, and the most any field's value
  * occupies. A buffer taking a row of any field is as long as out_widest values of
  * out_widest_bytes each. */

@@ -148,6 +148,38 @@ size_t out_widest(size_t cap, const bool *wanted)
     return widest;
 }
 
+/* Whether the fill a field carries already reads as outside a reference. The columns past
+ * a reference are marked NaN whatever the field means by an absent value, so a field
+ * filled with NaN has nothing to mark there. */
+static bool fill_marks_outside(out_field_id id)
+{
+    return OUT_FIELDS[id].absent == OUT_NAN;
+}
+
+/* Whether one field's row must be written for a reference no read arrived on. Nothing was
+ * accumulated, so the values inside the reference are the ones the fill already gives, and
+ * what is left is the region outside it: a reference occupying fewer values than the
+ * longest has such a region, and only some fills mark it. */
+static bool field_row_needed(out_field_id id, size_t len, size_t cap)
+{
+    if (!OUT_FIELDS[id].per_ref || fill_marks_outside(id)) {
+        return false;
+    }
+
+    return out_values(id, len, cap) < out_values(id, cap, cap);
+}
+
+bool out_row_needed(size_t len, size_t cap, const bool *wanted)
+{
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (wanted[id] && field_row_needed(id, len, cap)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 size_t out_stored_bytes(out_field_id id)
 {
     switch (OUT_FIELDS[id].stored) {

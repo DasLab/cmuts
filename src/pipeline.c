@@ -392,9 +392,8 @@ static bool pipeline_check_reference(const pipeline *p, int32_t tid)
 }
 
 /* Opens and closes a reference the reader passed over, so that its row is written unread.
- * A reference that received nothing is zero everywhere, which is what the fill value
- * gives. That covers a reference as long as the longest; a shorter one needs the columns
- * past its own end marked as outside it. */
+ * A reference that received nothing is zero everywhere, which is what the accumulator a
+ * pooled context carries already holds. */
 static bool loader_emit_empty(loader *l, int32_t tid)
 {
     refctx *ctx = pipeline_open_reference(l->pipe, tid);
@@ -411,16 +410,17 @@ static bool loader_emit_empty(loader *l, int32_t tid)
 }
 
 /* Takes every reference the reader has passed since the last one it stopped at. Each is
- * checked against the headers; one shorter than the longest is opened as well, which
- * writes its row. */
+ * checked against the headers, and one whose row the output needs is opened as well, which
+ * writes it. */
 static bool loader_account_through(loader *l, int32_t upto)
 {
     const pipeline *p = l->pipe;
 
     while (l->owed < upto) {
-        int32_t tid = l->owed++;
+        int32_t tid  = l->owed++;
+        size_t  len  = (size_t)cm_bam_stream_reflen(p->bam, tid);
 
-        if ((size_t)cm_bam_stream_reflen(p->bam, tid) < p->ref_cap) {
+        if (out_row_needed(len, p->ref_cap, p->wanted)) {
             if (!loader_emit_empty(l, tid)) {
                 return false;
             }
