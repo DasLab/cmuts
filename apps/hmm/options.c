@@ -12,6 +12,7 @@
 #include "pairs.h"
 #include "params.h"
 #include "phmm.h"
+#include "phred.h"
 
 static const cli_choice VERIFY_CHOICES[] = {
     { "name",     REFSEQ_VERIFY_NAME     },
@@ -160,6 +161,16 @@ static const cli_option OPTIONS[] = {
         .help    = "reference positions the marginal may look either side of the CIGAR",
         .minimum = 0,
         .maximum = CLI_UNBOUNDED,
+    },
+    {
+        .group   = "Counting",
+        .name    = "min-phred",
+        .type    = OPT_INT,
+        .offset  = offsetof(cli_args, pipeline.tally_config.min_phred),
+        .metavar = "Q",
+        .help    = "assign bases below this the maximum sequencing error",
+        .minimum = 0,
+        .maximum = PHRED_MAX,
     },
     {
         .group   = "Counting",

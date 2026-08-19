@@ -123,15 +123,16 @@ static phmm_status marginalize(const context *ctx, tally_scratch *scratch)
 tally_config tally_defaults(void)
 {
     return (tally_config){
-        .band    = PHMM_DEFAULT_BAND,
-        .weights = phmm_default_weights(),
-        .params  = phmm_defaults(),
+        .band      = PHMM_DEFAULT_BAND,
+        .min_phred = 0,
+        .weights   = phmm_default_weights(),
+        .params    = phmm_defaults(),
     };
 }
 
 void tally_tables_build(tally_tables *tables, const tally_config *config)
 {
-    phred_build(&tables->quality);
+    phred_build(&tables->quality, config->min_phred);
     phmm_build(&tables->model, &config->params, &config->weights);
     tables->band = config->band;
 }

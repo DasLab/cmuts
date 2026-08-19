@@ -137,6 +137,7 @@ The number of reads in which this pair of bases was present.
 | Option | Description |
 | --- | --- |
 | `--band N` | reference positions the marginal may look either side of the CIGAR (default 2) |
+| `--min-phred Q` | assign bases below this the maximum sequencing error (0 to 255; default 0) |
 | `--pairwise STATS` | write these statistics of how often two positions are modified together (correlation, conditional, none; default none) |
 | `--min-depth D` | evidence a position needs before its rate is written (default 1) |
 | `--params FILE` | read the pair HMM's rates from this file (default: built in) |
