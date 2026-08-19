@@ -34,11 +34,9 @@
 /* The structures                                                            */
 /* ------------------------------------------------------------------------ */
 
-/* One reference's structure. Every string owns its memory. The sequence is held only
- * where the record carried one, and is checked against the reference. */
+/* One reference's structure. The name and the pairing own their memory. */
 typedef struct {
     char  *name;
-    char  *seq;
     char  *pairing;
     size_t len;
 } structure;
@@ -54,7 +52,6 @@ static void structures_free(structures *set)
 {
     for (size_t i = 0; i < set->n; i++) {
         free(set->at[i].name);
-        free(set->at[i].seq);
         free(set->at[i].pairing);
     }
 
@@ -105,10 +102,8 @@ static void trim(char *line)
     line[strcspn(line, "\r\n")] = '\0';
 }
 
-/* Keeps one record, copying it, since the lines it came from are reused. The sequence is
- * optional and NULL where the record carried none. */
-static int structures_add(structures *set, const char *name, const char *seq,
-                          const char *pairing)
+/* Keeps one record, copying it, since the lines it came from are reused. */
+static int structures_add(structures *set, const char *name, const char *pairing)
 {
     structure *at;
 
@@ -118,13 +113,11 @@ static int structures_add(structures *set, const char *name, const char *seq,
 
     at          = &set->at[set->n];
     at->name    = strdup(name);
-    at->seq     = seq ? strdup(seq) : NULL;
     at->pairing = strdup(pairing);
     at->len     = strlen(pairing);
 
-    if (!at->name || !at->pairing || (seq && !at->seq)) {
+    if (!at->name || !at->pairing) {
         free(at->name);
-        free(at->seq);
         free(at->pairing);
         return -1;
     }
@@ -141,7 +134,6 @@ static int structures_read(structures *set, const char *path, char *error,
 {
     char  line[4096];
     char  name[256] = { 0 };
-    char *seq       = NULL;
     FILE *file      = fopen(path, "r");
     int   number    = 0;
 
@@ -157,50 +149,29 @@ static int structures_read(structures *set, const char *path, char *error,
         if (line[0] == '>') {
             snprintf(name, sizeof name, "%s", line + 1 + strspn(line + 1, " \t"));
             name[strcspn(name, " \t")] = '\0';
-            free(seq);
-            seq = NULL;
             continue;
         }
 
-        if (line[0] == '\0') {
-            continue;
-        }
-
-        /* a record may carry its sequence before the pairing, which is kept so that the
-         * reference can be checked against it */
-        if (!is_pairing(line)) {
-            free(seq);
-            seq = strdup(line);
-
-            if (!seq) {
-                snprintf(error, error_len, "%s: out of memory", path);
-                fclose(file);
-                return -1;
-            }
-
+        /* a record may carry its sequence before the pairing, which is passed over */
+        if (line[0] == '\0' || !is_pairing(line)) {
             continue;
         }
 
         if (name[0] == '\0') {
             snprintf(error, error_len, "%s:%d: a pairing before any name", path, number);
-            free(seq);
             fclose(file);
             return -1;
         }
 
-        if (structures_add(set, name, seq, line) < 0) {
+        if (structures_add(set, name, line) < 0) {
             snprintf(error, error_len, "%s: out of memory", path);
-            free(seq);
             fclose(file);
             return -1;
         }
 
         name[0] = '\0';
-        free(seq);
-        seq = NULL;
     }
 
-    free(seq);
     fclose(file);
     qsort(set->at, set->n, sizeof *set->at, by_name);
 
@@ -326,32 +297,6 @@ typedef struct {
     point              *points;
     size_t              cap;
 } context;
-
-/* Returns whether two bases are the same, reading U and T as one another and ignoring
- * case, so a structure written as RNA matches a reference written as DNA. */
-static bool same_base(char a, char b)
-{
-    a = (char)toupper((unsigned char)a);
-    b = (char)toupper((unsigned char)b);
-
-    a = a == 'U' ? 'T' : a;
-    b = b == 'U' ? 'T' : b;
-
-    return a == b;
-}
-
-/* Returns the first position where the record's sequence differs from the reference, or
- * -1 where they agree over the shorter of the two. */
-static long disagreement(const char *seq, const cm_fasta_record *ref)
-{
-    for (size_t i = 0; i < ref->len && seq[i] != '\0'; i++) {
-        if (!same_base(seq[i], ref->seq[i])) {
-            return (long)i;
-        }
-    }
-
-    return -1;
-}
 
 /* Returns the bit standing for a base, or 0 for a base the alphabet does not name, such
  * as an ambiguous one. T and U give the same bit. */
@@ -497,19 +442,6 @@ static int score_all(context *ctx, const structures *set, char *error, size_t er
         if (!known) {
             tid++;
             continue;
-        }
-
-        if (known->seq) {
-            long at = disagreement(known->seq, &ref);
-
-            if (at >= 0) {
-                snprintf(error, error_len,
-                         "%s: the structure holds %c at position %ld, where the "
-                         "reference holds %c",
-                         ref.name, known->seq[at], at + 1, ref.seq[at]);
-                cm_fasta_close(reader);
-                return -1;
-            }
         }
 
         if (read_row(ctx, tid, error, error_len) < 0) {

@@ -2,56 +2,32 @@
 
 ## Purpose
 
-Measure reactivities against a known structure.
+Score reactivity rates against known structures.
 
 ## Requires
 
-- A cmuts-compatible HDF5 file of reactivities
-- The FASTA that the file was counted against
-- The pairing of one or more of its references, as dot bracket records
+- Reactivity rates, in a cmuts-compatible HDF5 file
+- Dot-bracket secondary structures
+- The reference library FASTA
 
 ## Usage
 
-An output file stores no reference names. Its rows are in the order of the FASTA that produced it, so `cmuts score` takes the names and the sequences from that FASTA. Each reference with a structure gives one row of the output table.
+Pass the reactivity, structures, and reference library to `cmuts score`.
 
 ```sh
 cmuts score -f ref.fasta -s structures.db reactivity.h5
 ```
 
-The structures file holds dot bracket records. Each record is matched to a reference by name. A record can also hold the sequence.
+The structure file holds dot-bracket records, each matched to its reactivity profile by name.
 
 ```
->rool120
+>sequence1
 ((((....))))...
->another
-GGCAUUAAGCCU
-((((....))))
+>sequence2
+((..(((...)))))
 ```
 
-A bracket marks a paired base, and a dot marks an unpaired base. Any other character, such as a dash, marks a base that the structure does not resolve. Those positions are not scored.
-
-If a record holds a sequence, it is compared with the reference, and the run stops at the first base that differs. U and T are equivalent in this comparison, so an RNA structure matches a DNA reference.
-
-The file does not have to cover the whole library. A reference without a record is skipped, and a record whose name is not in the library is ignored. The rows are in the order of the FASTA, whatever order the records are in.
-
-## What is Scored
-
-Each reagent modifies only some bases, so `--bases` limits the scoring to those bases. DMS modifies adenine and cytosine. A SHAPE reagent modifies all four bases, which is the default.
-
-```sh
-cmuts score -f ref.fasta -s structures.db -b A,C dms.h5
-```
-
-`U` names the base that a DNA reference writes as `T`, so `-b U` scores both. A base outside `A`, `C`, `G` and `U`, such as an ambiguous one, is never scored.
-
-`--min-coverage` removes the positions that too few reads cover.
-
-Score a treated sample against its untreated control, and not a raw count. `cmuts sub` removes the background first, and the result is the signal that the treatment added.
-
-```sh
-cmuts sub -o subtracted.h5 treated.h5 untreated.h5
-cmuts score -f ref.fasta -s structures.db subtracted.h5
-```
+Positions containing neither dots nor brackets are not scored.
 
 ## Output
 
