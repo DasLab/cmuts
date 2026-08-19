@@ -398,6 +398,56 @@ static int read_row(context *ctx, int32_t tid, char *error, size_t error_len)
     return 0;
 }
 
+/* Reports a structure that does not describe the reference it is matched to. */
+static void warn_length(const cm_fasta_record *ref, const structure *known)
+{
+    fprintf(stderr, "%s: the structure is %zu long and the reference %zu; not scored\n",
+            ref->name, known->len, ref->len);
+}
+
+/* What one reference of the FASTA came to. */
+typedef enum {
+    REF_MEASURED,   /* the result is filled in */
+    REF_PASSED,     /* nothing to rank, and the run goes on */
+    REF_FAILED,     /* the run cannot go on */
+} ref_status;
+
+/* Measures one reference, leaving what it scored in one. */
+static ref_status measure_reference(context *ctx, const cm_fasta_record *ref,
+                                    const structure *known, int32_t tid, result *one,
+                                    char *error, size_t error_len)
+{
+    size_t unpaired;
+    size_t n;
+
+    /* the rows are as wide as the longest reference the file was written for, so a
+     * longer one means this is not the FASTA it was counted against */
+    if (ref->len > ctx->cap) {
+        snprintf(error, error_len, "%s is %zu long, wider than the rows of %s",
+                 ref->name, ref->len, ctx->cfg->input_path);
+        return REF_FAILED;
+    }
+
+    if (read_row(ctx, tid, error, error_len) < 0) {
+        return REF_FAILED;
+    }
+
+    n = collect(ctx, ref, known, &unpaired);
+
+    /* a reference holding one class alone gives no ranking to measure */
+    if (unpaired == 0 || unpaired == n) {
+        return REF_PASSED;
+    }
+
+    *one = measure(ctx->points, n, unpaired);
+
+    return REF_MEASURED;
+}
+
+/* ------------------------------------------------------------------------ */
+/* The table                                                                 */
+/* ------------------------------------------------------------------------ */
+
 /* Names the columns. Written before the first row, so that a run scoring nothing
  * writes nothing. */
 static void print_header(FILE *out)
@@ -479,11 +529,11 @@ static int score_all(context *ctx, const structures *set, char *error, size_t er
 
     while (cm_fasta_next(reader, &ref) == CM_ITER_OK) {
         const structure *known = structure_named(set, ref.name);
-        size_t           unpaired;
-        size_t           n;
+        int32_t          row   = tid++;
+        ref_status       came;
         result           one;
 
-        if (tid >= h5reader_refs(ctx->reader)) {
+        if (row >= h5reader_refs(ctx->reader)) {
             snprintf(error, error_len, "%s holds %d references, fewer than %s",
                      ctx->cfg->input_path, h5reader_refs(ctx->reader),
                      ctx->cfg->fasta_path);
@@ -491,41 +541,26 @@ static int score_all(context *ctx, const structures *set, char *error, size_t er
         }
 
         if (!known) {
-            tid++;
             continue;
         }
 
         /* a structure of another length describes another molecule, so scoring the part
          * that overlaps would give a number that means nothing */
         if (known->len != ref.len) {
-            fprintf(stderr, "%s: the structure is %zu long and the reference %zu; "
-                            "not scored\n", ref.name, known->len, ref.len);
+            warn_length(&ref, known);
             skipped++;
-            tid++;
             continue;
         }
 
-        /* the rows are as wide as the longest reference the file was written for, so a
-         * longer one means this is not the FASTA it was counted against */
-        if (ref.len > ctx->cap) {
-            snprintf(error, error_len, "%s is %zu long, wider than the rows of %s",
-                     ref.name, ref.len, ctx->cfg->input_path);
+        came = measure_reference(ctx, &ref, known, row, &one, error, error_len);
+
+        if (came == REF_FAILED) {
             goto done;
         }
 
-        if (read_row(ctx, tid, error, error_len) < 0) {
-            goto done;
-        }
-
-        n = collect(ctx, &ref, known, &unpaired);
-        tid++;
-
-        /* a reference holding one class alone gives no ranking to measure */
-        if (unpaired == 0 || unpaired == n) {
+        if (came == REF_PASSED) {
             continue;
         }
-
-        one = measure(ctx->points, n, unpaired);
 
         if (scored == 0) {
             print_header(ctx->out);
