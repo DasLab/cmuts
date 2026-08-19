@@ -36,11 +36,13 @@ The file does not have to cover the whole library. A reference without a record 
 
 ## What is Scored
 
-Each reagent modifies only some bases, so `--bases` limits the scoring to those bases. DMS modifies adenine and cytosine. A SHAPE reagent modifies all four bases.
+Each reagent modifies only some bases, so `--bases` limits the scoring to those bases. DMS modifies adenine and cytosine. A SHAPE reagent modifies all four bases, which is the default.
 
 ```sh
-cmuts score -f ref.fasta -s structures.db -b AC dms.h5
+cmuts score -f ref.fasta -s structures.db -b A,C dms.h5
 ```
+
+`U` names the base that a DNA reference writes as `T`, so `-b U` scores both. A base outside `A`, `C`, `G` and `U`, such as an ambiguous one, is never scored.
 
 `--min-coverage` removes the positions that too few reads cover.
 
@@ -87,7 +89,7 @@ Each row covers one reference. The reactivity of a position depends on the read 
 
 | Option | Description |
 | --- | --- |
-| `-b, --bases BASES` | score only the bases the reagent modifies (default: every base) |
+| `-b, --bases BASES` | score only at these bases (A, C, G, U; default A,C,G,U) |
 | `--min-coverage D` | reads a position needs before it is scored (default 0) |
 
 ### Information

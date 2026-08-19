@@ -321,7 +321,6 @@ static result measure(point *at, size_t n, size_t unpaired)
 typedef struct {
     const score_config *cfg;
     h5reader           *reader;
-    bool                wanted[256];  /* the bases scored, by character */
     float              *reactivity;
     float              *coverage;
     point              *points;
@@ -354,10 +353,24 @@ static long disagreement(const char *seq, const cm_fasta_record *ref)
     return -1;
 }
 
-/* Returns whether the base at this position is scored, which the reagent decides. */
+/* Returns the bit standing for a base, or 0 for a base the alphabet does not name, such
+ * as an ambiguous one. T and U give the same bit. */
+static int bit_of(char base)
+{
+    switch (toupper((unsigned char)base)) {
+        case 'A': return SCORE_BASE_A;
+        case 'C': return SCORE_BASE_C;
+        case 'G': return SCORE_BASE_G;
+        case 'T':
+        case 'U': return SCORE_BASE_U;
+        default:  return 0;
+    }
+}
+
+/* Returns whether the base at this position is one the reagent modifies. */
 static bool base_wanted(const context *ctx, char base)
 {
-    return ctx->wanted[(unsigned char)base];
+    return (ctx->cfg->bases & bit_of(base)) != 0;
 }
 
 /* Fills the points from one reference's row, and gives how many are unpaired. Returns the
@@ -421,27 +434,6 @@ static void print_result(const char *name, const result *r, size_t written)
 /* ------------------------------------------------------------------------ */
 /* The run                                                                   */
 /* ------------------------------------------------------------------------ */
-
-/* Marks the bases a reagent reports on. An empty list takes every base. */
-static void want_bases(context *ctx, const char *bases)
-{
-    if (!bases || *bases == '\0') {
-        memset(ctx->wanted, 1, sizeof ctx->wanted);
-        return;
-    }
-
-    for (const char *at = bases; *at; at++) {
-        ctx->wanted[(unsigned char)*at]                  = true;
-        ctx->wanted[(unsigned char)tolower((int)*at)]    = true;
-        ctx->wanted[(unsigned char)toupper((int)*at)]    = true;
-    }
-
-    /* a reagent that reads A also reads it written as T or U */
-    if (ctx->wanted['T'] || ctx->wanted['U']) {
-        ctx->wanted['T'] = ctx->wanted['U'] = true;
-        ctx->wanted['t'] = ctx->wanted['u'] = true;
-    }
-}
 
 static int allocate(context *ctx, size_t cap, char *error, size_t error_len)
 {
@@ -572,8 +564,6 @@ int score_run(const score_config *cfg, char *error, size_t error_len)
         structures_free(&set);
         return h5reader_fail(ctx.reader, cfg->input_path, error, error_len);
     }
-
-    want_bases(&ctx, cfg->bases);
 
     if (allocate(&ctx, h5reader_capacity(ctx.reader), error, error_len) < 0) {
         status = -1;

@@ -7,6 +7,16 @@
 
 #include <stddef.h>
 
+/* U names the base that a DNA reference writes as T, since the two are one base and the
+ * scoring reads a reference of either alphabet. */
+static const cli_choice BASE_CHOICES[] = {
+    { "A",  SCORE_BASE_A },
+    { "C",  SCORE_BASE_C },
+    { "G",  SCORE_BASE_G },
+    { "U",  SCORE_BASE_U },
+    { NULL, 0            },
+};
+
 static const cli_option OPTIONS[] = {
     {
         .group    = "Input",
@@ -30,14 +40,14 @@ static const cli_option OPTIONS[] = {
     },
 
     {
-        .group       = "Scoring",
-        .name        = "bases",
-        .key         = 'b',
-        .type        = OPT_STRING,
-        .offset      = offsetof(score_args, score.bases),
-        .metavar     = "BASES",
-        .help        = "score only the bases the reagent modifies",
-        .unset_label = "every base",
+        .group   = "Scoring",
+        .name    = "bases",
+        .key     = 'b',
+        .type    = OPT_SET,
+        .offset  = offsetof(score_args, score.bases),
+        .metavar = "BASES",
+        .help    = "score only at these bases",
+        .choices = BASE_CHOICES,
     },
     {
         .group   = "Scoring",
@@ -88,7 +98,7 @@ static const cli_positional POSITIONALS[] = {
 
 score_args score_defaults(void)
 {
-    return (score_args){ 0 };
+    return (score_args){ .score = { .bases = SCORE_BASES_ALL } };
 }
 
 cli_spec score_spec(const score_args *defaults)
