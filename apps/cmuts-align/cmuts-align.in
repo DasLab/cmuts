@@ -20,7 +20,7 @@ LONG_READ_PRESETS="map-ont map-hifi map-pb lr:hq ava-ont ava-pb"
 # Just for -h, verification is done by minimap2
 PRESETS="sr|map-ont|map-hifi|map-pb"
 
-HELP_FASTA="reference sequences, or a minimap2 index"
+HELP_FASTA="reference sequences"
 HELP_OUTPUT="write sorted alignments to this file"
 HELP_OVERWRITE="replace the output file if it already exists"
 HELP_PRESET="how minimap2 aligns"
@@ -157,6 +157,12 @@ done
 
 [[ -r $fasta ]] || die "cannot read $fasta"
 
+# minimap2 would accept an index, but the reference checksums need the bases,
+# which an index does not hold.
+if [[ $(head -c 4 "$fasta") == $'MMI\x02' ]]; then
+    die "--fasta: $fasta is a minimap2 index; pass the FASTA it was built from"
+fi
+
 for file in "${reads[@]}"; do
     [[ -r $file ]] || die "cannot read $file"
 done
@@ -172,7 +178,14 @@ directory=$(dirname "$output")
 
 # Sorted into place beside the output and renamed upon completion
 partial="$output.partial.$$"
-trap 'rm -f "$partial"' EXIT
+
+# @SQ lines from minimap2 carry SN and LN only. samtools dict computes each
+# reference's M5, which the awk pass splices in by name.
+dict="$output.dict.$$"
+
+trap 'rm -f "$partial" "$dict"' EXIT
+
+samtools dict "$fasta" > "$dict"
 
 # Merges each pair of mates into one consensus read, so that their overlap
 # counts a molecule once; cmuts-hmm refuses an unmerged pair for that reason.
@@ -193,8 +206,28 @@ align() {
 }
 
 align \
-    | awk -v limit="$NAME_LIMIT" '
-        BEGIN { FS = OFS = "\t" }
+    | awk -v limit="$NAME_LIMIT" -v dict="$dict" '
+        BEGIN {
+            FS = OFS = "\t"
+            while ((getline line < dict) > 0) {
+                n = split(line, field, FS)
+                name = ""
+                sum  = ""
+                for (i = 2; i <= n; i++) {
+                    if (field[i] ~ /^SN:/) { name = substr(field[i], 4) }
+                    if (field[i] ~ /^M5:/) { sum  = substr(field[i], 4) }
+                }
+                if (name != "" && sum != "") { m5[name] = sum }
+            }
+        }
+        /^@SQ/ {
+            name = ""
+            for (i = 2; i <= NF; i++) {
+                if ($i ~ /^SN:/) { name = substr($i, 4) }
+            }
+            if (name in m5) { $0 = $0 OFS "M5:" m5[name] }
+            print; next
+        }
         /^@/  { print; next }
               { if (length($1) > limit) { $1 = substr($1, 1, limit) } print }' \
     | samtools sort -@ "$threads" -o "$partial" -

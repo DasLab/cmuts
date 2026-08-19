@@ -25,6 +25,10 @@ or two for paired-end reads.
 cmuts align -f references.fasta -o treated.bam -x sr treated_R1.fastq.gz treated_R2.fastq.gz
 ```
 
+## Checksums
+
+The output header declares the MD5 checksum of each reference in the `M5` field of its `@SQ` line. `cmuts hmm --verify checksum` compares these against the FASTA it is given.
+
 ## Merging
 
 Paired-end input is merged with `fastp` before alignment. A pair whose mates do not overlap cannot be merged and is discarded. `fastp` reports how many pairs it merged on standard error.
@@ -55,7 +59,7 @@ Paired-end inputs are refused unless the preset is `sr`.
 
 | Option | Description |
 | --- | --- |
-| `-f, --fasta FASTA` | reference sequences, or a minimap2 index (required) |
+| `-f, --fasta FASTA` | reference sequences (required) |
 | `-o, --output BAM` | write sorted alignments to this file (required) |
 | `--overwrite` | replace the output file if it already exists |
 
