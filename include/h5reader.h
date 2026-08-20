@@ -43,6 +43,10 @@ int h5reader_total(h5reader *r, out_field_id id, size_t *value);
 
 const char *h5reader_error(const h5reader *r);
 
+/* Gives the datasets the file holds and the reader did not open, comma separated, or
+ * NULL where it opened every one. */
+const char *h5reader_ignored(const h5reader *r);
+
 /* Writes why the reader failed into error, naming the path it was opened from, and
  * returns -1. */
 int h5reader_fail(const h5reader *r, const char *path, char *error, size_t error_len);

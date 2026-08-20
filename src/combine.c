@@ -337,6 +337,14 @@ static int open_inputs(combination *c, char *error, size_t error_len)
         }
     }
 
+    for (size_t i = 0; i < c->spec->n_inputs; i++) {
+        const char *ignored = h5reader_ignored(c->input[i]);
+
+        if (ignored) {
+            fprintf(stderr, "%s: ignoring %s\n", c->spec->inputs[i], ignored);
+        }
+    }
+
     if (check_agreement(c, error, error_len) < 0) {
         return -1;
     }

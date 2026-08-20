@@ -7,6 +7,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "error.h"
 #include "h5layout.h"
@@ -26,6 +27,7 @@ struct h5reader {
     hid_t   memspace;   /* one row of the widest field, selected down to size */
     int32_t n_refs;
     size_t  ref_cap;
+    char    ignored[CM_ERROR_MAX];  /* datasets the file holds and open_fields did not open */
     char    error[CM_ERROR_MAX];
 };
 
@@ -168,6 +170,38 @@ static int open_fields(h5reader *r)
     return 0;
 }
 
+/* Appends one dataset path to the list of ignored datasets, comma separated. */
+static herr_t note_ignored(hid_t obj, const char *name, const H5O_info2_t *info,
+                           void *op_data)
+{
+    h5reader *r    = op_data;
+    size_t    used = strlen(r->ignored);
+
+    (void)obj;
+
+    if (info->type != H5O_TYPE_DATASET) {
+        return 0;
+    }
+
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (r->taken[id] && strcmp(name, OUT_FIELDS[id].name) == 0) {
+            return 0;
+        }
+    }
+
+    snprintf(r->ignored + used, sizeof r->ignored - used, "%s%s",
+             used ? ", " : "", name);
+    return 0;
+}
+
+/* Collects the datasets the reader did not open. Best effort: a walk that fails leaves
+ * the list short, and the fields themselves have been checked already. */
+static void find_ignored(h5reader *r)
+{
+    H5Ovisit3(r->file, H5_INDEX_NAME, H5_ITER_NATIVE, note_ignored, r,
+              H5O_INFO_BASIC);
+}
+
 /* Allocates a reader holding no handles yet, every one marked absent.
  *
  * The steps that build the rest may each fail and leave those after them undone, and the
@@ -233,8 +267,9 @@ h5reader *h5reader_open(const char *path, const out_manifest *manifest)
 
     if (open_file(r, path) == 0 &&
         probe_shape(r) == 0 &&
-        build_memspace(r) == 0) {
-        open_fields(r);
+        build_memspace(r) == 0 &&
+        open_fields(r) == 0) {
+        find_ignored(r);
     }
 
     return r;
@@ -269,6 +304,11 @@ void h5reader_close(h5reader *r)
 const char *h5reader_error(const h5reader *r)
 {
     return r->error[0] ? r->error : NULL;
+}
+
+const char *h5reader_ignored(const h5reader *r)
+{
+    return r->ignored[0] ? r->ignored : NULL;
 }
 
 int h5reader_fail(const h5reader *r, const char *path, char *error, size_t error_len)

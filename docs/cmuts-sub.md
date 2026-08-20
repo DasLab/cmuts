@@ -11,6 +11,12 @@ Background subtraction of reactivity rates.
 
 Both must be in `cmuts`-compatible HDF5 files.
 
+## Usage
+
+```sh
+cmuts sub -o reactivity.h5 treated.h5 untreated.h5
+```
+
 ## Error and Coverage
 
 The error of the background-subtracted rates is computed using the standard quadrature formula. The coverage and the four read-related datasets simply take the sum of the treated and untreated values.

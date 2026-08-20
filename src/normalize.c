@@ -359,6 +359,12 @@ static int gather(const normalize_config *cfg, const out_manifest *writes, rate_
         if (h5reader_error(in)) {
             h5reader_fail(in, cfg->inputs[i], error, error_len);
         } else {
+            const char *ignored = h5reader_ignored(in);
+
+            if (ignored) {
+                fprintf(stderr, "%s: ignoring %s\n", cfg->inputs[i], ignored);
+            }
+
             status = gather_input(cfg, p, in, cfg->inputs[i], error, error_len);
         }
 
