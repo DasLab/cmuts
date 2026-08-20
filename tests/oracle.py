@@ -200,6 +200,45 @@ def assert_counts_agree(summary, data, criteria: dict):
 
 
 # ---------------------------------------------------------------------------
+# The depth samtools computes
+# ---------------------------------------------------------------------------
+
+
+def _counted_reads(data, directory):
+    """Writes the reads cmuts hmm counts under no filter, coordinate sorted.
+
+    samtools depth cannot express the unavailable mapping quality as a flag,
+    so those reads are removed with view first. depth reads a pileup, so the
+    file is sorted as well.
+    """
+    kept = directory / "kept.bam"
+    ordered = directory / "ordered.bam"
+
+    samtools_into(kept, "view", "-b", *NOT_COUNTED_FLAGS,
+                  "-e", f"mapq != {UNAVAILABLE_MAPQ}", data.bam)
+    samtools("sort", "-o", ordered, kept)
+
+    return ordered
+
+
+def samtools_depth(data, directory) -> dict:
+    """Returns the depth samtools reports at every covered position, keyed by
+    reference name and zero-based position.
+
+    QC-fail and duplicate reads are counted, as cmuts hmm counts them, so only
+    unmapped and secondary reads are left excluded.
+    """
+    depths = defaultdict(dict)
+
+    for line in samtools("depth", "-d", "0", "-g", "QCFAIL,DUP",
+                         _counted_reads(data, directory)).splitlines():
+        name, position, depth = line.split("\t")
+        depths[name][int(position) - 1] = int(depth)
+
+    return depths
+
+
+# ---------------------------------------------------------------------------
 # The tags samtools computes
 # ---------------------------------------------------------------------------
 

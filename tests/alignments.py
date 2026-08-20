@@ -7,10 +7,12 @@ The totals carry over by construction, and are not counted a second time.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from oracle import (
+    CIGAR_COLUMN,
     FLAG_COLUMN,
     MAPPED_FLAG,
     UNMAPPED_FLAG,
@@ -184,6 +186,24 @@ def mark_secondary(data: Dataset, directory, every: int):
     rebuilt = _rebuild(data, directory, "secondary", header_text(data.bam), lines)
 
     return replace(data, bams=(rebuilt,)), marked
+
+
+# A deletion and an insertion written side by side. The model has no
+# transition between the two states, so it reads such a pair as a substitution
+# whatever the band, and no count taken from the CIGAR as written can agree
+# with it.
+ADJACENT_INDELS = re.compile(r"D\d+I|I\d+D")
+
+
+def drop_adjacent_indels(data: Dataset, directory) -> Dataset:
+    """Removes every read whose CIGAR writes a deletion and an insertion side
+    by side, leaving the reads the model aligns as the CIGAR was written."""
+    lines = [line for line in record_lines(data.bam)
+             if not ADJACENT_INDELS.search(line.split("\t")[CIGAR_COLUMN])]
+
+    rebuilt = _rebuild(data, directory, "pinned", header_text(data.bam), lines)
+
+    return replace(measure_dataset(data.name, (rebuilt,), data.fasta), fmt=data.fmt)
 
 
 def mark_paired(data: Dataset, directory) -> Dataset:
