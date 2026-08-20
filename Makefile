@@ -200,6 +200,10 @@ docs: $(BINS)
 site: docs
 	@$(PYTHON) -m sphinx -W -q -b html -d $(BUILD_ROOT)/doctrees docs site
 
+# Serves the rendered site locally, rebuilding it as the sources change
+serve: site
+	@$(PYTHON) -m sphinx_autobuild docs site
+
 # A clang that is not the system one needs the SDK spelled out.
 CLANG_TIDY ?= $(firstword $(wildcard /opt/homebrew/opt/llvm/bin/clang-tidy) clang-tidy)
 SDK        := $(if $(filter Darwin,$(shell uname)),-isysroot $(shell xcrun --show-sdk-path),)
@@ -223,6 +227,6 @@ lint: compile_commands.json
 clean:
 	rm -rf $(BUILD_ROOT) compile_commands.json
 
-.PHONY: all check clean docs install lint site uninstall
+.PHONY: all check clean docs install lint serve site uninstall
 
 -include $(DEP)

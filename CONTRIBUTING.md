@@ -68,7 +68,7 @@ If a program's arguments or output format changes, you must run `make docs` and 
 To preview the site locally:
 
 ```sh
-.venv/bin/sphinx-autobuild docs site
+make serve
 ```
 
 ## Static Binaries
