@@ -98,24 +98,15 @@ def test_a_file_that_is_not_an_output_is_left_intact(data, falsifiable, tmp_path
     assert notes.read_text() == NOTES
 
 
-def test_outputs_are_labelled_with_the_program(data, falsifiable, tmp_path):
+def test_outputs_name_the_program_that_wrote_them(data, falsifiable, tmp_path):
+    """The version is compared against what the program prints, so that a
+    release cannot change one without the other."""
     output = tmp_path / "out.h5"
 
-    # The attribute is written by every run.
+    # The attributes are written by every run.
     falsifiable(True)
 
     run_cmuts(data, output)
 
     assert attributes_of(output)["program"] == " ".join(CMUTS_HMM)
-
-
-def test_outputs_are_versioned(data, falsifiable, tmp_path):
-    """Compared against the version the program prints, so that a release
-    cannot change one without the other."""
-    output = tmp_path / "out.h5"
-
-    falsifiable(True)
-
-    run_cmuts(data, output)
-
     assert attributes_of(output)["version"] == reported_version(CMUTS_HMM)

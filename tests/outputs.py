@@ -259,6 +259,14 @@ def delete_field(path, name):
     return path
 
 
+def add_field(path, name, values):
+    """Adds a dataset that is not part of the layout."""
+    with h5py.File(path, "r+") as handle:
+        handle.create_dataset(name, data=values)
+
+    return path
+
+
 def set_field_width(path, name, columns):
     """Sets the column count of a dataset, leaving it inconsistent with the
     rest of the file."""

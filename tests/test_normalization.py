@@ -2,7 +2,8 @@
 
 The result depends only on the values in the input files, so the
 inputs are written by hand and not counted from an alignment. inputs.py builds
-them and outputs.py describes the layout the programs share.
+them and outputs.py describes the layout the programs share. The contracts
+this program shares with the other readers of outputs are in test_io.py.
 
 random_fields gives coverage in [0, 1), which no position clears the default
 floor with, so every test of the ubr scale sets the coverage it wants.
@@ -16,7 +17,6 @@ import pytest
 from inputs import (
     CAP,
     N_REFS,
-    NOTES,
     missing_in_each_input,
     not_hdf5,
     random_fields,
@@ -31,21 +31,10 @@ from outputs import (
     NORM,
     REACTIVITY,
     UNMAPPED,
-    attributes_of,
-    delete_field,
     field_of,
     layout_of,
-    read_summary,
-    write_output,
 )
-from programs import (
-    CMUTS_NORM,
-    attempt,
-    reported_version,
-    run_cmuts,
-    run_normalize,
-    try_normalize,
-)
+from programs import CMUTS_NORM, attempt, run_normalize, try_normalize
 
 # The scale is computed in float64 over values narrowed to float32, so a field
 # that carries it agrees to a tolerance and not exactly.
@@ -87,13 +76,6 @@ def besides_the_scale(path) -> dict:
 # ---------------------------------------------------------------------------
 # The scale
 # ---------------------------------------------------------------------------
-
-
-def test_the_result_names_the_program_that_wrote_it(build, normalize):
-    output, = normalize(build(covered()))
-
-    assert attributes_of(output)["program"] == " ".join(CMUTS_NORM)
-    assert attributes_of(output)["version"] == reported_version(CMUTS_NORM)
 
 
 @pytest.mark.parametrize("scheme", [UBR, OUTLIER])
@@ -338,38 +320,6 @@ def test_a_bound_left_out_is_not_applied(build, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_the_output_is_shaped_and_typed_like_its_input(build, normalize):
-    rates = build(covered(random_fields(seed=11)))
-
-    output, = normalize(rates)
-
-    assert besides_the_scale(output) == layout_of(rates)
-
-
-def test_the_columns_past_a_reference_stay_nan(build, normalize):
-    lengths = [6, 4, 2, 1]
-    rows = np.full((N_REFS, CAP), np.float32(0.25))
-
-    for row, length in enumerate(lengths):
-        rows[row, length:] = np.nan
-
-    output, = normalize(build(covered({REACTIVITY: rows})))
-    result = field_of(output, REACTIVITY)
-
-    for row, length in enumerate(lengths):
-        assert not np.isnan(result[row, :length]).any(), row
-        assert np.isnan(result[row, length:]).all(), row
-
-
-def test_two_runs_agree_byte_for_byte(build, tmp_path):
-    rates = build(covered(random_fields(seed=12)))
-
-    first = run_normalize([rates], [tmp_path / "first.h5"])
-    second = run_normalize([rates], [tmp_path / "second.h5"])
-
-    assert first[0].read_bytes() == second[0].read_bytes()
-
-
 @pytest.mark.parametrize("n_refs, cap", [(1, 1), (1, 40), (3, 1), (400, 2)])
 def test_the_scale_holds_at_any_shape(build, normalize, n_refs, cap):
     shaped = dict(n_refs=n_refs, cap=cap)
@@ -409,35 +359,6 @@ def test_an_input_is_required(tmp_path):
     assert not (tmp_path / "out.h5").exists()
 
 
-def test_something_that_is_not_hdf5_is_refused(tmp_path):
-    notes = not_hdf5(tmp_path)
-
-    failed = try_normalize([notes], [tmp_path / "out.h5"])
-
-    assert failed.returncode != 0
-    assert notes.read_text() == NOTES
-
-
-# The datasets cmuts norm refuses an input for.
-REQUIRED = (COVERAGE, REACTIVITY)
-SKIPPABLE = tuple(name for name in ALL_FIELDS if name not in REQUIRED)
-
-
-@pytest.mark.parametrize("missing", REQUIRED)
-def test_an_input_missing_a_required_dataset_is_refused(build, tmp_path, missing):
-    failed = try_normalize([delete_field(build(), missing)], [tmp_path / "out.h5"])
-
-    assert failed.returncode != 0
-
-
-def test_a_file_holding_no_references_is_refused(tmp_path):
-    empty = write_output(tmp_path / "empty.h5", n_refs=0, cap=CAP)
-
-    failed = try_normalize([empty], [tmp_path / "out.h5"])
-
-    assert failed.returncode != 0
-
-
 def test_a_later_input_being_refused_writes_no_output(build, tmp_path):
     """Every input is read before the first output is created, so a bad second
     input leaves the first output unwritten."""
@@ -456,28 +377,6 @@ def test_a_later_input_being_refused_writes_no_output(build, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_an_existing_output_is_not_replaced_without_overwrite(build, normalize):
-    rates = build(covered())
-    output, = normalize(rates)
-    before = output.read_bytes()
-
-    failed = try_normalize([rates], [output])
-
-    assert failed.returncode != 0
-    assert output.read_bytes() == before
-
-
-def test_overwrite_replaces_an_existing_output(build, normalize):
-    """The two runs are given different inputs, so that the values left at the
-    path identify which of them wrote it."""
-    output, = normalize(build(covered({REACTIVITY: 0.25})))
-
-    run_normalize([build(covered({REACTIVITY: 0.5, ERROR: 0.25}))], [output],
-                  overwrite=True)
-
-    assert recorded(output) == pytest.approx(0.5, rel=TOLERANCE)
-
-
 def test_a_second_output_already_there_leaves_the_first_alone(build, tmp_path):
     """Every output path is checked before any is created."""
     taken = run_normalize([build(covered())], [tmp_path / "taken.h5"])
@@ -487,20 +386,3 @@ def test_a_second_output_already_there_leaves_the_first_alone(build, tmp_path):
 
     assert failed.returncode != 0
     assert not fresh.exists()
-
-
-# ---------------------------------------------------------------------------
-# End to end
-# ---------------------------------------------------------------------------
-
-
-def test_cmuts_norm_reads_what_cmuts_hmm_writes(data, falsifiable, tmp_path):
-    """Asserts that the run succeeds and leaves a file shaped like its input."""
-    counted = tmp_path / "counted.h5"
-    summary = read_summary(run_cmuts(data, counted))
-
-    falsifiable(summary.rows > 0)
-
-    output, = run_normalize([counted], [tmp_path / "normalized.h5"], min_coverage="0")
-
-    assert besides_the_scale(output) == layout_of(counted)
