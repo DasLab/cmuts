@@ -34,14 +34,14 @@ hid_t h5layout_memory_type(out_field_id id);
  * row is then selected. */
 hid_t h5layout_row_space(size_t cap, const bool *wanted);
 
-/* Selects n values of one reference's row of a field, starting at column from, in the file
- * and in the memory row the values move through. The two are selected together so that
- * they cannot disagree on how many values move.
+/* Selects the first n values of one reference's row of a field, in the file and in the
+ * memory row the values move through. The two are selected together so that they cannot
+ * disagree on how many values move.
  *
  * The selections replace whatever was there, so both dataspaces may be kept for as long as
  * the file is open and reselected for each row. */
 int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
-                         int32_t tid, size_t from, size_t n);
+                         int32_t tid, size_t n);
 
 /* Selects one reference's whole block of a field whose row has two extents, in the file
  * and in memory together. The block is square and starts at the origin of the row, so a

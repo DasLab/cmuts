@@ -26,7 +26,7 @@
  *
  * Every row is this wide, whatever its own reference measures. A read length is not a
  * position in a reference, so a column a short reference has no reads for is a count of
- * zero and not padding, and a column means one length in every row alike.
+ * zero, and a column means one length in every row alike.
  *
  * A read longer than the range is counted in no bin. How many there were is the reads
  * total less the row's own sum. */

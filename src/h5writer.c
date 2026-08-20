@@ -57,7 +57,6 @@ struct h5writer {
     hid_t   memspace;   /* one row of the widest field, selected down to size */
     int32_t n_refs;
     size_t  ref_cap;
-    double *padding;    /* NaN, as wide as the most a row can need */
     const bool *wanted; /* the optional fields this run writes; NULL for all of them */
 
     chunkfield gathered[OUT_N_FIELDS];
@@ -509,23 +508,6 @@ static void narrow(void *dst, out_stored stored, const double *src, size_t n)
     }
 }
 
-/* Pads a staged row, as write_part does with the padding row for a row written directly.
- * An unsigned field has no NaN to pad with, and none needs it: every such row spans its
- * full width whatever its reference measures. */
-static void pad_row(unsigned char *row, out_field_id id, size_t from, size_t width)
-{
-    size_t    elem = out_stored_bytes(id);
-    out_value pad;
-
-    if (out_pad_value(id, &pad) < 0) {
-        return;
-    }
-
-    for (size_t i = from; i < width; i++) {
-        memcpy(row + i * elem, &pad, elem);
-    }
-}
-
 static int64_t gathered_chunk(const chunkfield *f, int32_t tid)
 {
     return (int64_t)tid / (int64_t)f->rows;
@@ -659,22 +641,6 @@ static h5writer *writer_alloc(int32_t n_refs, size_t ref_cap)
     return w;
 }
 
-/* Fills the row of marks that a reference's unused columns are written from. */
-static int build_padding(h5writer *w)
-{
-    w->padding = calloc(w->ref_cap ? w->ref_cap : 1, sizeof *w->padding);
-
-    if (!w->padding) {
-        return fail(w, "out of memory");
-    }
-
-    for (size_t i = 0; i < w->ref_cap; i++) {
-        w->padding[i] = (double)NAN;
-    }
-
-    return 0;
-}
-
 /* Prepares the row every write is selected from. */
 static int build_memspace(h5writer *w)
 {
@@ -764,8 +730,7 @@ h5writer *h5writer_create(const char *path, const char *program, int32_t n_refs,
 
     w->wanted = wanted;
 
-    if (build_padding(w) == 0 &&
-        build_memspace(w) == 0 &&
+    if (build_memspace(w) == 0 &&
         create_file(w, path, overwrite) == 0 &&
         stamp_identity(w, program) == 0 &&
         create_groups(w) == 0 &&
@@ -834,7 +799,6 @@ void h5writer_close(h5writer *w)
         H5Fclose(w->file);
     }
 
-    free(w->padding);
     free(w);
 }
 
@@ -855,8 +819,8 @@ int h5writer_fail(const h5writer *w, const char *path, char *error, size_t error
 /* Rows                                                                      */
 /* ------------------------------------------------------------------------ */
 
-static int write_part(h5writer *w, out_field_id id, int32_t tid, size_t from,
-                      size_t n, const double *values)
+static int write_span(h5writer *w, out_field_id id, int32_t tid, size_t n,
+                      const double *values)
 {
     herr_t status;
 
@@ -864,7 +828,7 @@ static int write_part(h5writer *w, out_field_id id, int32_t tid, size_t from,
         return 0;
     }
 
-    if (h5layout_select_span(w->filespace[id], w->memspace, id, tid, from, n) < 0) {
+    if (h5layout_select_span(w->filespace[id], w->memspace, id, tid, n) < 0) {
         return fail(w, "unable to select an output row");
     }
 
@@ -887,35 +851,7 @@ int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
         return gather_span(w, id, tid, held, values);
     }
 
-    return write_part(w, id, tid, 0, held, values);
-}
-
-int h5writer_pad(h5writer *w, out_field_id id, int32_t tid, size_t len)
-{
-    size_t held  = out_values(id, len, w->ref_cap);
-    size_t width = out_values(id, w->ref_cap, w->ref_cap);
-
-    if (tid < 0 || tid >= w->n_refs) {
-        return fail(w, "reference index outside the output");
-    }
-
-    if (held == width) {
-        return 0;
-    }
-
-    if (gathers(w, id)) {
-        chunkfield  *f = &w->gathered[id];
-        chunk_stage *s = stage_for(f, id, gathered_chunk(f, tid));
-
-        if (!s) {
-            return fail(w, "out of memory gathering an output chunk");
-        }
-
-        pad_row(stage_row(f, s, tid), id, held, f->width);
-        return 0;
-    }
-
-    return write_part(w, id, tid, held, width - held, w->padding);
+    return write_span(w, id, tid, held, values);
 }
 
 /* Writes the whole of one reference's row, in the type the field is stored as.
@@ -933,7 +869,7 @@ int h5writer_row(h5writer *w, out_field_id id, int32_t tid, const void *values)
         return fail(w, "reference index outside the output");
     }
 
-    if (h5layout_select_span(w->filespace[id], w->memspace, id, tid, 0, width) < 0) {
+    if (h5layout_select_span(w->filespace[id], w->memspace, id, tid, width) < 0) {
         return fail(w, "unable to select an output row");
     }
 

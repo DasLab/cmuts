@@ -32,8 +32,7 @@ class Field:
     name: str
     kind: str
     dtype: str
-    fill: float          # what a row nobody wrote reads as
-    pad: float           # what a column past the end of a reference reads as
+    fill: float
     rate: bool = False
     sequence: bool = False
 
@@ -42,13 +41,13 @@ class Field:
 # unsigned and zero where nothing was counted. The sequence is the reference
 # itself, and is neither.
 FIELDS = (
-    Field(COVERAGE, PER_BASE, "f4", 0.0, np.nan),
-    Field(REACTIVITY, PER_BASE, "f4", np.nan, np.nan, rate=True),
-    Field(ERROR, PER_BASE, "f4", np.nan, np.nan, rate=True),
-    Field(LENGTHS, PER_LENGTH, "u8", 0, 0),
-    Field(COUNTED, SCALAR, "u8", 0, 0),
-    Field(REJECTED, SCALAR, "u8", 0, 0),
-    Field(SEQUENCE, PER_BASE, "i1", -1, -1, sequence=True),
+    Field(COVERAGE, PER_BASE, "f4", 0.0),
+    Field(REACTIVITY, PER_BASE, "f4", np.nan, rate=True),
+    Field(ERROR, PER_BASE, "f4", np.nan, rate=True),
+    Field(LENGTHS, PER_LENGTH, "u8", 0),
+    Field(COUNTED, SCALAR, "u8", 0),
+    Field(REJECTED, SCALAR, "u8", 0),
+    Field(SEQUENCE, PER_BASE, "i1", -1, sequence=True),
 )
 
 BY_NAME = {field.name: field for field in FIELDS}
@@ -61,23 +60,12 @@ def _field_names(matches) -> tuple:
 
 # The groups a test reasons about. Each is derived from the declaration above,
 # so a new field joins them without being listed a second time.
-PER_BASE_FIELDS = _field_names(lambda field: field.kind == PER_BASE)
-PER_LENGTH_FIELDS = _field_names(lambda field: field.kind == PER_LENGTH)
-PER_REFERENCE_FIELDS = _field_names(lambda field: field.kind == SCALAR)
 RATE_FIELDS = _field_names(lambda field: field.rate)
 FLOAT_FIELDS = _field_names(lambda field: field.dtype.startswith("f"))
 
 # The fields holding counts, in which a zero is a measured value and not a
 # missing one.
 COUNT_FIELDS = _field_names(lambda field: not field.rate and not field.sequence)
-COLUMN_COUNT_FIELDS = _field_names(
-    lambda field: not field.rate and not field.sequence and field.kind != SCALAR)
-
-# The fields in which a NaN marks a column past the end of a reference. A row
-# indexed by read length runs to its full width, and a rate is NaN at any
-# position failing --min-depth, so neither kind marks padding.
-PADDED_FIELDS = _field_names(
-    lambda field: not field.rate and not field.sequence and field.kind == PER_BASE)
 
 # Every field with a row per reference, and every field of the file. The
 # unmapped total belongs to the run and not to any reference, so it has no row
@@ -100,11 +88,6 @@ def width(kind: str, cap: int) -> int:
 def shape(field: Field, n_refs: int, cap: int) -> tuple:
     """Returns the shape a field takes in a file of this size."""
     return (n_refs,) if field.kind == SCALAR else (n_refs, width(field.kind, cap))
-
-
-def extent(name: str, reference_length: int, columns: int) -> int:
-    """Returns how far along a row the field holds data; the rest is padding."""
-    return columns if name in PER_LENGTH_FIELDS else reference_length
 
 
 # ---------------------------------------------------------------------------

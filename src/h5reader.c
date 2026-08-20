@@ -309,7 +309,7 @@ int h5reader_field(h5reader *r, out_field_id id, int32_t tid, void *values)
         return fail(r, "reference index outside the file");
     }
 
-    if (h5layout_select_span(r->filespace[id], r->memspace, id, tid, 0, width) < 0) {
+    if (h5layout_select_span(r->filespace[id], r->memspace, id, tid, width) < 0) {
         return fail(r, "unable to select an input row");
     }
 

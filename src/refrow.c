@@ -13,7 +13,6 @@
 struct refrow {
     h5writer   *out;      /* borrowed */
     rate_config rates;
-    size_t      ref_cap;  /* the longest reference in the run */
     double     *row;      /* scratch a derived field is computed into */
 };
 
@@ -27,10 +26,9 @@ refrow *refrow_create(h5writer *out, rate_config rates, size_t ref_cap,
         return NULL;
     }
 
-    r->out     = out;
-    r->rates   = rates;
-    r->ref_cap = ref_cap;
-    r->row     = calloc(widest ? widest : 1, sizeof *r->row);
+    r->out   = out;
+    r->rates = rates;
+    r->row   = calloc(widest ? widest : 1, sizeof *r->row);
 
     if (!r->row) {
         refrow_destroy(r);
@@ -159,11 +157,6 @@ int refrow_write(refrow *r, int32_t tid, size_t len, const char *seq, const accu
         row = values(r, id, seq, acc, pr, len);
 
         if (row && write_values(r, id, tid, len, row) < 0) {
-            return -1;
-        }
-
-        if (out_padding_needed(id, len, r->ref_cap)
-            && h5writer_pad(r->out, id, tid, len) < 0) {
             return -1;
         }
     }

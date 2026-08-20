@@ -62,10 +62,7 @@ typedef struct {
     bool        from_ref;  /* whether its values are the reference's and not the reads' */
     out_stored  stored;    /* the type its values are narrowed to */
 
-    /* Both are narrowed to the stored type. Padding is written only where it differs from
-     * the fill. */
     double      fill;      /* what a position the run never wrote reads as */
-    double      pad;       /* what a column past the end of a reference reads as */
 } out_field;
 
 extern const out_field OUT_FIELDS[OUT_N_FIELDS];
@@ -141,15 +138,6 @@ size_t out_widest(size_t cap, const bool *wanted);
 /* Whether this field's values must be written for a reference no read arrived on. */
 bool out_values_needed(out_field_id id);
 
-/* Whether this field's row must be padded past a reference of len bases, in a run whose
- * longest reference is cap. Padding says the columns are outside the reference and not
- * merely unmeasured, which a field already filled with that marker does not need.
- *
- * False for a field whose row has more than one extent: such a row is written as a block
- * at the origin, and everything outside the block keeps the fill. */
-bool out_padding_needed(out_field_id id, size_t len, size_t cap);
-
-
 /* One value of any field, in the type it is stored as. */
 typedef union {
     float    f32;
@@ -157,10 +145,9 @@ typedef union {
     int8_t   i8;
 } out_value;
 
-/* Narrow a field's markers to the type it is stored in. Return 0, or -1 where that type
+/* Narrows a field's fill to the type it is stored in. Returns 0, or -1 where that type
  * has no such value: a whole number has no NaN. */
 int out_fill_value(out_field_id id, out_value *value);
-int out_pad_value(out_field_id id, out_value *value);
 
 /* Give the bytes one of a field's values occupies, and the most any field's value
  * occupies. A buffer taking a row of any field is as long as out_widest values of

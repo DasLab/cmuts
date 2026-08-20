@@ -105,9 +105,9 @@ hid_t h5layout_row_space(size_t cap, const bool *wanted)
  * scalar field has one value per reference, so the column plays no part in selecting
  * it: the arrays are filled in full and the rank bounds how much is read. */
 int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
-                         int32_t tid, size_t from, size_t n)
+                         int32_t tid, size_t n)
 {
-    hsize_t start[OUT_RANK_MAX] = { (hsize_t)tid, (hsize_t)from };
+    hsize_t start[OUT_RANK_MAX] = { (hsize_t)tid, 0 };
     hsize_t count[OUT_RANK_MAX] = { 1, (hsize_t)n };
     hsize_t offset              = 0;
     hsize_t extent              = out_rank(id) > 1 ? (hsize_t)n : 1;

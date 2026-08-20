@@ -16,7 +16,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_F32,
         .fill    = 0.0,
-        .pad     = (double)NAN,
     },
     [OUT_REACTIVITY] = {
         .name    = "reactivity",
@@ -24,7 +23,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_F32,
         .fill    = (double)NAN,
-        .pad     = (double)NAN,
     },
     [OUT_ERROR] = {
         .name    = "error",
@@ -32,7 +30,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_F32,
         .fill    = (double)NAN,
-        .pad     = (double)NAN,
     },
     [OUT_LENGTHS] = {
         .name    = "reads/lengths",
@@ -40,7 +37,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_U64,
         .fill    = 0.0,
-        .pad     = 0.0,
     },
     [OUT_READS] = {
         .name    = "reads/counted",
@@ -48,7 +44,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_U64,
         .fill    = 0.0,
-        .pad     = 0.0,
     },
     [OUT_REJECTED] = {
         .name    = "reads/rejected",
@@ -56,7 +51,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = true,
         .stored  = OUT_U64,
         .fill    = 0.0,
-        .pad     = 0.0,
     },
     [OUT_PAIRWISE_CORRELATION] = {
         .name     = "pairwise/correlation",
@@ -64,7 +58,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref  = true,
         .stored   = OUT_F32,
         .fill     = (double)NAN,
-        .pad      = (double)NAN,
     },
     [OUT_PAIRWISE_CONDITIONAL] = {
         .name     = "pairwise/conditional",
@@ -72,7 +65,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref  = true,
         .stored   = OUT_F32,
         .fill     = (double)NAN,
-        .pad      = (double)NAN,
     },
     [OUT_PAIRWISE_COVERAGE] = {
         .name     = "pairwise/coverage",
@@ -80,7 +72,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref  = true,
         .stored   = OUT_F32,
         .fill     = 0.0,
-        .pad      = 0.0,
     },
     [OUT_NORM] = {
         .name     = "norm",
@@ -88,7 +79,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref  = false,
         .stored   = OUT_F32,
         .fill     = (double)NAN,
-        .pad      = (double)NAN,
     },
     [OUT_SEQUENCE] = {
         .name     = "sequence",
@@ -97,7 +87,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .from_ref = true,
         .stored   = OUT_I8,
         .fill     = -1.0,
-        .pad      = -1.0,
     },
     [OUT_UNMAPPED] = {
         .name    = "reads/unmapped",
@@ -105,7 +94,6 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .per_ref = false,
         .stored  = OUT_U64,
         .fill    = 0.0,
-        .pad     = 0.0,
     },
 };
 
@@ -190,41 +178,10 @@ int out_fill_value(out_field_id id, out_value *value)
     return narrow_marker(id, OUT_FIELDS[id].fill, value);
 }
 
-int out_pad_value(out_field_id id, out_value *value)
-{
-    return narrow_marker(id, OUT_FIELDS[id].pad, value);
-}
-
-static bool pad_differs(out_field_id id)
-{
-    double fill = OUT_FIELDS[id].fill;
-    double pad  = OUT_FIELDS[id].pad;
-
-    return !(pad == fill || (isnan(pad) && isnan(fill)));
-}
-
-/* Whether a field's row is written as a block, which is every row of more than one
- * extent. Such a row starts at the origin and leaves the rest of itself at the fill,
- * so it is never padded. */
-static bool is_block(out_field_id id, size_t len, size_t cap)
-{
-    return shape_rank(OUT_FIELDS[id].row(len, cap)) > 1;
-}
-
 bool out_values_needed(out_field_id id)
 {
     return OUT_FIELDS[id].from_ref;
 }
-
-bool out_padding_needed(out_field_id id, size_t len, size_t cap)
-{
-    if (!OUT_FIELDS[id].per_ref || !pad_differs(id) || is_block(id, len, cap)) {
-        return false;
-    }
-
-    return out_values(id, len, cap) < out_values(id, cap, cap);
-}
-
 
 size_t out_stored_bytes(out_field_id id)
 {

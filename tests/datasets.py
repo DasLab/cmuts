@@ -15,7 +15,7 @@ DATASETS = {
     # Every read on one reference, so every worker writes to one accumulator.
     "single":  dict(seed=103, references=1, ref_length=600, reads_per_ref=3000),
 
-    # Lengths ranging sixtyfold, so most rows are mostly padding.
+    # Lengths ranging sixtyfold, so most references end far short of their row.
     "ragged":  dict(seed=104, references=30, ref_length="60:4000", reads_per_ref="10:40"),
 
     # Reads storing far more than the span they align to, through clipped ends.
@@ -45,13 +45,13 @@ DATASETS = {
                         read_length="40:60", soft_clips="0:2",
                         soft_clip_length="20:150"),
 
-    # Ragged and sparsely covered at once, so a reference with padding and no
-    # reads at all is among them.
+    # Ragged and sparsely covered at once, so a short reference with no reads
+    # at all is among them.
     "patchy":  dict(seed=110, references=60, ref_length="60:900", covered=0.4,
                     reads_per_ref="5:20"),
 
-    # References of one length, some of them uncovered, so a row holding no
-    # reads holds no padding either.
+    # References of one length, some of them uncovered, so every row spans its
+    # reference exactly.
     "flat":    dict(seed=111, references=120, ref_length=300, covered=0.4,
                     reads_per_ref="5:20"),
 
