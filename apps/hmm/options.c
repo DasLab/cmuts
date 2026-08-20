@@ -162,6 +162,26 @@ static const cli_option OPTIONS[] = {
         .minimum = 0,
         .maximum = CLI_UNBOUNDED,
     },
+    {
+        .group   = "Counting",
+        .name    = "nan-5p",
+        .type    = OPT_SIZE,
+        .offset  = offsetof(cli_args, pipeline.rate_config.nan_5p),
+        .metavar = "N",
+        .help    = "write NaN reactivity and error for this many bases at the 5' end",
+        .minimum = 0,
+        .maximum = CLI_UNBOUNDED,
+    },
+    {
+        .group   = "Counting",
+        .name    = "nan-3p",
+        .type    = OPT_SIZE,
+        .offset  = offsetof(cli_args, pipeline.rate_config.nan_3p),
+        .metavar = "N",
+        .help    = "write NaN reactivity and error for this many bases at the 3' end",
+        .minimum = 0,
+        .maximum = CLI_UNBOUNDED,
+    },
 
     {
         .group       = "Counting",

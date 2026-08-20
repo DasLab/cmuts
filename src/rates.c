@@ -14,9 +14,15 @@ rate_config rate_defaults(void)
 
 /* Returns whether a position carries enough evidence to report on. Some is always
  * required: a depth of zero does not report on a position with none. */
-static bool known_at(double wanted, double evidence)
+static bool meets_min_depth(double wanted, double evidence)
 {
     return evidence > 0.0 && evidence >= wanted;
+}
+
+/* Returns whether a position falls within a masked end of the reference. */
+static bool masked_at(const rate_config *cfg, size_t i, size_t len)
+{
+    return i < cfg->nan_5p || len - i <= cfg->nan_3p;
 }
 
 /* Returns the mutations at a position over the evidence for them, held to one. Every
@@ -29,34 +35,58 @@ static double rate_of(double mutations, double evidence)
     return rate > 1.0 ? 1.0 : rate;
 }
 
+/* Returns whether a position reports a rate: it carries enough evidence and lies
+ * outside the masked ends. */
+static bool reported_at(const rate_config *cfg, double evidence, size_t i, size_t len)
+{
+    return meets_min_depth(cfg->min_depth, evidence) && !masked_at(cfg, i, len);
+}
+
+/* Returns one position's rate, or NaN where none is reported. */
+static double reactivity_at(const rate_config *cfg, double mutations, double evidence,
+                            size_t i, size_t len)
+{
+    if (!reported_at(cfg, evidence, i, len)) {
+        return (double)NAN;
+    }
+
+    return rate_of(mutations, evidence);
+}
+
+/* Returns the standard error of one position's rate, taking the evidence as the count
+ * the rate is a proportion of, or NaN where none is reported. */
+static double error_at(const rate_config *cfg, double mutations, double evidence,
+                       size_t i, size_t len)
+{
+    double rate;
+
+    if (!reported_at(cfg, evidence, i, len)) {
+        return (double)NAN;
+    }
+
+    rate = rate_of(mutations, evidence);
+
+    return sqrt(rate * (1.0 - rate) / evidence);
+}
+
 void rate_reactivity(const rate_config *cfg, const accum *acc, size_t len,
                      double *restrict out)
 {
     const double *evidence  = accum_const_data(acc, ACCUM_SPANNED);
     const double *mutations = accum_const_data(acc, ACCUM_MUTATIONS);
-    double        wanted    = cfg->min_depth;
 
     for (size_t i = 0; i < len; i++) {
-        out[i] = known_at(wanted, evidence[i])
-               ? rate_of(mutations[i], evidence[i])
-               : (double)NAN;
+        out[i] = reactivity_at(cfg, mutations[i], evidence[i], i, len);
     }
 }
 
-/* Returns the standard error of the rate, taking the evidence as the count it is a
- * proportion of. */
 void rate_error(const rate_config *cfg, const accum *acc, size_t len,
                 double *restrict out)
 {
     const double *evidence  = accum_const_data(acc, ACCUM_SPANNED);
     const double *mutations = accum_const_data(acc, ACCUM_MUTATIONS);
-    double        wanted    = cfg->min_depth;
 
     for (size_t i = 0; i < len; i++) {
-        double rate = rate_of(mutations[i], evidence[i]);
-
-        out[i] = known_at(wanted, evidence[i])
-               ? sqrt(rate * (1.0 - rate) / evidence[i])
-               : (double)NAN;
+        out[i] = error_at(cfg, mutations[i], evidence[i], i, len);
     }
 }

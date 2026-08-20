@@ -151,6 +151,8 @@ The number of reads in which this pair of bases was present.
 | `--min-phred Q` | assign bases below this the maximum sequencing error (0 to 255; default 0) |
 | `--pairwise STATS` | write these statistics of how often two positions are modified together (correlation, conditional, none; default none) |
 | `--min-depth D` | evidence a position needs before its rate is written (default 1) |
+| `--nan-5p N` | write NaN reactivity and error for this many bases at the 5' end (default 0) |
+| `--nan-3p N` | write NaN reactivity and error for this many bases at the 3' end (default 0) |
 | `--params FILE` | read the pair HMM's rates from this file (default: built in) |
 | `--substitution-weight W` | what a substitution counts towards the mutation total (0 to 1; default 1) |
 | `--deletion-weight W` | what a deletion counts towards the mutation total (0 to 1; default 1) |
