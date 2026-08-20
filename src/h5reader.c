@@ -12,9 +12,10 @@
 #include "error.h"
 #include "h5layout.h"
 
-/* The field whose shape gives the rest. Coverage is one value per base, so the width
- * of its row is the capacity every other field's width derives from. */
-#define SHAPE_FIELD OUT_COVERAGE
+/* The field whose shape gives the rest. Reactivity is one value per base and required by
+ * every program that reads an output, so the width of its row is the capacity every
+ * other field's width derives from. */
+#define SHAPE_FIELD OUT_REACTIVITY
 
 struct h5reader {
     hid_t   file;

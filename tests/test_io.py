@@ -93,14 +93,14 @@ class Program:
 
 SUBTRACT = Program(
     name="sub", command=CMUTS_SUB, arity=2,
-    required=(COVERAGE, REACTIVITY), added=(), rules=SUB_RULES, rounds=(),
+    required=(REACTIVITY,), added=(), rules=SUB_RULES, rounds=(),
     run=lambda inputs, output, **options: run_subtract(*inputs, output, **options),
     attempt=lambda inputs, output, **options: try_subtract(*inputs, output, **options),
 )
 
 DIVIDE = Program(
     name="div", command=CMUTS_DIV, arity=2,
-    required=(COVERAGE, REACTIVITY, ERROR), added=(), rules=DIV_RULES,
+    required=(REACTIVITY,), added=(), rules=DIV_RULES,
     rounds=(ERROR,),
     run=lambda inputs, output, **options: run_divide(*inputs, output, **options),
     attempt=lambda inputs, output, **options: try_divide(*inputs, output, **options),
