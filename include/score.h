@@ -32,5 +32,5 @@ typedef struct {
 /* Writes one row per reference to out, as comma separated values, and a note on stderr
  * for each structure that cannot be scored. Returns 0, or -1 with a description in
  * error. */
-int score_run(const score_config *cfg, const fmt_reads *reads, FILE *out,
+int score_run(const score_config *cfg, const fmt_request *requests, size_t n_requests, FILE *out,
               char *error, size_t error_len);

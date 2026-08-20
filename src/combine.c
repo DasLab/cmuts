@@ -28,7 +28,8 @@ typedef struct {
 
     h5reader **input;
     h5writer  *out;
-    fmt_reads  reads;   /* derived from the spec's manifest */
+    fmt_request requests[FMT_N_FIELDS];  /* derived from the spec's manifest */
+    size_t      n_requests;
 
     combine_rows rows;
     void        *result;
@@ -329,10 +330,10 @@ static int open_inputs(combination *c, char *error, size_t error_len)
         return -1;
     }
 
-    fmt_reads_of(c->spec->writes, &c->reads);
+    c->n_requests = fmt_requests_of(c->spec->writes, c->requests);
 
     for (size_t i = 0; i < c->spec->n_inputs; i++) {
-        c->input[i] = h5reader_open(c->spec->inputs[i], &c->reads);
+        c->input[i] = h5reader_open(c->spec->inputs[i], c->requests, c->n_requests);
 
         if (!c->input[i]) {
             snprintf(error, error_len, "out of memory");

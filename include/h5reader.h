@@ -19,11 +19,11 @@
  * only. */
 typedef struct h5reader h5reader;
 
-/* Opens a file, taking the fields the reads name and checking that their shapes agree.
- * A field the reads require must be present; one they do not require is skipped where
+/* Opens a file, taking the n requested fields and checking that their shapes agree. A
+ * field a request requires must be present; one no request requires is skipped where
  * the file lacks it. Returns NULL only when out of memory; every other failure is
  * reported through h5reader_error. */
-h5reader *h5reader_open(const char *path, const fmt_reads *reads);
+h5reader *h5reader_open(const char *path, const fmt_request *requests, size_t n);
 void      h5reader_close(h5reader *r);
 
 /* Give the shape the file was written at: one row per reference, each as wide as the

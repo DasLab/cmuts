@@ -23,8 +23,8 @@ struct h5reader {
     /* A dataspace apiece, kept for the life of the reader as the writer keeps its
      * own: only the selection differs between one row and the next. */
     hid_t   filespace[FMT_N_FIELDS];
-    const fmt_reads *reads;        /* what the program reads, and what of it it requires */
-    bool    taken[FMT_N_FIELDS];   /* the fields it opened */
+    bool    taken[FMT_N_FIELDS];     /* the fields it opened */
+    bool    required[FMT_N_FIELDS];  /* the fields the caller's requests insist on */
     hid_t   memspace;   /* one row of the widest field, selected down to size */
     int32_t n_refs;
     size_t  ref_cap;
@@ -136,9 +136,9 @@ static int open_field(h5reader *r, fmt_field_id id)
     r->dataset[id] = H5Dopen2(r->file, FMT_FIELDS[id].name, dapl);
     H5Pclose(dapl);
 
-    /* A field the reads do not require is skipped where the file lacks it. */
+    /* A field no request requires is skipped where the file lacks it. */
     if (r->dataset[id] < 0) {
-        if (fmt_read_required(r->reads, id)) {
+        if (r->required[id]) {
             return fail_field(r, id, "not present");
         }
 
@@ -155,7 +155,7 @@ static int open_field(h5reader *r, fmt_field_id id)
     return r->filespace[id] < 0 ? fail_field(r, id, "cannot be described") : 0;
 }
 
-/* Opens the fields the reads name. */
+/* Opens the requested fields. */
 static int open_fields(h5reader *r)
 {
     for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
@@ -209,7 +209,7 @@ static void find_ignored(h5reader *r)
  * reader is always closed, so it must be safe to close from here onwards: it
  * closes exactly what it opened. Zero, which calloc leaves behind, is a handle HDF5 would
  * accept, hence the marking. */
-static h5reader *reader_alloc(const fmt_reads *reads)
+static h5reader *reader_alloc(const fmt_request *requests, size_t n)
 {
     h5reader *r = calloc(1, sizeof *r);
 
@@ -217,8 +217,10 @@ static h5reader *reader_alloc(const fmt_reads *reads)
         return NULL;
     }
 
-    r->reads = reads;
-    fmt_reads_selection(reads, r->taken);
+    for (size_t i = 0; i < n; i++) {
+        r->taken[requests[i].id]    = true;
+        r->required[requests[i].id] = requests[i].required;
+    }
 
     /* Report failures through h5reader_error, with HDF5's own stack trace on stderr
      * turned off. */
@@ -251,9 +253,9 @@ static int build_memspace(h5reader *r)
     return r->memspace < 0 ? fail(r, "unable to prepare the file for reading") : 0;
 }
 
-h5reader *h5reader_open(const char *path, const fmt_reads *reads)
+h5reader *h5reader_open(const char *path, const fmt_request *requests, size_t n)
 {
-    h5reader *r = reader_alloc(reads);
+    h5reader *r = reader_alloc(requests, n);
 
     if (!r) {
         return NULL;

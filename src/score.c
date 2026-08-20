@@ -584,7 +584,7 @@ done:
     return status;
 }
 
-int score_run(const score_config *cfg, const fmt_reads *reads, FILE *out,
+int score_run(const score_config *cfg, const fmt_request *requests, size_t n_requests, FILE *out,
               char *error, size_t error_len)
 {
     context    ctx = { .cfg = cfg, .out = out };
@@ -596,7 +596,7 @@ int score_run(const score_config *cfg, const fmt_reads *reads, FILE *out,
         return -1;
     }
 
-    ctx.reader = h5reader_open(cfg->input_path, reads);
+    ctx.reader = h5reader_open(cfg->input_path, requests, n_requests);
 
     if (!ctx.reader) {
         structures_free(&set);

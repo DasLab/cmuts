@@ -104,28 +104,16 @@ typedef struct {
 /* Fills one entry per field with whether the manifest holds it. */
 void fmt_selection(const fmt_manifest *manifest, bool *wanted);
 
-/* One field a program reads of its inputs. */
+/* One field a program asks to read of an input file. */
 typedef struct {
     fmt_field_id id;
     bool         required;  /* an input lacking it is refused */
-} fmt_read;
+} fmt_request;
 
-/* The fields one program reads. Derived from a manifest by fmt_reads_of, or authored by
- * a program that writes no fields. */
-typedef struct {
-    fmt_read fields[FMT_N_FIELDS];
-    size_t   n_fields;
-} fmt_reads;
-
-/* Fills reads with every field the manifest's entries depend on, each once, required
- * where a required entry depends on it. */
-void fmt_reads_of(const fmt_manifest *manifest, fmt_reads *reads);
-
-/* Fills one entry per field with whether the reads hold it. */
-void fmt_reads_selection(const fmt_reads *reads, bool *wanted);
-
-/* Whether the reads require a field. */
-bool fmt_read_required(const fmt_reads *reads, fmt_field_id id);
+/* Fills requests, which must hold FMT_N_FIELDS entries, with every field the manifest's
+ * entries depend on, each once, required where a required entry depends on it. Returns
+ * how many it filled. */
+size_t fmt_requests_of(const fmt_manifest *manifest, fmt_request *requests);
 
 /* Whether a selection holds a field. */
 bool fmt_wanted(fmt_field_id id, const bool *wanted);

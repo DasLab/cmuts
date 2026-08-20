@@ -136,55 +136,37 @@ void fmt_selection(const fmt_manifest *manifest, bool *wanted)
     }
 }
 
-/* Adds one field to the reads, keeping each field a single entry. */
-static void reads_add(fmt_reads *reads, fmt_field_id id, bool required)
+/* Adds one field to the requests, keeping each field a single entry. */
+static size_t requests_add(fmt_request *requests, size_t n, fmt_field_id id,
+                           bool required)
 {
-    for (size_t i = 0; i < reads->n_fields; i++) {
-        if (reads->fields[i].id == id) {
+    for (size_t i = 0; i < n; i++) {
+        if (requests[i].id == id) {
             if (required) {
-                reads->fields[i].required = true;
+                requests[i].required = true;
             }
-            return;
+            return n;
         }
     }
 
-    reads->fields[reads->n_fields++] = (fmt_read){ id, required };
+    requests[n] = (fmt_request){ id, required };
+    return n + 1;
 }
 
-void fmt_reads_of(const fmt_manifest *manifest, fmt_reads *reads)
+size_t fmt_requests_of(const fmt_manifest *manifest, fmt_request *requests)
 {
-    reads->n_fields = 0;
+    size_t n = 0;
 
     for (size_t i = 0; i < manifest->n_fields; i++) {
         const fmt_written *field = &manifest->fields[i];
 
         for (const fmt_field_id *dep = field->depends;
              dep && *dep != FMT_N_FIELDS; dep++) {
-            reads_add(reads, *dep, field->required);
-        }
-    }
-}
-
-void fmt_reads_selection(const fmt_reads *reads, bool *wanted)
-{
-    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
-        wanted[id] = false;
-    }
-
-    for (size_t i = 0; i < reads->n_fields; i++) {
-        wanted[reads->fields[i].id] = true;
-    }
-}
-
-bool fmt_read_required(const fmt_reads *reads, fmt_field_id id)
-{
-    for (size_t i = 0; i < reads->n_fields; i++) {
-        if (reads->fields[i].id == id) {
-            return reads->fields[i].required;
+            n = requests_add(requests, n, *dep, field->required);
         }
     }
 
-    return false;
+    return n;
 }
 
 bool fmt_wanted(fmt_field_id id, const bool *wanted)

@@ -349,12 +349,11 @@ done:
 static int gather(const normalize_config *cfg, const fmt_manifest *writes, rate_pool *p,
                   progress *bar, char *error, size_t error_len)
 {
-    fmt_reads reads;
-
-    fmt_reads_of(writes, &reads);
+    fmt_request requests[FMT_N_FIELDS];
+    size_t      n = fmt_requests_of(writes, requests);
 
     for (size_t i = 0; i < cfg->n_files; i++) {
-        h5reader *in     = h5reader_open(cfg->inputs[i], &reads);
+        h5reader *in     = h5reader_open(cfg->inputs[i], requests, n);
         int       status = -1;
 
         if (!in) {
@@ -392,7 +391,8 @@ static int gather(const normalize_config *cfg, const fmt_manifest *writes, rate_
 typedef struct {
     const normalize_config *cfg;
     const fmt_manifest     *manifest;               /* what it writes */
-    fmt_reads               reads;                  /* derived from the manifest */
+    fmt_request             requests[FMT_N_FIELDS]; /* derived from the manifest */
+    size_t                  n_requests;
     double                  factor;
     bool                    writes[FMT_N_FIELDS];   /* what this run leaves behind */
 
@@ -500,9 +500,9 @@ static void drop_absent_fields(transfer *t)
 
 static int open_transfer(transfer *t, bool may_replace, char *error, size_t error_len)
 {
-    fmt_reads_of(t->manifest, &t->reads);
+    t->n_requests = fmt_requests_of(t->manifest, t->requests);
 
-    t->in = h5reader_open(t->in_path, &t->reads);
+    t->in = h5reader_open(t->in_path, t->requests, t->n_requests);
 
     if (!t->in) {
         return fail_memory(error, error_len);

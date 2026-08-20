@@ -5,10 +5,9 @@
 
 #include "manifest.h"
 
-const fmt_reads CMUTS_SCORE_READS = {
-    .fields = {
-        { FMT_COVERAGE,   .required = true },
-        { FMT_REACTIVITY, .required = true },
-    },
-    .n_fields = 2,
+const fmt_request CMUTS_SCORE_READS[] = {
+    { FMT_COVERAGE,   .required = true },
+    { FMT_REACTIVITY, .required = true },
 };
+
+const size_t CMUTS_SCORE_N_READS = sizeof CMUTS_SCORE_READS / sizeof *CMUTS_SCORE_READS;
