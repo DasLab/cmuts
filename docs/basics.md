@@ -66,13 +66,13 @@ All HDF5 files in cmuts have the same format, where `n` is the number of referen
 <!-- BEGIN GENERATED cmuts-norm LAYOUT -->
 | Dataset | Shape | Type | Fill |
 | --- | --- | --- | --- |
-| `coverage` | `(n, l)` | `float32` | `zero` |
+| `coverage` | `(n, l)` | `float32` | `0` |
 | `reactivity` | `(n, l)` | `float32` | `NaN` |
 | `error` | `(n, l)` | `float32` | `NaN` |
-| `reads/lengths` | `(n, 2l)` | `uint64` | `zero` |
-| `reads/counted` | `(n,)` | `uint64` | `zero` |
-| `reads/rejected` | `(n,)` | `uint64` | `zero` |
-| `reads/unmapped` | `()` | `uint64` | `zero` |
+| `reads/lengths` | `(n, 2l)` | `uint64` | `0` |
+| `reads/counted` | `(n,)` | `uint64` | `0` |
+| `reads/rejected` | `(n,)` | `uint64` | `0` |
+| `reads/unmapped` | `()` | `uint64` | `0` |
 | `norm` | `()` | `float32` | `NaN` |
 | `sequence` | `(n, l)` | `int8` | `-1` |
 <!-- END GENERATED cmuts-norm LAYOUT -->

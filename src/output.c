@@ -256,8 +256,6 @@ static void fill_name(out_field_id id, char *out, size_t len)
 
     if (isnan(fill)) {
         snprintf(out, len, "nan");
-    } else if (fill == 0.0) {
-        snprintf(out, len, "zero");
     } else {
         snprintf(out, len, "%g", fill);
     }

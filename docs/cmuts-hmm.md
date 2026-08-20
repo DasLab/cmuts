@@ -37,7 +37,7 @@ The length check is required to avoid buffer overflows and cannot be disabled.
 {.field}
 ### `coverage`
 
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `zero`
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `0`
 
 The number of reads in which this base was present.
 
@@ -58,28 +58,28 @@ Standard error of the reactivity values. Purely the statistical error introduced
 {.field}
 ### `reads/lengths`
 
-**Shape** `(n, 2l)` · **Type** `uint64` · **Fill** `zero`
+**Shape** `(n, 2l)` · **Type** `uint64` · **Fill** `0`
 
 The number of reads passing all filters, binned by length.
 
 {.field}
 ### `reads/counted`
 
-**Shape** `(n,)` · **Type** `uint64` · **Fill** `zero`
+**Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
 
 The number of reads passing all filters.
 
 {.field}
 ### `reads/rejected`
 
-**Shape** `(n,)` · **Type** `uint64` · **Fill** `zero`
+**Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
 
 The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM
 
 {.field}
 ### `reads/unmapped`
 
-**Shape** `()` · **Type** `uint64` · **Fill** `zero`
+**Shape** `()` · **Type** `uint64` · **Fill** `0`
 
 The number of reads not aligned to any reference.
 
@@ -107,7 +107,7 @@ The probability that the base on the first axis was mutated in a read, given tha
 {.field}
 ### `pairwise/coverage`
 
-**Shape** `(n, l, l)` · **Type** `float32` · **Fill** `zero` · **Written with** `--pairwise`
+**Shape** `(n, l, l)` · **Type** `float32` · **Fill** `0` · **Written with** `--pairwise`
 
 The number of reads in which this pair of bases was present.
 <!-- END GENERATED cmuts-hmm FIELDS -->
