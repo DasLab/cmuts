@@ -635,7 +635,7 @@ static int consumer_row(consumer *c, refctx *ctx)
 {
     const accum *acc = refctx_accumulated(ctx) ? &ctx->acc : NULL;
 
-    return refrow_write(c->pipe->rows, ctx->tid, ctx->len, acc,
+    return refrow_write(c->pipe->rows, ctx->tid, ctx->len, ctx->seq, acc,
                         ctx->pr.cells ? &ctx->pr : NULL);
 }
 

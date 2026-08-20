@@ -68,6 +68,7 @@ hid_t h5layout_type(out_field_id id)
     switch (OUT_FIELDS[id].stored) {
         case OUT_F32:      return H5T_IEEE_F32LE;
         case OUT_U64:      return H5T_STD_U64LE;
+        case OUT_I8:       return H5T_STD_I8LE;
         case OUT_N_STORED: break;
     }
 
@@ -82,6 +83,7 @@ hid_t h5layout_memory_type(out_field_id id)
     switch (OUT_FIELDS[id].stored) {
         case OUT_F32:      return H5T_NATIVE_FLOAT;
         case OUT_U64:      return H5T_NATIVE_UINT64;
+        case OUT_I8:       return H5T_NATIVE_INT8;
         case OUT_N_STORED: break;
     }
 

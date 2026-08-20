@@ -74,6 +74,7 @@ All HDF5 files in cmuts have the same format, where `n` is the number of referen
 | `reads/rejected` | `(n,)` | `uint64` | `zero` |
 | `reads/unmapped` | `()` | `uint64` | `zero` |
 | `norm` | `()` | `float32` | `NaN` |
+| `sequence` | `(n, l)` | `int8` | `-1` |
 <!-- END GENERATED cmuts-norm LAYOUT -->
 
 See the [output](output.md) page for more detail on what each dataset contains.

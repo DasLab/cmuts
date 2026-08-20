@@ -10,12 +10,17 @@ from __future__ import annotations
 
 import numpy as np
 
-from outputs import COVERAGE, ERROR, LENGTHS, COUNTED, REACTIVITY, REJECTED, UNMAPPED
+from outputs import (COVERAGE, ERROR, LENGTHS, COUNTED, REACTIVITY, REJECTED,
+                     SEQUENCE, UNMAPPED)
 from outputs import field_of
 
 # Every rule takes the values of the field being formed and the reactivities of
 # the same inputs, one array apiece. Only the error of a ratio uses a field
 # other than the one being formed.
+
+
+def _same(values, rates):
+    return values[0]
 
 
 def _add(values, rates):
@@ -54,7 +59,8 @@ def _ratio_error(values, rates):
 
 
 # How each dataset of the output is formed from the inputs, for each program.
-# Both sum every count, so only the rate and its error differ.
+# Both sum every count and carry the sequence through, so only the rate and its
+# error differ.
 SUB_RULES = {
     COVERAGE: _add,
     REACTIVITY: _subtract,
@@ -63,6 +69,7 @@ SUB_RULES = {
     COUNTED: _add,
     REJECTED: _add,
     UNMAPPED: _add,
+    SEQUENCE: _same,
 }
 
 DIV_RULES = {
@@ -73,6 +80,7 @@ DIV_RULES = {
     COUNTED: _add,
     REJECTED: _add,
     UNMAPPED: _add,
+    SEQUENCE: _same,
 }
 
 

@@ -90,6 +90,15 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .fill     = (double)NAN,
         .pad      = (double)NAN,
     },
+    [OUT_SEQUENCE] = {
+        .name     = "sequence",
+        .row      = shape_per_base,
+        .per_ref  = true,
+        .from_ref = true,
+        .stored   = OUT_I8,
+        .fill     = -1.0,
+        .pad      = -1.0,
+    },
     [OUT_UNMAPPED] = {
         .name    = "reads/unmapped",
         .row     = shape_none,
@@ -116,20 +125,6 @@ size_t out_values(out_field_id id, size_t len, size_t cap)
     return shape_values(OUT_FIELDS[id].row, len, cap);
 }
 
-/* Every output holds these, whichever program wrote it, so a program reading one takes
- * exactly them. */
-static const out_written COMMON[] = {
-    { .id = OUT_COVERAGE },
-    { .id = OUT_REACTIVITY },
-    { .id = OUT_ERROR },
-    { .id = OUT_LENGTHS },
-    { .id = OUT_READS },
-    { .id = OUT_REJECTED },
-    { .id = OUT_UNMAPPED },
-};
-
-const out_manifest OUT_COMMON = { COMMON, sizeof COMMON / sizeof *COMMON };
-
 void out_selection(const out_manifest *manifest, bool *wanted)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
@@ -139,6 +134,17 @@ void out_selection(const out_manifest *manifest, bool *wanted)
     for (size_t i = 0; i < manifest->n_fields; i++) {
         wanted[manifest->fields[i].id] = true;
     }
+}
+
+out_origin out_origin_of(const out_manifest *manifest, out_field_id id)
+{
+    for (size_t i = 0; i < manifest->n_fields; i++) {
+        if (manifest->fields[i].id == id) {
+            return manifest->fields[i].origin;
+        }
+    }
+
+    return OUT_IF_PRESENT;
 }
 
 bool out_wanted(out_field_id id, const bool *wanted)
@@ -172,6 +178,7 @@ static int narrow_marker(out_field_id id, double marker, out_value *value)
     switch (OUT_FIELDS[id].stored) {
         case OUT_F32:      value->f32 = (float)marker;    return 0;
         case OUT_U64:      value->u64 = (uint64_t)marker; return 0;
+        case OUT_I8:       value->i8  = (int8_t)marker;   return 0;
         case OUT_N_STORED: break;
     }
 
@@ -204,6 +211,11 @@ static bool is_block(out_field_id id, size_t len, size_t cap)
     return shape_rank(OUT_FIELDS[id].row(len, cap)) > 1;
 }
 
+bool out_values_needed(out_field_id id)
+{
+    return OUT_FIELDS[id].from_ref;
+}
+
 bool out_padding_needed(out_field_id id, size_t len, size_t cap)
 {
     if (!OUT_FIELDS[id].per_ref || !pad_differs(id) || is_block(id, len, cap)) {
@@ -213,11 +225,13 @@ bool out_padding_needed(out_field_id id, size_t len, size_t cap)
     return out_values(id, len, cap) < out_values(id, cap, cap);
 }
 
+
 size_t out_stored_bytes(out_field_id id)
 {
     switch (OUT_FIELDS[id].stored) {
         case OUT_F32:      return sizeof(float);
         case OUT_U64:      return sizeof(uint64_t);
+        case OUT_I8:       return sizeof(int8_t);
         case OUT_N_STORED: break;
     }
 
@@ -271,6 +285,7 @@ static const char *stored_name(out_stored stored)
     switch (stored) {
         case OUT_F32:      return "float32";
         case OUT_U64:      return "uint64";
+        case OUT_I8:       return "int8";
         case OUT_N_STORED: break;
     }
 

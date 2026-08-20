@@ -89,6 +89,13 @@ The number of reads not aligned to any reference.
 **Shape** `()` · **Type** `float32` · **Fill** `NaN`
 
 The norm every rate in this file was divided by.
+
+{.field}
+### `sequence`
+
+**Shape** `(n, l)` · **Type** `int8` · **Fill** `-1`
+
+The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.
 <!-- END GENERATED cmuts-norm FIELDS -->
 
 ## CLI Options

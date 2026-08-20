@@ -21,6 +21,7 @@ typedef enum {
 
 typedef enum {
     DIV_SUM,
+    DIV_SAME,
     DIV_RATIO,
     DIV_RATIO_ERROR,
 } div_rule;
@@ -33,6 +34,7 @@ static const div_rule RULES[OUT_N_FIELDS] = {
     [OUT_READS]      = DIV_SUM,
     [OUT_REJECTED]   = DIV_SUM,
     [OUT_UNMAPPED]   = DIV_SUM,
+    [OUT_SEQUENCE]   = DIV_SAME,
 };
 
 /* ------------------------------------------------------------------------ */
@@ -87,10 +89,11 @@ static int combine_f32(const combine_rows *rows, out_field_id id, div_rule how, 
             ratio_error_f32(rows, out, n);
             return 0;
         case DIV_SUM:
+        case DIV_SAME:
             break;
     }
 
-    return -1;
+    return COMBINE_NO_RULE;
 }
 
 static int divide_field(const combine_rows *rows, out_field_id id, void *out, size_t n,
@@ -98,13 +101,17 @@ static int divide_field(const combine_rows *rows, out_field_id id, void *out, si
 {
     (void)ctx;
 
-    /* Every count sums; every other rule is over rates. */
+    /* Every count sums and every other rule is over rates. */
     if (RULES[id] == DIV_SUM) {
         return combine_sum(rows, id, out, n);
     }
 
+    if (RULES[id] == DIV_SAME) {
+        return combine_same(rows, id, out, n);
+    }
+
     if (OUT_FIELDS[id].stored != OUT_F32) {
-        return -1;
+        return COMBINE_NO_RULE;
     }
 
     return combine_f32(rows, id, RULES[id], out, n);

@@ -29,7 +29,7 @@ void    refrow_destroy(refrow *r);
  * and the region outside the reference where the field's fill does not already read as
  * outside it. Anything else keeps the fill.
  *
- * acc is NULL for a reference no read arrived on, which has no accumulated values and so
- * writes only what lies outside itself. */
-int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc,
+ * acc is NULL for a reference no read arrived on, which has no accumulated values. seq is
+ * its sequence, which it has whether or not a read arrived. */
+int refrow_write(refrow *r, int32_t tid, size_t len, const char *seq, const accum *acc,
                  const pairs *pr);

@@ -418,8 +418,13 @@ def test_something_that_is_not_hdf5_is_refused(tmp_path):
     assert notes.read_text() == NOTES
 
 
-@pytest.mark.parametrize("missing", ALL_FIELDS)
-def test_an_input_missing_any_dataset_is_refused(build, tmp_path, missing):
+# The datasets cmuts norm refuses an input for.
+REQUIRED = (COVERAGE, REACTIVITY)
+SKIPPABLE = tuple(name for name in ALL_FIELDS if name not in REQUIRED)
+
+
+@pytest.mark.parametrize("missing", REQUIRED)
+def test_an_input_missing_a_required_dataset_is_refused(build, tmp_path, missing):
     failed = try_normalize([delete_field(build(), missing)], [tmp_path / "out.h5"])
 
     assert failed.returncode != 0

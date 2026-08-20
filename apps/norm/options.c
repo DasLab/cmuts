@@ -22,9 +22,11 @@ static const cli_choice SCHEME_CHOICES[] = {
  * norm alongside it. */
 static const out_written WRITTEN[] = {
     { .id = OUT_COVERAGE,
-      .detail = "The number of reads in which this base was present." },
+      .detail = "The number of reads in which this base was present.",
+      .origin = OUT_REQUIRED },
     { .id = OUT_REACTIVITY,
-      .detail = "The mutation rate divided by the norm this file records, so a rate reads against the norm rather than as a raw frequency." },
+      .detail = "The mutation rate divided by the norm this file records, so a rate reads against the norm rather than as a raw frequency.",
+      .origin = OUT_REQUIRED },
     { .id = OUT_ERROR,
       .detail = "Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors." },
     { .id = OUT_LENGTHS,
@@ -36,7 +38,11 @@ static const out_written WRITTEN[] = {
     { .id = OUT_UNMAPPED,
       .detail = "The number of reads not aligned to any reference." },
     { .id = OUT_NORM,
-      .detail = "The norm every rate in this file was divided by." },
+      .detail = "The norm every rate in this file was divided by.",
+      .origin = OUT_MADE },
+    { .id = OUT_SEQUENCE,
+      .detail = "The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.",
+},
 };
 
 

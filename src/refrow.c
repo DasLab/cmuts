@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 
+#include "nuc.h"
 #include "output.h"
 
 struct refrow {
@@ -68,17 +69,32 @@ static void pair_square(refrow *r, out_field_id id, const pairs *pr, size_t len)
     }
 }
 
+/* Fills the scratch with one value for every base of the reference: its index among the
+ * named bases, or the marker for a base that is none of them. */
+static void sequence(refrow *r, const char *seq, size_t len)
+{
+    for (size_t i = 0; i < len; i++) {
+        nuc base = nuc_from_char(seq[i]);
+
+        r->row[i] = nuc_is_base(base) ? (double)nuc_index(base) : -1.0;
+    }
+}
+
 /* Gives one output field's values for this reference, computed into the scratch row where
  * they are derived and read in place where they are not, or NULL where the reference has
  * none of them.
  *
- * Every field is taken from the reads, so a reference none reached has no values at all.
  * The accumulated fields and the written ones do not correspond one to one, so every field
- * is listed below and none is defaulted: one added without a source of its own is caught
- * by the switch. */
-static const double *values(refrow *r, out_field_id id, const accum *acc,
+ * is listed below and none is defaulted: one added without a source of its own is caught by
+ * the switch. */
+static const double *values(refrow *r, out_field_id id, const char *seq, const accum *acc,
                             const pairs *pr, size_t len)
 {
+    if (out_values_needed(id)) {
+        sequence(r, seq, len);
+        return r->row;
+    }
+
     if (!acc) {
         return NULL;
     }
@@ -88,6 +104,7 @@ static const double *values(refrow *r, out_field_id id, const accum *acc,
         case OUT_LENGTHS:    return accum_const_data(acc, ACCUM_LENGTHS);
         case OUT_READS:      return accum_const_data(acc, ACCUM_READS);
         case OUT_REJECTED:   return accum_const_data(acc, ACCUM_FILTERED);
+        case OUT_SEQUENCE:
         case OUT_NORM:
         case OUT_UNMAPPED:
         case OUT_N_FIELDS:   break;
@@ -125,7 +142,7 @@ static int write_values(refrow *r, out_field_id id, int32_t tid, size_t len,
          : h5writer_field(r->out, id, tid, len, row);
 }
 
-int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc,
+int refrow_write(refrow *r, int32_t tid, size_t len, const char *seq, const accum *acc,
                  const pairs *pr)
 {
     if (len == 0) {
@@ -139,7 +156,7 @@ int refrow_write(refrow *r, int32_t tid, size_t len, const accum *acc,
             continue;
         }
 
-        row = values(r, id, acc, pr, len);
+        row = values(r, id, seq, acc, pr, len);
 
         if (row && write_values(r, id, tid, len, row) < 0) {
             return -1;

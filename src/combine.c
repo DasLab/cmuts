@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "h5reader.h"
 #include "h5writer.h"
@@ -74,10 +75,13 @@ static int fail_output(const combination *c, char *error, size_t error_len)
     return h5writer_fail(c->out, c->spec->output, error, error_len);
 }
 
-static int fail_rule(out_field_id id, char *error, size_t error_len)
+static int fail_rule(out_field_id id, int status, char *error, size_t error_len)
 {
-    snprintf(error, error_len, "%s: no rule combines a field of this type",
-             OUT_FIELDS[id].name);
+    const char *why = status == COMBINE_MISMATCH
+                    ? "the inputs disagree on it, so they were not made against one FASTA"
+                    : "no rule combines a field of this type";
+
+    snprintf(error, error_len, "%s: %s", OUT_FIELDS[id].name, why);
     return -1;
 }
 
@@ -123,11 +127,27 @@ int combine_sum(const combine_rows *rows, out_field_id id, void *out, size_t n)
         case OUT_U64:
             sum_u64(rows, id, out, n);
             return 0;
+        case OUT_I8:
         case OUT_N_STORED:
             break;
     }
 
-    return -1;
+    return COMBINE_NO_RULE;
+}
+
+int combine_same(const combine_rows *rows, out_field_id id, void *out, size_t n)
+{
+    size_t      bytes = n * out_stored_bytes(id);
+    const void *first = combine_row(rows, 0, id);
+
+    for (size_t i = 1; i < rows->n_inputs; i++) {
+        if (memcmp(first, combine_row(rows, i, id), bytes) != 0) {
+            return COMBINE_MISMATCH;
+        }
+    }
+
+    memcpy(out, first, bytes);
+    return COMBINE_OK;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -138,7 +158,7 @@ static int read_reference(combination *c, int32_t tid, char *error, size_t error
 {
     for (size_t i = 0; i < c->spec->n_inputs; i++) {
         for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-            if (!OUT_FIELDS[id].per_ref || !h5reader_holds(c->input[i], id)) {
+            if (!OUT_FIELDS[id].per_ref || !out_wanted(id, c->writes)) {
                 continue;
             }
 
@@ -154,8 +174,10 @@ static int read_reference(combination *c, int32_t tid, char *error, size_t error
 static int combine_field(const combination *c, out_field_id id, size_t n, char *error,
                          size_t error_len)
 {
-    if (c->spec->field(&c->rows, id, c->result, n, c->spec->ctx) < 0) {
-        return fail_rule(id, error, error_len);
+    int status = c->spec->field(&c->rows, id, c->result, n, c->spec->ctx);
+
+    if (status < 0) {
+        return fail_rule(id, status, error, error_len);
     }
 
     return 0;
@@ -208,7 +230,7 @@ static int read_totals(combination *c, char *error, size_t error_len)
         for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
             size_t total;
 
-            if (OUT_FIELDS[id].per_ref || !h5reader_holds(c->input[i], id)) {
+            if (OUT_FIELDS[id].per_ref || !out_wanted(id, c->writes)) {
                 continue;
             }
 
@@ -272,6 +294,25 @@ static int check_agreement(combination *c, char *error, size_t error_len)
     return 0;
 }
 
+/* Clears from writes every field an input does not carry. What remains is read, allocated
+ * for and written alike. */
+static void drop_absent_fields(combination *c)
+{
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (!out_wanted(id, c->writes)
+            || out_origin_of(c->spec->writes, id) == OUT_MADE) {
+            continue;
+        }
+
+        for (size_t i = 0; i < c->spec->n_inputs; i++) {
+            if (!h5reader_holds(c->input[i], id)) {
+                c->writes[id] = false;
+                break;
+            }
+        }
+    }
+}
+
 static int open_inputs(combination *c, char *error, size_t error_len)
 {
     c->input = calloc(c->spec->n_inputs, sizeof *c->input);
@@ -282,7 +323,7 @@ static int open_inputs(combination *c, char *error, size_t error_len)
     }
 
     for (size_t i = 0; i < c->spec->n_inputs; i++) {
-        c->input[i] = h5reader_open(c->spec->inputs[i]);
+        c->input[i] = h5reader_open(c->spec->inputs[i], c->spec->writes);
 
         if (!c->input[i]) {
             snprintf(error, error_len, "out of memory");
@@ -296,7 +337,12 @@ static int open_inputs(combination *c, char *error, size_t error_len)
         }
     }
 
-    return check_agreement(c, error, error_len);
+    if (check_agreement(c, error, error_len) < 0) {
+        return -1;
+    }
+
+    drop_absent_fields(c);
+    return 0;
 }
 
 static int build_rows(combination *c, char *error, size_t error_len)

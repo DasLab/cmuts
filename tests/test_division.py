@@ -288,11 +288,25 @@ def test_something_that_is_not_hdf5_is_refused(build, tmp_path):
     assert notes.read_text() == NOTES
 
 
-@pytest.mark.parametrize("missing", ALL_FIELDS)
-def test_an_input_missing_any_dataset_is_refused(build, tmp_path, missing):
+# The datasets cmuts div refuses an input for.
+REQUIRED = (COVERAGE, REACTIVITY, ERROR)
+SKIPPABLE = tuple(name for name in ALL_FIELDS if name not in REQUIRED)
+
+
+@pytest.mark.parametrize("missing", REQUIRED)
+def test_an_input_missing_a_required_dataset_is_refused(build, tmp_path, missing):
     failed = try_divide(delete_field(build(), missing), build(), tmp_path / "out.h5")
 
     assert failed.returncode != 0
+
+@pytest.mark.parametrize("missing", SKIPPABLE)
+def test_an_input_missing_a_dataset_that_is_not_required_is_skipped(build, divide,
+                                                                missing):
+    output = divide(delete_field(build(), missing), build())
+
+    assert missing not in layout_of(output)
+    assert REACTIVITY in layout_of(output), "the output holds no reactivity either"
+
 
 
 def test_a_control_missing_a_dataset_is_refused(build, tmp_path):
@@ -341,7 +355,7 @@ def test_a_run_that_refuses_its_inputs_leaves_the_output_intact(build, divide,
                                                                 tmp_path, wrong):
     bad = {
         "shape": lambda: build(n_refs=N_REFS + 1),
-        "missing dataset": lambda: delete_field(build(), UNMAPPED),
+        "missing dataset": lambda: delete_field(build(), REACTIVITY),
         "not hdf5": lambda: not_hdf5(tmp_path),
     }
 

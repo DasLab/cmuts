@@ -496,12 +496,22 @@ static void narrow(void *dst, out_stored stored, const double *src, size_t n)
             }
             return;
         }
+        case OUT_I8: {
+            int8_t *to = dst;
+
+            for (size_t i = 0; i < n; i++) {
+                to[i] = (int8_t)src[i];
+            }
+            return;
+        }
         case OUT_N_STORED:
             break;
     }
 }
 
-/* Pads a staged row, as write_part does with the padding row for a row written directly. */
+/* Pads a staged row, as write_part does with the padding row for a row written directly.
+ * An unsigned field has no NaN to pad with, and none needs it: every such row spans its
+ * full width whatever its reference measures. */
 static void pad_row(unsigned char *row, out_field_id id, size_t from, size_t width)
 {
     size_t    elem = out_stored_bytes(id);

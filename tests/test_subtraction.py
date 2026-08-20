@@ -325,11 +325,25 @@ def test_something_that_is_not_hdf5_is_refused(build, tmp_path):
     assert notes.read_text() == NOTES
 
 
-@pytest.mark.parametrize("missing", ALL_FIELDS)
-def test_an_input_missing_any_dataset_is_refused(build, tmp_path, missing):
+# The datasets cmuts sub refuses an input for.
+REQUIRED = (COVERAGE, REACTIVITY)
+SKIPPABLE = tuple(name for name in ALL_FIELDS if name not in REQUIRED)
+
+
+@pytest.mark.parametrize("missing", REQUIRED)
+def test_an_input_missing_a_required_dataset_is_refused(build, tmp_path, missing):
     failed = try_subtract(delete_field(build(), missing), build(), tmp_path / "out.h5")
 
     assert failed.returncode != 0
+
+@pytest.mark.parametrize("missing", SKIPPABLE)
+def test_an_input_missing_a_dataset_that_is_not_required_is_skipped(build, subtract,
+                                                                missing):
+    output = subtract(delete_field(build(), missing), build())
+
+    assert missing not in layout_of(output)
+    assert REACTIVITY in layout_of(output), "the output holds no reactivity either"
+
 
 
 def test_an_input_whose_datasets_disagree_is_refused(build, tmp_path):
@@ -371,7 +385,7 @@ def test_overwrite_replaces_an_existing_output(build, subtract):
 # temporary directory.
 BAD_INPUTS = {
     "shape": lambda build, tmp_path: build(n_refs=N_REFS + 1),
-    "missing dataset": lambda build, tmp_path: delete_field(build(), UNMAPPED),
+    "missing dataset": lambda build, tmp_path: delete_field(build(), REACTIVITY),
     "not hdf5": lambda build, tmp_path: not_hdf5(tmp_path),
 }
 

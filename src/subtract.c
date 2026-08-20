@@ -22,6 +22,7 @@ typedef enum {
 
 typedef enum {
     SUB_SUM,
+    SUB_SAME,
     SUB_DIFFERENCE,
     SUB_QUADRATURE,
 } sub_rule;
@@ -34,6 +35,7 @@ static const sub_rule RULES[OUT_N_FIELDS] = {
     [OUT_READS]      = SUB_SUM,
     [OUT_REJECTED]   = SUB_SUM,
     [OUT_UNMAPPED]   = SUB_SUM,
+    [OUT_SEQUENCE]   = SUB_SAME,
 };
 
 /* ------------------------------------------------------------------------ */
@@ -96,10 +98,11 @@ static int combine_f32(const combine_rows *rows, out_field_id id, sub_rule how, 
             propagate_f32(treated, untreated, out, n);
             return 0;
         case SUB_SUM:
+        case SUB_SAME:
             break;
     }
 
-    return -1;
+    return COMBINE_NO_RULE;
 }
 
 static int subtract_field(const combine_rows *rows, out_field_id id, void *out, size_t n,
@@ -107,13 +110,17 @@ static int subtract_field(const combine_rows *rows, out_field_id id, void *out, 
 {
     const subtract_config *cfg = ctx;
 
-    /* Every count sums; every other rule is over rates. */
+    /* Every count sums and every other rule is over rates. */
     if (RULES[id] == SUB_SUM) {
         return combine_sum(rows, id, out, n);
     }
 
+    if (RULES[id] == SUB_SAME) {
+        return combine_same(rows, id, out, n);
+    }
+
     if (OUT_FIELDS[id].stored != OUT_F32) {
-        return -1;
+        return COMBINE_NO_RULE;
     }
 
     return combine_f32(rows, id, RULES[id], cfg->clip, out, n);

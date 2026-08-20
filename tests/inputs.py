@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from outputs import BY_NAME, FIELDS, shape
+from outputs import BY_NAME, FIELDS, reference_sequences, shape
 
 # Small enough to write out by hand and to read in a failure, and ragged enough
 # that a row, a histogram and a scalar are all of different widths.
@@ -38,6 +38,9 @@ def random_values(field, n_refs=N_REFS, cap=CAP, seed=0):
     accident."""
     rng = np.random.default_rng(seed)
     wanted = shape(BY_NAME[field], n_refs, cap)
+
+    if BY_NAME[field].sequence:
+        return reference_sequences(n_refs, cap)
 
     if BY_NAME[field].dtype == "u8":
         return rng.integers(0, 1000, size=wanted, dtype=np.uint64)

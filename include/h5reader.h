@@ -19,10 +19,11 @@
  * only. */
 typedef struct h5reader h5reader;
 
-/* Opens a file, checking that it holds every field the layout declares and that their shapes
- * agree. Returns NULL only when out of memory; every other failure is reported through
- * h5reader_error. */
-h5reader *h5reader_open(const char *path);
+/* Opens a file, taking the fields the manifest names and checking that their shapes agree.
+ * A field the manifest requires must be present; one it does not require is skipped where
+ * the file lacks it. Returns NULL only when out of memory; every other failure is reported
+ * through h5reader_error. */
+h5reader *h5reader_open(const char *path, const out_manifest *manifest);
 void      h5reader_close(h5reader *r);
 
 /* Give the shape the file was written at: one row per reference, each as wide as the
@@ -30,8 +31,7 @@ void      h5reader_close(h5reader *r);
 int32_t h5reader_refs(const h5reader *r);
 size_t  h5reader_capacity(const h5reader *r);
 
-/* Whether the reader holds a field. Only the fields every output holds are opened, so
- * the optional ones read false. */
+/* Whether the reader opened a field. */
 bool h5reader_holds(const h5reader *r, out_field_id id);
 
 /* Reads one field's whole row for a reference. values must hold

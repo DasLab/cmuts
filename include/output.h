@@ -37,6 +37,7 @@ typedef enum {
     OUT_PAIRWISE_CONDITIONAL,
     OUT_PAIRWISE_COVERAGE,
     OUT_NORM,
+    OUT_SEQUENCE,
     OUT_N_FIELDS,
 } out_field_id;
 
@@ -44,6 +45,7 @@ typedef enum {
 typedef enum {
     OUT_F32,
     OUT_U64,
+    OUT_I8,
     OUT_N_STORED,
 } out_stored;
 
@@ -57,6 +59,7 @@ typedef struct {
     const char *name;
     shape_fn    row;       /* the extents one reference's values occupy */
     bool        per_ref;   /* whether there is one such row per reference */
+    bool        from_ref;  /* whether its values are the reference's and not the reads' */
     out_stored  stored;    /* the type its values are narrowed to */
 
     /* Both are narrowed to the stored type. Padding is written only where it differs from
@@ -93,6 +96,13 @@ extern const out_attribute OUT_ATTRIBUTES[OUT_N_ATTRS];
  * longest reference is cap. */
 size_t out_values(out_field_id id, size_t len, size_t cap);
 
+/* Where a program's field comes from. */
+typedef enum {
+    OUT_IF_PRESENT,  /* read where an input has it, skipped where it does not */
+    OUT_REQUIRED,    /* read from every input; one lacking it is refused */
+    OUT_MADE,        /* the run makes it, so no input is read for it */
+} out_origin;
+
 /* One field of one program's output.
  *
  * A field has the same shape, type and fill wherever it is written, so those stay in
@@ -103,22 +113,23 @@ typedef struct {
     out_field_id id;
     const char  *detail;     /* what the numbers are here, in one sentence */
     const char  *condition;  /* what a run needs for it, where it is not written always */
+    out_origin   origin;     /* where the run gets it */
 } out_written;
 
-/* The fields one program writes.
+/* The fields one program reads and writes.
  *
- * A program is an interface: it takes the datasets it needs, ignores whatever else its
- * input carries, and writes exactly these. */
+ * A program is an interface: it reads exactly these of its inputs, ignores whatever else
+ * they carry, and writes exactly these. */
 typedef struct {
     const out_written *fields;
     size_t             n_fields;
 } out_manifest;
 
-/* The fields every output holds, which is what a program reading one takes. */
-extern const out_manifest OUT_COMMON;
-
-/* Fills one entry per field with whether the manifest writes it. */
+/* Fills one entry per field with whether the manifest holds it. */
 void out_selection(const out_manifest *manifest, bool *wanted);
+
+/* Where the manifest gets a field. OUT_IF_PRESENT for one it does not hold. */
+out_origin out_origin_of(const out_manifest *manifest, out_field_id id);
 
 /* Whether a selection holds a field. */
 bool out_wanted(out_field_id id, const bool *wanted);
@@ -126,6 +137,9 @@ bool out_wanted(out_field_id id, const bool *wanted);
 /* Gives the widest row of any field, which is what a buffer must hold to take a row of
  * any of them. */
 size_t out_widest(size_t cap, const bool *wanted);
+
+/* Whether this field's values must be written for a reference no read arrived on. */
+bool out_values_needed(out_field_id id);
 
 /* Whether this field's row must be padded past a reference of len bases, in a run whose
  * longest reference is cap. Padding says the columns are outside the reference and not
@@ -140,6 +154,7 @@ bool out_padding_needed(out_field_id id, size_t len, size_t cap);
 typedef union {
     float    f32;
     uint64_t u64;
+    int8_t   i8;
 } out_value;
 
 /* Narrow a field's markers to the type it is stored in. Return 0, or -1 where that type

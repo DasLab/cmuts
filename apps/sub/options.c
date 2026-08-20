@@ -11,9 +11,11 @@
  * given, less the background it was given. */
 static const out_written WRITTEN[] = {
     { .id = OUT_COVERAGE,
-      .detail = "The number of reads in which this base was present." },
+      .detail = "The number of reads in which this base was present.",
+      .origin = OUT_REQUIRED },
     { .id = OUT_REACTIVITY,
-      .detail = "The mutation rate of the treated sample less that of the untreated one, so what remains is the signal the treatment added." },
+      .detail = "The mutation rate of the treated sample less that of the untreated one, so what remains is the signal the treatment added.",
+      .origin = OUT_REQUIRED },
     { .id = OUT_ERROR,
       .detail = "Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors." },
     { .id = OUT_LENGTHS,
@@ -24,6 +26,9 @@ static const out_written WRITTEN[] = {
       .detail = "The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM" },
     { .id = OUT_UNMAPPED,
       .detail = "The number of reads not aligned to any reference." },
+    { .id = OUT_SEQUENCE,
+      .detail = "The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.",
+},
 };
 
 

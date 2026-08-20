@@ -18,15 +18,26 @@
  * here, so the same rule applies to a field with a row and to one without. */
 typedef struct combine_rows combine_rows;
 
+/* What a rule reports. combine_run names the field in the message it prints. */
+typedef enum {
+    COMBINE_OK       = 0,
+    COMBINE_NO_RULE  = -1,   /* no rule for a field of this type */
+    COMBINE_MISMATCH = -2,   /* the inputs do not agree on it */
+} combine_status;
+
 /* Gives one input's values for a field, in the type the field is stored as. Any field of
  * any input is available, not only the one being formed. */
 const void *combine_row(const combine_rows *rows, size_t input, out_field_id id);
 
-/* Sums one field across every input. Returns 0, or -1 for a type with no sum. */
+/* Sums one field across every input. Returns COMBINE_NO_RULE for a type with no sum. */
 int combine_sum(const combine_rows *rows, out_field_id id, void *out, size_t n);
 
-/* Fills out with the n values one field of the result holds. Returns 0, or -1 where no
- * rule applies to the field. */
+/* Copies one field from the first input. Returns COMBINE_MISMATCH where the inputs do not
+ * hold the same values for it. */
+int combine_same(const combine_rows *rows, out_field_id id, void *out, size_t n);
+
+/* Fills out with the n values one field of the result holds. Returns COMBINE_OK, or one of
+ * the failures above. */
 typedef int (*combine_fn)(const combine_rows *rows, out_field_id id, void *out, size_t n,
                           const void *ctx);
 

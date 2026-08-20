@@ -345,11 +345,11 @@ done:
 
 /* Reads every input in turn, so a file that cannot be read fails before any output is
  * created. */
-static int gather(const normalize_config *cfg, rate_pool *p, char *error,
-                  size_t error_len)
+static int gather(const normalize_config *cfg, const out_manifest *writes, rate_pool *p,
+                  char *error, size_t error_len)
 {
     for (size_t i = 0; i < cfg->n_files; i++) {
-        h5reader *in     = h5reader_open(cfg->inputs[i]);
+        h5reader *in     = h5reader_open(cfg->inputs[i], writes);
         int       status = -1;
 
         if (!in) {
@@ -378,6 +378,7 @@ static int gather(const normalize_config *cfg, rate_pool *p, char *error,
 
 typedef struct {
     const normalize_config *cfg;
+    const out_manifest     *manifest;               /* what it reads and writes */
     double                  factor;
     bool                    writes[OUT_N_FIELDS];   /* what this run leaves behind */
 
@@ -409,7 +410,7 @@ static int transfer_reference(const transfer *t, int32_t tid, char *error,
                               size_t error_len)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (!OUT_FIELDS[id].per_ref || !h5reader_holds(t->in, id)) {
+        if (!OUT_FIELDS[id].per_ref || !out_wanted(id, t->writes)) {
             continue;
         }
 
@@ -467,9 +468,24 @@ static int transfer_file(const transfer *t, char *error, size_t error_len)
     return 0;
 }
 
+/* Clears from writes every field the input does not carry. What remains is read, copied
+ * and written alike. */
+static void drop_absent_fields(transfer *t)
+{
+    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        if (out_origin_of(t->manifest, id) == OUT_MADE) {
+            continue;
+        }
+
+        if (!h5reader_holds(t->in, id)) {
+            t->writes[id] = false;
+        }
+    }
+}
+
 static int open_transfer(transfer *t, bool may_replace, char *error, size_t error_len)
 {
-    t->in = h5reader_open(t->in_path);
+    t->in = h5reader_open(t->in_path, t->manifest);
 
     if (!t->in) {
         return fail_memory(error, error_len);
@@ -478,6 +494,8 @@ static int open_transfer(transfer *t, bool may_replace, char *error, size_t erro
     if (h5reader_error(t->in)) {
         return h5reader_fail(t->in, t->in_path, error, error_len);
     }
+
+    drop_absent_fields(t);
 
     t->n_refs  = h5reader_refs(t->in);
     t->ref_cap = h5reader_capacity(t->in);
@@ -509,6 +527,7 @@ static int write_output(const normalize_config *cfg, size_t which, const char *p
 {
     transfer t = {
         .cfg      = cfg,
+        .manifest = writes,
         .factor   = factor,
         .in_path  = cfg->inputs[which],
         .out_path = cfg->outputs[which],
@@ -579,7 +598,7 @@ int normalize_run(const normalize_config *cfg, const char *program,
         return -1;
     }
 
-    if (gather(cfg, &p, error, error_len) == 0) {
+    if (gather(cfg, writes, &p, error, error_len) == 0) {
         status = write_outputs(cfg, program, writes, pooled_factor(cfg, &p),
                                error, error_len);
     }

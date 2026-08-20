@@ -15,6 +15,7 @@ COUNTED = "reads/counted"
 REJECTED = "reads/rejected"
 UNMAPPED = "reads/unmapped"
 NORM = "norm"
+SEQUENCE = "sequence"
 
 READS_GROUP = "reads"
 
@@ -34,10 +35,12 @@ class Field:
     fill: float          # what a row nobody wrote reads as
     pad: float           # what a column past the end of a reference reads as
     rate: bool = False
+    sequence: bool = False
 
 
-# A rate is a float and NaN where it was not measured; a count is a whole
-# unsigned and zero where nothing was counted.
+# A rate is a float and NaN where it was not measured. A count is a whole
+# unsigned and zero where nothing was counted. The sequence is the reference
+# itself, and is neither.
 FIELDS = (
     Field(COVERAGE, PER_BASE, "f4", 0.0, np.nan),
     Field(REACTIVITY, PER_BASE, "f4", np.nan, np.nan, rate=True),
@@ -45,6 +48,7 @@ FIELDS = (
     Field(LENGTHS, PER_LENGTH, "u8", 0, 0),
     Field(COUNTED, SCALAR, "u8", 0, 0),
     Field(REJECTED, SCALAR, "u8", 0, 0),
+    Field(SEQUENCE, PER_BASE, "i1", -1, -1, sequence=True),
 )
 
 BY_NAME = {field.name: field for field in FIELDS}
@@ -65,13 +69,15 @@ FLOAT_FIELDS = _field_names(lambda field: field.dtype.startswith("f"))
 
 # The fields holding counts, in which a zero is a measured value and not a
 # missing one.
-COUNT_FIELDS = _field_names(lambda field: not field.rate)
-COLUMN_COUNT_FIELDS = _field_names(lambda field: not field.rate and field.kind != SCALAR)
+COUNT_FIELDS = _field_names(lambda field: not field.rate and not field.sequence)
+COLUMN_COUNT_FIELDS = _field_names(
+    lambda field: not field.rate and not field.sequence and field.kind != SCALAR)
 
 # The fields in which a NaN marks a column past the end of a reference. A row
 # indexed by read length runs to its full width, and a rate is NaN at any
 # position failing --min-depth, so neither kind marks padding.
-PADDED_FIELDS = _field_names(lambda field: not field.rate and field.kind == PER_BASE)
+PADDED_FIELDS = _field_names(
+    lambda field: not field.rate and not field.sequence and field.kind == PER_BASE)
 
 # Every field with a row per reference, and every field of the file. The
 # unmapped total belongs to the run and not to any reference, so it has no row
@@ -106,10 +112,21 @@ def extent(name: str, reference_length: int, columns: int) -> int:
 # ---------------------------------------------------------------------------
 
 
+def reference_sequences(n_refs: int, cap: int) -> np.ndarray:
+    """Builds the sequence every synthetic output carries.
+
+    cmuts sub and div refuse inputs that disagree on the sequence, so this does
+    not vary with the caller."""
+    return np.tile(np.arange(cap) % 4, (n_refs, 1)).astype(np.int8)
+
+
 def _values(field: Field, n_refs: int, cap: int, given) -> np.ndarray:
     """Builds a field's dataset from what the caller specified: an array of the
     right shape, or a single value to fill it with."""
     wanted = shape(field, n_refs, cap)
+
+    if given is None and field.sequence:
+        return reference_sequences(n_refs, cap)
 
     if given is None:
         given = field.fill
