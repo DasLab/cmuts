@@ -40,17 +40,6 @@ typedef enum {
     OUT_N_FIELDS,
 } out_field_id;
 
-/* What a value the run never wrote means. Counts read zero; rates read NaN, since zero
- * would claim an unread position was measured and unmodified.
- *
- * Columns past a reference's length are NaN regardless of this setting, being outside the
- * reference and not unmeasured within it. */
-typedef enum {
-    OUT_ZERO,
-    OUT_NAN,
-    OUT_N_ABSENT,
-} out_absent;
-
 /* The type a field's values are narrowed to in the output file. */
 typedef enum {
     OUT_F32,
@@ -66,10 +55,14 @@ typedef enum {
  * with nothing in front of it, which is a dataset of rank zero. */
 typedef struct {
     const char *name;
-    shape_fn    row;      /* the extents one reference's values occupy */
-    bool        per_ref;  /* whether there is one such row per reference */
-    out_stored  stored;   /* the type its values are narrowed to */
-    out_absent  absent;   /* what a value it was never given means */
+    shape_fn    row;       /* the extents one reference's values occupy */
+    bool        per_ref;   /* whether there is one such row per reference */
+    out_stored  stored;    /* the type its values are narrowed to */
+
+    /* Both are narrowed to the stored type. Padding is written only where it differs from
+     * the fill. */
+    double      fill;      /* what a position the run never wrote reads as */
+    double      pad;       /* what a column past the end of a reference reads as */
 } out_field;
 
 extern const out_field OUT_FIELDS[OUT_N_FIELDS];
@@ -142,6 +135,17 @@ size_t out_widest(size_t cap, const bool *wanted);
  * at the origin, and everything outside the block keeps the fill. */
 bool out_padding_needed(out_field_id id, size_t len, size_t cap);
 
+
+/* One value of any field, in the type it is stored as. */
+typedef union {
+    float    f32;
+    uint64_t u64;
+} out_value;
+
+/* Narrow a field's markers to the type it is stored in. Return 0, or -1 where that type
+ * has no such value: a whole number has no NaN. */
+int out_fill_value(out_field_id id, out_value *value);
+int out_pad_value(out_field_id id, out_value *value);
 
 /* Give the bytes one of a field's values occupies, and the most any field's value
  * occupies. A buffer taking a row of any field is as long as out_widest values of

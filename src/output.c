@@ -5,6 +5,8 @@
 
 #include "output.h"
 
+#include <math.h>
+
 #include "version.h"
 
 const out_field OUT_FIELDS[OUT_N_FIELDS] = {
@@ -13,77 +15,88 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
         .row     = shape_per_base,
         .per_ref = true,
         .stored  = OUT_F32,
-        .absent  = OUT_ZERO,
+        .fill    = 0.0,
+        .pad     = (double)NAN,
     },
     [OUT_REACTIVITY] = {
         .name    = "reactivity",
         .row     = shape_per_base,
         .per_ref = true,
         .stored  = OUT_F32,
-        .absent  = OUT_NAN,
+        .fill    = (double)NAN,
+        .pad     = (double)NAN,
     },
     [OUT_ERROR] = {
         .name    = "error",
         .row     = shape_per_base,
         .per_ref = true,
         .stored  = OUT_F32,
-        .absent  = OUT_NAN,
+        .fill    = (double)NAN,
+        .pad     = (double)NAN,
     },
     [OUT_LENGTHS] = {
         .name    = "reads/lengths",
         .row     = shape_per_length,
         .per_ref = true,
         .stored  = OUT_U64,
-        .absent  = OUT_ZERO,
+        .fill    = 0.0,
+        .pad     = 0.0,
     },
     [OUT_READS] = {
         .name    = "reads/counted",
         .row     = shape_none,
         .per_ref = true,
         .stored  = OUT_U64,
-        .absent  = OUT_ZERO,
+        .fill    = 0.0,
+        .pad     = 0.0,
     },
     [OUT_REJECTED] = {
         .name    = "reads/rejected",
         .row     = shape_none,
         .per_ref = true,
         .stored  = OUT_U64,
-        .absent  = OUT_ZERO,
+        .fill    = 0.0,
+        .pad     = 0.0,
     },
     [OUT_PAIRWISE_CORRELATION] = {
         .name     = "pairwise/correlation",
         .row      = shape_per_pair,
         .per_ref  = true,
         .stored   = OUT_F32,
-        .absent   = OUT_NAN,
+        .fill     = (double)NAN,
+        .pad      = (double)NAN,
     },
     [OUT_PAIRWISE_CONDITIONAL] = {
         .name     = "pairwise/conditional",
         .row      = shape_per_pair,
         .per_ref  = true,
         .stored   = OUT_F32,
-        .absent   = OUT_NAN,
+        .fill     = (double)NAN,
+        .pad      = (double)NAN,
     },
     [OUT_PAIRWISE_COVERAGE] = {
         .name     = "pairwise/coverage",
         .row      = shape_per_pair,
         .per_ref  = true,
         .stored   = OUT_F32,
-        .absent   = OUT_ZERO,
+        .fill     = 0.0,
+        .pad      = 0.0,
     },
     [OUT_NORM] = {
         .name     = "norm",
         .row      = shape_none,
         .per_ref  = false,
         .stored   = OUT_F32,
-        .absent   = OUT_NAN,
+        .fill     = (double)NAN,
+        .pad      = (double)NAN,
     },
     [OUT_UNMAPPED] = {
         .name    = "reads/unmapped",
         .row     = shape_none,
         .per_ref = false,
         .stored  = OUT_U64,
-        .absent  = OUT_ZERO,
+        .fill    = 0.0,
+        .pad     = 0.0,
     },
 };
 
@@ -148,11 +161,39 @@ size_t out_widest(size_t cap, const bool *wanted)
     return widest;
 }
 
-/* Whether the fill a field carries already reads as padding. A row is padded with NaN
- * whatever the field means by an absent value, so a field filled with NaN needs none. */
-static bool fill_pads(out_field_id id)
+/* Narrows one marker to the type a field is stored in. Refuses NaN in a type that has
+ * none, where the cast is undefined. */
+static int narrow_marker(out_field_id id, double marker, out_value *value)
 {
-    return OUT_FIELDS[id].absent == OUT_NAN;
+    if (isnan(marker) && OUT_FIELDS[id].stored != OUT_F32) {
+        return -1;
+    }
+
+    switch (OUT_FIELDS[id].stored) {
+        case OUT_F32:      value->f32 = (float)marker;    return 0;
+        case OUT_U64:      value->u64 = (uint64_t)marker; return 0;
+        case OUT_N_STORED: break;
+    }
+
+    return -1;
+}
+
+int out_fill_value(out_field_id id, out_value *value)
+{
+    return narrow_marker(id, OUT_FIELDS[id].fill, value);
+}
+
+int out_pad_value(out_field_id id, out_value *value)
+{
+    return narrow_marker(id, OUT_FIELDS[id].pad, value);
+}
+
+static bool pad_differs(out_field_id id)
+{
+    double fill = OUT_FIELDS[id].fill;
+    double pad  = OUT_FIELDS[id].pad;
+
+    return !(pad == fill || (isnan(pad) && isnan(fill)));
 }
 
 /* Whether a field's row is written as a block, which is every row of more than one
@@ -165,13 +206,12 @@ static bool is_block(out_field_id id, size_t len, size_t cap)
 
 bool out_padding_needed(out_field_id id, size_t len, size_t cap)
 {
-    if (!OUT_FIELDS[id].per_ref || fill_pads(id) || is_block(id, len, cap)) {
+    if (!OUT_FIELDS[id].per_ref || !pad_differs(id) || is_block(id, len, cap)) {
         return false;
     }
 
     return out_values(id, len, cap) < out_values(id, cap, cap);
 }
-
 
 size_t out_stored_bytes(out_field_id id)
 {
@@ -237,17 +277,18 @@ static const char *stored_name(out_stored stored)
     return "unknown";
 }
 
-/* Names the value read back where the run wrote nothing, which is not the same as the
- * type it is stored in: zero for a count, NaN for a rate. */
-static const char *absent_name(out_absent absent)
+/* Writes a field's fill into out, as the documentation names it. */
+static void fill_name(out_field_id id, char *out, size_t len)
 {
-    switch (absent) {
-        case OUT_ZERO:     return "zero";
-        case OUT_NAN:      return "nan";
-        case OUT_N_ABSENT: break;
-    }
+    double fill = OUT_FIELDS[id].fill;
 
-    return "unknown";
+    if (isnan(fill)) {
+        snprintf(out, len, "nan");
+    } else if (fill == 0.0) {
+        snprintf(out, len, "zero");
+    } else {
+        snprintf(out, len, "%g", fill);
+    }
 }
 
 /* Returns a sentence as JSON, or null where a field has none. Escapes the characters
@@ -333,6 +374,9 @@ void out_dump_layout(FILE *out, const char *program, const out_manifest *manifes
         const out_field *field  = &OUT_FIELDS[id];
         const char      *detail = manifest->fields[i].detail;
         const char      *needs  = manifest->fields[i].condition;
+        char             fill[32];
+
+        fill_name(id, fill, sizeof fill);
 
         fprintf(out,
                 "    {\n"
@@ -353,7 +397,7 @@ void out_dump_layout(FILE *out, const char *program, const out_manifest *manifes
                 "      \"absent\": \"%s\",\n"
                 "      \"detail\": ",
                 needs ? "\"" : "", needs ? needs : "null", needs ? "\"" : "",
-                stored_name(field->stored), absent_name(field->absent));
+                stored_name(field->stored), fill);
 
         print_detail(out, detail);
 

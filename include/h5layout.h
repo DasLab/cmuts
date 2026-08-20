@@ -27,9 +27,8 @@
 void h5layout_shape(out_field_id id, int32_t n_refs, size_t cap,
                     hsize_t *dims, hsize_t *chunk);
 
-hid_t       h5layout_type(out_field_id id);
-hid_t       h5layout_memory_type(out_field_id id);
-const void *h5layout_fill(out_field_id id);
+hid_t h5layout_type(out_field_id id);
+hid_t h5layout_memory_type(out_field_id id);
 
 /* Gives a dataspace holding one row of the widest field, from which a span of any field's
  * row is then selected. */

@@ -88,25 +88,6 @@ hid_t h5layout_memory_type(out_field_id id)
     return H5I_INVALID_HID;
 }
 
-/* Gives a field's absence marker, in the type the field is stored as.
- *
- * An unsigned has no NaN, so that one pairing has no fill and a field declaring it is
- * refused, and not filled with something that means otherwise. A storage type added
- * without fills of its own is refused the same way. */
-const void *h5layout_fill(out_field_id id)
-{
-    static const uint64_t u64_zero = 0;
-    static const float    f32_zero = 0.0f;
-    static const float    f32_nan  = (float)NAN;
-
-    static const void *const fill[OUT_N_STORED][OUT_N_ABSENT] = {
-        [OUT_F32] = { [OUT_ZERO] = &f32_zero, [OUT_NAN] = &f32_nan },
-        [OUT_U64] = { [OUT_ZERO] = &u64_zero },
-    };
-
-    return fill[OUT_FIELDS[id].stored][OUT_FIELDS[id].absent];
-}
-
 /* ------------------------------------------------------------------------ */
 /* Dataspaces                                                                */
 /* ------------------------------------------------------------------------ */
@@ -182,8 +163,9 @@ hid_t h5layout_untimed_plist(hid_t class_id)
 
 hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank)
 {
-    const void *fill = h5layout_fill(id);
-    hid_t       dcpl = h5layout_untimed_plist(H5P_DATASET_CREATE);
+    out_value fill;
+    bool      filled = out_fill_value(id, &fill) == 0;
+    hid_t     dcpl   = h5layout_untimed_plist(H5P_DATASET_CREATE);
 
     if (dcpl < 0) {
         return H5I_INVALID_HID;
@@ -196,9 +178,9 @@ hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank)
         return dcpl;
     }
 
-    if (!fill ||
+    if (!filled ||
         H5Pset_chunk(dcpl, rank, chunk) < 0 ||
-        H5Pset_fill_value(dcpl, h5layout_type(id), fill) < 0 ||
+        H5Pset_fill_value(dcpl, h5layout_type(id), &fill) < 0 ||
         H5Pset_fill_time(dcpl, H5D_FILL_TIME_ALLOC) < 0 ||
         H5Pset_shuffle(dcpl) < 0 ||
         H5Pset_deflate(dcpl, CODEC_DEFLATE_LEVEL) < 0) {

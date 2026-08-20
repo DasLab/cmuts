@@ -22,6 +22,7 @@ from outputs import (
     COVERAGE,
     ERROR,
     PADDED_FIELDS,
+    BY_NAME,
     PER_BASE_FIELDS,
     PER_REFERENCE_FIELDS,
     REACTIVITY,
@@ -103,8 +104,9 @@ def test_positions_past_a_reference_are_nan(data, scored_run, falsifiable):
     for reference in run.shorter:
         for field, values in fields.items():
             tail = values[run.row_of[reference]][run.lengths[reference]:]
+            pad = np.full(tail.shape, BY_NAME[field].pad, dtype=tail.dtype)
 
-            assert np.isnan(tail).all(), \
+            assert np.array_equal(tail, pad, equal_nan=tail.dtype.kind == "f"), \
                 f"{field}: {reference} is padded with {tail[:4]}"
 
 

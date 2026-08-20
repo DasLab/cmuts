@@ -425,14 +425,17 @@ static chunk_stage *stage_more(chunkfield *f)
     return stage_spare(f);
 }
 
-/* Fills a fresh chunk with the field's absence marker, value by value, so a row never
- * written and the columns past a reference read as the fill would have left them. */
+/* Writes the field's fill across a fresh chunk, value by value. */
 static void prefill(const chunkfield *f, out_field_id id, unsigned char *values)
 {
-    const unsigned char *mark = h5layout_fill(id);
+    out_value fill;
+
+    if (out_fill_value(id, &fill) < 0) {
+        return;
+    }
 
     for (size_t i = 0; i < f->raw_bytes; i += f->elem) {
-        memcpy(values + i, mark, f->elem);
+        memcpy(values + i, &fill, f->elem);
     }
 }
 
@@ -498,19 +501,18 @@ static void narrow(void *dst, out_stored stored, const double *src, size_t n)
     }
 }
 
-/* Pads a staged row, as write_part does with the padding row for a row written directly.
- * An unsigned field has no NaN to pad with, and none needs it: every such row spans its
- * full width whatever its reference measures. */
-static void pad_row(void *row, out_stored stored, size_t from, size_t width)
+/* Pads a staged row, as write_part does with the padding row for a row written directly. */
+static void pad_row(unsigned char *row, out_field_id id, size_t from, size_t width)
 {
-    float *to = row;
+    size_t    elem = out_stored_bytes(id);
+    out_value pad;
 
-    if (stored != OUT_F32) {
+    if (out_pad_value(id, &pad) < 0) {
         return;
     }
 
     for (size_t i = from; i < width; i++) {
-        to[i] = (float)NAN;
+        memcpy(row + i * elem, &pad, elem);
     }
 }
 
@@ -899,7 +901,7 @@ int h5writer_pad(h5writer *w, out_field_id id, int32_t tid, size_t len)
             return fail(w, "out of memory gathering an output chunk");
         }
 
-        pad_row(stage_row(f, s, tid), OUT_FIELDS[id].stored, held, f->width);
+        pad_row(stage_row(f, s, tid), id, held, f->width);
         return 0;
     }
 

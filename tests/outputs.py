@@ -31,19 +31,20 @@ class Field:
     name: str
     kind: str
     dtype: str
-    fill: float
+    fill: float          # what a row nobody wrote reads as
+    pad: float           # what a column past the end of a reference reads as
     rate: bool = False
 
 
 # A rate is a float and NaN where it was not measured; a count is a whole
 # unsigned and zero where nothing was counted.
 FIELDS = (
-    Field(COVERAGE, PER_BASE, "f4", 0.0),
-    Field(REACTIVITY, PER_BASE, "f4", np.nan, rate=True),
-    Field(ERROR, PER_BASE, "f4", np.nan, rate=True),
-    Field(LENGTHS, PER_LENGTH, "u8", 0),
-    Field(COUNTED, SCALAR, "u8", 0),
-    Field(REJECTED, SCALAR, "u8", 0),
+    Field(COVERAGE, PER_BASE, "f4", 0.0, np.nan),
+    Field(REACTIVITY, PER_BASE, "f4", np.nan, np.nan, rate=True),
+    Field(ERROR, PER_BASE, "f4", np.nan, np.nan, rate=True),
+    Field(LENGTHS, PER_LENGTH, "u8", 0, 0),
+    Field(COUNTED, SCALAR, "u8", 0, 0),
+    Field(REJECTED, SCALAR, "u8", 0, 0),
 )
 
 BY_NAME = {field.name: field for field in FIELDS}
