@@ -27,11 +27,10 @@
 #define CELL_MAX_BYTES 4
 
 struct progress {
-    const cm_bam_stream *stream;
-    uint64_t             span;
-    uint64_t             next;   /* position at which the bar would change */
-    int                  width;  /* cells, not columns */
-    int                  shown;  /* percentage drawn, or -1 */
+    uint64_t span;
+    uint64_t next;   /* position at which the bar would change */
+    int      width;  /* cells, not columns */
+    int      shown;  /* percentage drawn, or -1 */
 };
 
 static int terminal_cells(void)
@@ -56,9 +55,8 @@ static int terminal_cells(void)
     return cells;
 }
 
-progress *progress_start(const cm_bam_stream *stream)
+progress *progress_start(uint64_t span)
 {
-    uint64_t  span = cm_bam_stream_span(stream);
     progress *bar;
 
     if (span == 0 || !isatty(STDOUT_FILENO)) {
@@ -70,17 +68,15 @@ progress *progress_start(const cm_bam_stream *stream)
         return NULL;
     }
 
-    bar->stream = stream;
-    bar->span   = span;
-    bar->width  = terminal_cells();
-    bar->shown  = -1;
+    bar->span  = span;
+    bar->width = terminal_cells();
+    bar->shown = -1;
 
     return bar;
 }
 
-/* Returns how far along the bar a position is, held to PERCENT_WHOLE. Decoding runs ahead
- * of the records handed on, so the reader can be past the span the bar was drawn
- * across. */
+/* Returns how far along the bar a position is, held to PERCENT_WHOLE, since a caller may
+ * report positions past the span the bar was drawn across. */
 static int percentage(const progress *bar, uint64_t position)
 {
     return position >= bar->span ? PERCENT_WHOLE : (int)(position * PERCENT_WHOLE / bar->span);
@@ -114,19 +110,12 @@ static void draw(const progress *bar, int percent)
 }
 
 /* Redraws the bar where it has changed. Costs a comparison until there is something new
- * to show, so the loader may call it on every read. */
-void progress_follow(progress *bar)
+ * to show, so a caller may follow on every unit of work. */
+void progress_follow(progress *bar, uint64_t position)
 {
-    uint64_t position;
-    int      percent;
+    int percent;
 
-    if (!bar) {
-        return;
-    }
-
-    position = cm_bam_stream_position(bar->stream);
-
-    if (position < bar->next) {
+    if (!bar || position < bar->next) {
         return;
     }
 

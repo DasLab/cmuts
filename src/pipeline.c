@@ -502,7 +502,7 @@ static int loader_main(const pipeline *p, const failure_flag *f,
     }
 
     while ((status = cm_bam_stream_next(p->bam, &rec)) == CM_ITER_OK) {
-        progress_follow(p->bar);
+        progress_follow(p->bar, cm_bam_stream_position(p->bam));
 
         /* A worker has failed, so the rest of the file is left unread. Not an error here: the
          * worker reports it. */
@@ -550,7 +550,7 @@ static int loader_main(const pipeline *p, const failure_flag *f,
         result = -1;
     }
 
-    progress_follow(p->bar);
+    progress_follow(p->bar, cm_bam_stream_position(p->bam));
     loader_finish(&l);
 
     if (result == 0 && status == CM_ITER_ERROR) {
@@ -876,7 +876,7 @@ int pipeline_run(const pipeline_config *cfg, const char *program,
     tally_tables_build(&p.tally_tables, &cfg->tally_config);
 
     /* Started last, so that no setup step fails after the bar is drawn. */
-    p.bar = progress_start(p.bam);
+    p.bar = progress_start(cm_bam_stream_span(p.bam));
 
     cons.pipe = &p;
     if (pthread_create(&cons.thread, NULL, consumer_main, &cons) != 0) {
