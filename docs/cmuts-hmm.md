@@ -25,15 +25,23 @@ You may specify a subset of the parameters to modify only them.
 
 `cmuts hmm` verifies the FASTA against the alignment header, by comparing each sequence's name and length, and its MD5 checksum when present. Any mismatch between the header and the FASTA ends the run early. This behavior is configurable via the `--verify` flag.
 
-A read carrying the paired flag also ends the run. Two mates read one molecule, so counting them as separate reads would count their overlap twice. Merge the mates before aligning, which [`cmuts align`](cmuts-align.md) does for paired-end input.
-
 ```{note}
 The length check is required to avoid buffer overflows and cannot be disabled.
 ```
 
+Both the DNA and the RNA forms of the FASTA sequence are accepted during the checksum comparison.
+
 ## Error Computation
 
 `cmuts hmm` computes a per-base estimate for the reactivity error. This is purely the statistical error introduced by finite read depths; it does not account for experimental or systemic errors.
+
+## Rejected Reads
+
+Reads which do not pass the configured filters are rejected, meaning they are not processed by the HMM and do not contribute to the final reactivity. A secondary alignment, a read with MAPQ 255, a read missing a sequence, or a read with no CIGAR is automatically rejected.
+
+Unmapped reads are rejected by nature of having no reference to compute mutation rates against.
+
+A read carrying the paired flag ends the run. Two mates read one molecule, so counting them as separate reads would count their overlap twice. Merge the mates before aligning, which [`cmuts align`](cmuts-align.md) does for paired-end input.
 
 ## Output
 
