@@ -9,15 +9,9 @@
 
 #include "shape.h"
 
-/* The quantities every accumulator carries.
- *
- * This enum and ACCUM_FIELDS are the single source of truth for the layout: allocation,
- * zeroing and merging all derive from them, and nothing else in the pipeline inspects an
- * accumulator's contents. Adding a quantity means adding one enumerator and one row.
- *
- * These are not the fields written out. The mutations and the span are evidence and the
- * output holds the rate they come to, so output.h keeps a table of its own and takes only
- * its shapes from here. */
+/* The quantities every accumulator carries. This enum and ACCUM_FIELDS are the single
+ * source of truth for the layout: allocation, zeroing and merging all derive from them.
+ * These are not the fields written out; output.h keeps a table of its own. */
 typedef enum {
     ACCUM_COVERAGE,
     ACCUM_SPANNED,
@@ -28,8 +22,7 @@ typedef enum {
     ACCUM_N_FIELDS,
 } accum_field_id;
 
-/* All the accumulator needs of a field. What it is called in the output, and whether it
- * is written at all, is output.h's to say. */
+/* What the accumulator needs of a field. */
 typedef struct {
     shape_fn shape;
 } accum_field;
@@ -37,9 +30,7 @@ typedef struct {
 extern const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS];
 
 /* Gives the values one field occupies for a reference of len bases, in a run whose
- * longest is cap.
- * Allocation, zeroing, merging, the output row and the dataset width all derive from
- * this, so a new kind of field is described here and nowhere else. */
+ * longest is cap. */
 size_t accum_values(accum_field_id id, size_t len, size_t cap);
 
 /* Accumulated values for a single reference.
@@ -64,10 +55,7 @@ void accum_zero(accum *acc, size_t len);
  * scalar. Both accumulators must have the same capacity. */
 void accum_add(accum *dst, const accum *src, size_t len);
 
-/* Give the storage for one field: len values for SHAPE_PER_BASE, one for SHAPE_SCALAR.
- *
- * A const accumulator yields a const pointer, so anything holding a finished reference
- * cannot alter it. */
+/* Give the storage for one field: len values for SHAPE_PER_BASE, one for SHAPE_SCALAR. */
 static inline double *accum_data(accum *acc, accum_field_id id)
 {
     return acc->slot[id];

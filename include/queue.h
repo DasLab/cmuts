@@ -22,12 +22,8 @@ void   queue_destroy(queue *q);
  * short of n only when the queue is closed. */
 size_t queue_push(queue *q, void *const *items, size_t n);
 
-/* Appends every item, aborting the program on a short push.
- *
- * A queue rejects items only once closed, and every queue here closes strictly after its
- * producers finish, so a short push cannot happen and could not be handled if it did. A
- * dropped item is a unit of work or a pooled object, giving either an output silently
- * missing rows or a wait that never ends. */
+/* Appends every item, aborting the program on a short push. Every queue here closes
+ * strictly after its producers finish, so a short push is a bug. */
 void queue_push_all(queue *q, void *const *items, size_t n);
 
 /* Appends up to n items without blocking. Returns the number accepted, which is short of n

@@ -10,18 +10,8 @@
 #include "params.h"
 #include "phred.h"
 
-/* How far either side of the aligner's path the model may look.
- *
- * The band is drawn around the CIGAR, so it bounds departure from the reported
- * alignment. The width needed follows the length of the gap
- * and not that of the homopolymer run it sits in: 2 admits every placement of a one or
- * two base deletion, and wider scored no better on the two libraries tested.
- *
- * A row covers what the CIGAR path crosses before the band widens it, so no band is too
- * narrow to hold a read's own gaps. A band of 0 is the CIGAR path.
- *
- * There is no upper bound. Cost per read is linear in the band, and an unreasonable one
- * ends the run by exhausting memory. */
+/* How far either side of the CIGAR path the model may look. 2 admits every placement of a
+ * one or two base deletion, and wider scored no better on the two libraries tested. */
 #define PHMM_DEFAULT_BAND 2
 
 /* The kinds of event the mutation channel counts. */
@@ -33,28 +23,19 @@ typedef enum {
 } phmm_event;
 
 /* How much an event of each kind counts towards the mutation total, given that the event
- * happened.
- *
- * Read by the accumulation only, so the alignment does not depend on them. Each is a
- * share of an event, at most one whole event, and only their ratios matter: a common
- * factor rescales every rate the run reports and changes nothing else.
- *
- * The insertion weight also scales what the mutations are taken against, deciding how far
- * an insertion bears on the position it precedes at all. Substitutions and deletions
- * default to 1 and insertions to 0, leaving insertions out of both. None of the three is
- * calibrated. */
+ * happened. Read by the accumulation only, so the alignment does not depend on them. The
+ * insertion weight also scales the span an insertion adds, so a weight of zero removes
+ * insertions from both totals. */
 typedef struct {
     double weight[PHMM_N_EVENTS];
 } phmm_weights;
 
+/* Substitutions and deletions at 1, insertions at 0. */
 phmm_weights phmm_default_weights(void);
 
-/* The parameters, with every transition they imply computed once.
- *
- * Insertion to deletion and deletion to insertion are absent: an inserted base followed
- * by a deleted one is a substitution, and allowing the pair would record one event's
- * posterior in two places. A model is read-only once built, so one may be shared by every
- * thread. */
+/* The parameters, with every transition they imply computed once. Insertion to deletion
+ * and deletion to insertion are absent: an inserted base followed by a deleted one is a
+ * substitution. A model is read-only once built, so every thread may share one. */
 typedef struct {
     phmm_params  params;
     phmm_weights weights;
@@ -78,13 +59,9 @@ void          phmm_scratch_destroy(phmm_scratch *scratch);
 
 /* What one read contributes to each reference position it could have reached.
  *
- * The window covers the positions one read reaches, which are a few hundred of a reference
- * that may be far longer. Values are fractional, spread over each placement the band
- * allowed, and are added to a target, never assigned.
- *
- * The window is sized from the band, which is not clamped, so it may extend past either
- * end of the reference. Those positions are present but never written to, and the caller
- * must keep them out of anything it indexes by reference position. */
+ * Values are fractional, spread over each placement the band allowed, and are added to a
+ * target, never assigned. The window may extend past either end of the reference; those
+ * positions are never written, and phmm_window_bounds gives the range inside it. */
 typedef struct {
     hts_pos_t     origin;      /* reference position of value 0 */
     size_t        len;
@@ -94,21 +71,12 @@ typedef struct {
 } phmm_window;
 
 /* Gives the window indices that fall inside a reference of len bases: from the first to
- * one past the last, an empty range where none do. This is the clipping every consumer
- * of a window applies. */
+ * one past the last, an empty range where none do. */
 void phmm_window_bounds(const phmm_window *window, size_t len,
                         size_t *from, size_t *to);
 
-/* How a marginalization ended.
- *
- * PHMM_NO_PATH is the read, the rates and the band together: the rates give probability
- * zero to something the read contains, and the band is too narrow to route around it.
- * Widening the band or opening the rate it needs admits a path. It says nothing about the
- * reads after it, so the caller counts that read as rejected and carries on.
- *
- * The other two are a bad parameter or a bug, and trying the next alignment fixes
- * neither. A row summing to something non-finite means a rate that is not a probability;
- * the two passes disagreeing about which paths exist means an index error. */
+/* How a marginalization ended. PHMM_NO_PATH skips the read, while the other
+ * two failures end the run. */
 typedef enum {
     PHMM_OK,          /* out holds the read's contribution */
     PHMM_NO_MEMORY,   /* the matrix could not be allocated */
@@ -121,13 +89,10 @@ typedef enum {
  *
  * The band is given per row: half[i] is how far either side of CIGAR row i the model may
  * look, a row being one base of the placed span plus one before them all. half must hold
- * at least read->l_qseq + 1 entries, of which only those the span reaches are read. A
- * constant array gives a uniform band; the shape is otherwise the caller's to choose.
+ * at least read->l_qseq + 1 entries, of which only those the span reaches are read.
  *
- * The read must store a sequence and place at least one base, which the filter enforces.
- *
- * Anything but PHMM_OK ends the run. No read is rejected for being large: cost is whatever
- * the read implies, and memory exhaustion is what reports it. */
+ * The read must store a sequence and place at least one base, which the filter
+ * enforces. */
 phmm_status phmm_run(const phmm *model, const phred *quality,
                      const cm_bam_record *read, const cm_fasta_record *ref,
                      const int *half, phmm_scratch *scratch, phmm_window *out);

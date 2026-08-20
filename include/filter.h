@@ -9,18 +9,14 @@
 
 #include "bam.h"
 
-/* Which strands' alignments to keep, as the set of them: keeping both is asking for each.
- *
- * The test is on the alignment's own reverse bit, which for single-end reads is the strand
- * the read came from. It describes the read and not the fragment: for paired data, what
- * fragment belongs to depends on the library protocol and on which mate is being read. */
+/* Which strands' alignments to keep, as the set of them. The test is on the alignment's
+ * own reverse bit, which describes the read and not the fragment. */
 typedef enum {
     FILTER_STRAND_FORWARD = 1 << 0,
     FILTER_STRAND_REVERSE = 1 << 1,
 } filter_strand;
 
-/* A length bound of this is not applied at all. It also serves as the identity for either
- * bound: no read is shorter than zero, and an absent upper bound is not a length. */
+/* A length bound of this is not applied at all. */
 #define FILTER_LENGTH_UNBOUNDED 0
 
 /* The mapping quality of a placement the aligner reported no confidence in. */
@@ -28,10 +24,8 @@ typedef enum {
 
 /* Criteria an alignment must meet to be processed.
  *
- * Unmapped reads are excluded before any of this and counted separately, belonging to no
- * reference and so having nowhere to be accumulated. Secondary alignments, records storing
- * no sequence, records carrying no CIGAR and placements of unavailable mapping quality are
- * excluded whatever is set here.
+ * Secondary alignments, records storing no sequence, records carrying no CIGAR
+ * and placements of unavailable mapping quality are always excluded.
  *
  * The fields are int because the command line writes them directly, through a pointer of
  * the declared type. */
@@ -44,9 +38,8 @@ typedef struct {
 
 filter_config filter_defaults(void);
 
-/* Returns whether any read can meet the criteria. An upper length bound below the lower one
- * is met by no read of any length, unlike a bound that merely no read in a file happens to
- * meet. */
+/* Returns whether any read can meet the criteria: an upper length bound below the lower
+ * one is met by no read of any length. */
 bool filter_satisfiable(const filter_config *filter);
 
 bool filter_accepts(const filter_config *filter, const cm_bam_record *read);

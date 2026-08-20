@@ -1,15 +1,8 @@
 /* shape.h -- the extents one reference's values occupy.
  *
- * A field is described by a function from the reference it belongs to, and the longest in
- * the run, to the extents of the values it holds there. The rank is how many extents there
- * are, and the same call answers it, so no second description can disagree with the
- * first. A field of one value per reference has no extents at all: the
- * empty vector, whose product is the single value it holds.
- *
- * The accumulator and the output both describe their fields this way, and must, since a
- * value accumulated per read length has to reach a dataset column of the same meaning. What
- * the output adds is the reference dimension, which an accumulator holding one reference
- * has no use for.
+ * A shape maps a reference's length, and the longest in the run, to the extents the
+ * field's values occupy there. The accumulator and the output describe their fields
+ * with the same shapes.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -18,58 +11,40 @@
 
 #include <stddef.h>
 
-/* Gives the bins a read-length histogram covers, given the longest reference in the run:
- * one for every length from 1 to twice it, so that bin i holds the reads of length i + 1.
- * The range reaches past a reference because a read carrying insertions or soft-clipped
- * ends is longer than the one it aligns to. It starts at 1 because a read storing no
- * sequence is refused before it is counted, leaving no read of length zero to hold.
- *
- * Every row is this wide, whatever its own reference measures. A read length is not a
- * position in a reference, so a column a short reference has no reads for is a count of
- * zero, and a column means one length in every row alike.
- *
- * A read longer than the range is counted in no bin. How many there were is the reads
- * total less the row's own sum. */
+/* The bins a read-length histogram holds: one for each length from 1 to twice the
+ * longest reference. */
 #define SHAPE_LENGTH_BINS(cap) (2 * (cap))
 
 /* The largest number of extents any of the shapes below writes. Raise it alongside a shape
  * that writes more. */
 #define SHAPE_RANK_MAX 2
 
-/* The extents one reference's values occupy. A shape fills this and nothing wider, so one
- * reporting a rank it has no room for misdescribes a field without overrunning
- * anything; shape_rank is what every reader of dim counts through. */
+/* The extents one reference's values occupy. Loops over dim take their bound from
+ * shape_rank. */
 typedef struct {
     int    rank;
     size_t dim[SHAPE_RANK_MAX];
 } shape_extents;
 
 /* Gives the extents a reference of len bases occupies, in a run whose longest is cap.
- *
- * The rank is the same whatever a shape is given, and only the extents vary, so the rank
- * of a dataset is known without a run. */
+ * The rank does not depend on the arguments, so a call at any length gives a dataset's
+ * rank. */
 typedef shape_extents (*shape_fn)(size_t len, size_t cap);
 
 shape_extents shape_per_base(size_t len, size_t cap);
-
-/* Gives the extents of one value for every ordered pair of the reference's positions. The
- * square is written whole, both halves of it, so that a reader indexing either way finds
- * the pair; what is accumulated is the triangle. */
 shape_extents shape_per_pair(size_t len, size_t cap);
 shape_extents shape_per_length(size_t len, size_t cap);
 shape_extents shape_none(size_t len, size_t cap);
 
-/* Gives the name of a shape, for the JSON description of a field. A shape added above needs
- * a name here too; one without gets "unknown". */
+/* Gives the name of a shape, for the JSON description of a field, or "unknown" for a
+ * shape without one. */
 const char *shape_name(shape_fn shape);
 
 /* Gives extent i of a shape as the documentation writes it, "l" standing for the longest
- * reference. NULL where the extent does not vary with the run, so a caller prints the
- * number the shape gives. */
+ * reference, or NULL where the extent does not vary with the run. */
 const char *shape_symbol(shape_fn shape, int extent);
 
-/* Gives the extents held: what was reported, or all there is room for, whichever is fewer.
- * Inline so that every loop over dim carries the bound with it. */
+/* Gives the rank, capped at SHAPE_RANK_MAX. */
 static inline int shape_rank(shape_extents extents)
 {
     return extents.rank < SHAPE_RANK_MAX ? extents.rank : SHAPE_RANK_MAX;

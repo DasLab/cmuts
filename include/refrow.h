@@ -25,11 +25,10 @@ refrow *refrow_create(h5writer *out, rate_config rates, size_t ref_cap,
                       const bool *wanted);
 void    refrow_destroy(refrow *r);
 
-/* Writes one reference's row: for every field, its values where the reference has any,
- * and the region outside the reference where the field's fill does not already read as
- * outside it. Anything else keeps the fill.
+/* Writes one reference's row: for every field, its values where the reference has any.
+ * Everything else keeps the fill.
  *
- * acc is NULL for a reference no read arrived on, which has no accumulated values. seq is
- * its sequence, which it has whether or not a read arrived. */
+ * acc is NULL for a reference no read arrived on. seq is its sequence, which it has
+ * whether or not a read arrived. */
 int refrow_write(refrow *r, int32_t tid, size_t len, const char *seq, const accum *acc,
                  const pairs *pr);

@@ -43,7 +43,6 @@ int h5reader_total(h5reader *r, out_field_id id, size_t *value);
 
 const char *h5reader_error(const h5reader *r);
 
-/* Writes why the reader failed into error, naming the path it was opened from. Stands in
- * for a reader that failed without saying why. Returns -1, which is what a caller reporting
- * a failure returns. */
+/* Writes why the reader failed into error, naming the path it was opened from, and
+ * returns -1. */
 int h5reader_fail(const h5reader *r, const char *path, char *error, size_t error_len);

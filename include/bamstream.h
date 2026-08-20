@@ -17,13 +17,12 @@
  * the moment the stream moves past it and is visited once across every file.
  *
  * A record refers to its reference by an index into its own file's header, so the headers
- * must agree. Nothing here checks that; refseq compares each of them against the FASTA,
- * which is equivalent wherever it matters. */
+ * must agree, which nothing here checks. */
 typedef struct cm_bam_stream cm_bam_stream;
 
-/* Opens every path and reads the first record of each, which is why the reference and the
- * thread pool are settled here. There must be at least one path. Returns NULL only when out
- * of memory; anything else is reported through cm_bam_stream_error(). */
+/* Opens every path and reads the first record of each. There must be at least one path.
+ * Returns NULL only when out of memory; anything else is reported through
+ * cm_bam_stream_error(). */
 cm_bam_stream *cm_bam_stream_open(const char *const *paths, size_t n_paths,
                                   const char *fasta_path, int threads);
 
@@ -52,8 +51,7 @@ uint64_t cm_bam_stream_span(const cm_bam_stream *stream);
 /* Header queries                                                            */
 /* ------------------------------------------------------------------------ */
 
-/* Answered from the first file's header. The other headers are held to it by the checks
- * refseq makes on each. */
+/* Answered from the first file's header. */
 const char *cm_bam_stream_refname(const cm_bam_stream *stream, int32_t tid);
 int32_t     cm_bam_stream_nref(const cm_bam_stream *stream);
 hts_pos_t   cm_bam_stream_reflen(const cm_bam_stream *stream, int32_t tid);

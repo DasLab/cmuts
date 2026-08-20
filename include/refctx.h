@@ -17,11 +17,10 @@
 
 /* Everything a reference accumulates while its reads are in flight.
  *
- * Completion is tracked with a handle count: the loader holds one
- * while it is still dispatching, each read in transit holds one, and each worker holding
- * unmerged contributions in a shadow accumulator holds one. The reference is finished
- * exactly when the count falls to zero, which leaves no ordering question between the
- * loader closing a reference and the workers draining it. */
+ * Completion is tracked with a handle count: the loader holds one while it is still
+ * dispatching, each read in transit holds one, and each worker holding unmerged
+ * contributions in a shadow accumulator holds one. The reference is finished exactly when
+ * the count falls to zero. */
 typedef struct refctx {
     int32_t         tid;   /* also the output row index */
     const char     *name;  /* borrowed from the BAM header, stable for the run */
@@ -45,29 +44,24 @@ bool refctx_release(refctx *ctx, int n);
  * same lock, and is NULL for a run counting no pairs. */
 void refctx_merge(refctx *ctx, const accum *src, const pairs *src_pairs);
 
-/* Adds to one scalar field, for counts arising outside the processing step and so having
- * no accumulator of their own to merge from. */
+/* Adds to one scalar field, under the same lock as a merge. */
 void refctx_add_scalar(refctx *ctx, accum_field_id id, double value);
 
 /* Presents the reference sequence in the form the processing step expects. */
 void refctx_sequence(const refctx *ctx, cm_fasta_record *out);
 
-/* Whether any read reached a reference, which is whether its accumulator holds anything
- * but zero. Read once the last handle is dropped, which orders it after every merge. */
+/* Whether any read reached the reference. Read once the last handle is dropped, which
+ * orders it after every merge. */
 bool refctx_accumulated(const refctx *ctx);
 
 /* A fixed set of contexts. Its size caps how many references may be in flight, bounding
- * memory independently of how many references the file declares.
- *
- * A pooled context always has a zeroed accumulator, an invariant ctxpool_give restores, so
- * a context taken from the pool is ready to accumulate whatever the previous reference
- * left behind. */
+ * memory independently of how many references the file declares. A pooled context always
+ * has a zeroed accumulator, which ctxpool_give restores. */
 typedef struct ctxpool ctxpool;
 
-/* Creates a pool of contexts. ref_cap is the longest reference in the file, and every
- * context is sized to it so that any two accumulators share a layout and may be merged.
- * Co-modification is held only when asked for, its storage going as the square of
- * ref_cap where every other field goes linearly. */
+/* Creates a pool of contexts, each sized to ref_cap, the longest reference in the file,
+ * so that any two accumulators may be merged. Pair storage is allocated only when
+ * pairwise is set, and goes as the square of ref_cap. */
 ctxpool *ctxpool_create(size_t capacity, size_t ref_cap, bool pairwise);
 void     ctxpool_destroy(ctxpool *p);
 

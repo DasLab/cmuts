@@ -1,11 +1,9 @@
 /* codec.h -- the filter chain a chunk carries, applied by hand.
  *
  * A chunk handed to HDF5 whole arrives already filtered, so the shuffle and
- * deflate the library would otherwise apply are applied here instead, in the
- * order h5layout_creation_plist declares them. That declaration and this file
- * are two halves of one contract: a dataset filtered any other way cannot be
- * written through here. The deflate level lives here and h5layout passes it to
- * H5Pset_deflate, so the two halves cannot drift apart.
+ * deflate the library would otherwise apply are applied here instead.
+ * h5layout_creation_plist declares the same chain, taking CODEC_DEFLATE_LEVEL
+ * from here, so the two cannot drift apart.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */

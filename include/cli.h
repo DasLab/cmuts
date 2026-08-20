@@ -15,8 +15,7 @@
 #include <stdio.h>
 
 /* The maximum of an option with no ceiling of its own, bounded only by what its
- * destination can hold. It is also the widest number a command line can be read into, so a
- * row writing it out means the same thing. */
+ * destination can hold. */
 #define CLI_UNBOUNDED LONG_MAX
 
 /* The type of a row's destination. It must match the C type of the field at that offset,
@@ -40,10 +39,8 @@ typedef struct {
     int         value;
 } cli_choice;
 
-/* What an option does besides storing a value. Those that print and exit are declared, so
- * they need no field of their own and any program may have them. CLI_PRINT names a function
- * to call, which is how a program prints something specific to it without this header
- * declaring what that is. */
+/* What an option does besides storing a value. Those that print and exit need no field of
+ * their own. CLI_PRINT calls the row's print function. */
 typedef enum {
     CLI_STORE,
     CLI_SHOW_HELP,

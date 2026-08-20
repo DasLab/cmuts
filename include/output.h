@@ -4,12 +4,6 @@
  * the type each is stored as. Everything that reads or writes an output takes the
  * description from here.
  *
- * This is the specification of the file and nothing more. Where a field's values come
- * from is refrow's, the accumulated fields and the written ones not corresponding one to
- * one; how those values are stored is h5layout's. Nothing here refers to HDF5, so the
- * pipeline, the subtraction and everything else working in terms of fields and values
- * compiles without it.
- *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
 
@@ -22,9 +16,7 @@
 
 #include "shape.h"
 
-/* The fields an output holds, which are not those the accumulator holds. The mutations
- * and the span are the evidence gathered; what is written is the rate they come to and
- * its error, the two they are derived from staying internal. */
+/* The fields an output holds. */
 typedef enum {
     OUT_COVERAGE,
     OUT_REACTIVITY,
@@ -49,30 +41,20 @@ typedef enum {
     OUT_N_STORED,
 } out_stored;
 
-/* One field of the output.
- *
- * A field indexed by reference holds one row per reference, and its dataset is the
- * reference dimension followed by the extents of that row. A field not indexed by one
- * belongs to the run: the unmapped reads align to no reference, so their total is a row
- * with nothing in front of it, which is a dataset of rank zero. */
+/* One field of the output. A field indexed by reference holds one row per reference, and
+ * its dataset is the reference dimension followed by the extents of that row. */
 typedef struct {
     const char *name;
     shape_fn    row;       /* the extents one reference's values occupy */
     bool        per_ref;   /* whether there is one such row per reference */
     bool        from_ref;  /* whether its values are the reference's and not the reads' */
     out_stored  stored;    /* the type its values are narrowed to */
-
     double      fill;      /* what a position the run never wrote reads as */
 } out_field;
 
 extern const out_field OUT_FIELDS[OUT_N_FIELDS];
 
-/* What an output carries besides its fields.
- *
- * These describe the run and not any reference, so they are written as attributes on the
- * root group: everything reading an output walks its datasets, and an attribute stays out
- * of that. Their values differ from one run to the next, so the table names them and the
- * writer is given what each holds. */
+/* What an output carries besides its fields, as attributes on the root group. */
 typedef enum {
     OUT_ATTR_PROGRAM,
     OUT_ATTR_VERSION,
@@ -100,12 +82,7 @@ typedef enum {
     OUT_MADE,        /* the run makes it, so no input is read for it */
 } out_origin;
 
-/* One field of one program's output.
- *
- * A field has the same shape, type and fill wherever it is written, so those stay in
- * OUT_FIELDS. What the numbers mean depends on what produced them -- a rate cmuts hmm
- * counted is not a rate cmuts sub took a background off -- so the description belongs
- * here, and falls back to the field's own where the two agree. */
+/* One field of one program's output. */
 typedef struct {
     out_field_id id;
     const char  *detail;     /* what the numbers are here, in one sentence */
@@ -113,10 +90,8 @@ typedef struct {
     out_origin   origin;     /* where the run gets it */
 } out_written;
 
-/* The fields one program reads and writes.
- *
- * A program is an interface: it reads exactly these of its inputs, ignores whatever else
- * they carry, and writes exactly these. */
+/* The fields one program reads and writes. A program reads exactly these of its inputs,
+ * ignores whatever else they carry, and writes exactly these. */
 typedef struct {
     const out_written *fields;
     size_t             n_fields;
@@ -125,7 +100,7 @@ typedef struct {
 /* Fills one entry per field with whether the manifest holds it. */
 void out_selection(const out_manifest *manifest, bool *wanted);
 
-/* Where the manifest gets a field. OUT_IF_PRESENT for one it does not hold. */
+/* Gives where the manifest gets a field, or OUT_IF_PRESENT for one it does not hold. */
 out_origin out_origin_of(const out_manifest *manifest, out_field_id id);
 
 /* Whether a selection holds a field. */
@@ -150,18 +125,16 @@ typedef union {
 int out_fill_value(out_field_id id, out_value *value);
 
 /* Give the bytes one of a field's values occupies, and the most any field's value
- * occupies. A buffer taking a row of any field is as long as out_widest values of
- * out_widest_bytes each. */
+ * occupies. */
 size_t out_stored_bytes(out_field_id id);
 size_t out_widest_bytes(void);
 
 /* Writes the dimensions of one field's dataset into dims, which must have room for
- * OUT_RANK_MAX of them, and returns the rank. Rows hold as many values as the field
- * occupies at the longest reference, so every row of a field is the same width whatever
- * its own reference measures. */
+ * OUT_RANK_MAX of them, and returns the rank. Every row spans the longest reference, so
+ * a field's rows are all one width. */
 int out_dims(out_field_id id, int32_t n_refs, size_t cap, size_t *dims);
 
-/* Gives the dimensions one field's dataset has. */
+/* Gives the rank of one field's dataset. */
 int out_rank(out_field_id id);
 
 /* Writes the table above as JSON, for generating the documentation of the format from the

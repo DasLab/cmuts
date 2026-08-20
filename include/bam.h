@@ -44,13 +44,9 @@ typedef struct cm_bam_reader cm_bam_reader;
  * a linear pass in file order. Returns NULL on failure, leaving the reason in why. */
 cm_bam_reader *cm_bam_open(const char *path, const char **why);
 
-/* Points CRAM decoding at the given reference.
- *
- * CRAM stores sequence as differences from a reference, which htslib otherwise locates on
- * its own: from the UR path written into the header when the file was made, or from an M5
- * checksum, which may reach a remote server. Neither is necessarily the reference the
- * caller works against, and nothing reports the difference. Harmless for SAM and BAM, which
- * carry their own sequence. */
+/* Points CRAM decoding at the given reference. Without this, htslib locates one on its
+ * own, from the header's UR path or M5 checksum, which need not be the reference the
+ * caller works against. Harmless for SAM and BAM, which carry their own sequence. */
 int cm_bam_set_reference(cm_bam_reader *reader, const char *fasta_path);
 
 /* Fills out with the next alignment. Returns a cm_iter_status; on
@@ -63,20 +59,13 @@ void cm_bam_close(cm_bam_reader *reader);
 const char *cm_bam_error(const cm_bam_reader *reader);
 
 /* Give how far the reader has read, and how far it has to go, in compressed bytes of the
- * alignments only. The header is excluded, being read in one go before any record and
- * able to account for most of a file.
- *
- * Compressed bytes are a proxy and not an accounting: how many a read costs varies with
- * how well it compresses, which for CRAM means with how far it differs from the reference.
- * Span is 0 where the size is not known. */
+ * alignments only, excluding the header. Span is 0 where the size is not known. */
 uint64_t cm_bam_position(const cm_bam_reader *reader);
 uint64_t cm_bam_span(const cm_bam_reader *reader);
 
 /* Draws the reader's decompression threads from a pool, parallelizing inflation only:
- * reading and record parsing stay sequential.
- *
- * The pool is shared, so several readers may draw from one and its threads follow
- * whichever is being read from. The pool must outlive every reader given it. */
+ * reading and record parsing stay sequential. Several readers may draw from one pool,
+ * which must outlive every reader given it. */
 int cm_bam_use_pool(cm_bam_reader *reader, htsThreadPool *pool);
 
 /* ------------------------------------------------------------------------ */
@@ -109,19 +98,15 @@ hts_pos_t cm_bam_max_reflen(const cm_bam_reader *reader);
 /* Gives the number of references declared in the header. */
 int32_t cm_bam_nref(const cm_bam_reader *reader);
 
-/* Returns whether the header declares SO:coordinate. Reference-grouped input is what lets a
- * reference be finished the moment the reader moves past it; without it, every reference
- * stays live to the end of the file. */
+/* Returns whether the header declares SO:coordinate. */
 bool cm_bam_is_coordinate_sorted(const cm_bam_reader *reader);
 
 /* ------------------------------------------------------------------------ */
 /* Reference declarations                                                    */
 /* ------------------------------------------------------------------------ */
 
-/* A forward-only walk over the header's @SQ lines.
- *
- * The cursor holds the state of the walk and belongs to the caller, so two walks may run
- * at once and the reader is unchanged by either. */
+/* A forward-only walk over the header's @SQ lines. The cursor holds the state of the walk
+ * and belongs to the caller. */
 typedef struct {
     const char *line;  /* the @SQ line describing tid, or NULL past the last */
     int32_t     tid;
@@ -130,9 +115,6 @@ typedef struct {
 void cm_bam_sq_open(cm_bam_sq_cursor *cursor, const cm_bam_reader *reader);
 
 /* Gives the M5 checksum declared for a reference, its length in len, or NULL where the
- * header declares none -- the common case, many aligners omitting it. The result points
- * into the header text and lives as long as the reader does.
- *
- * References must be requested in non-decreasing order, so one walk of the text serves a
- * whole run of them. */
+ * header declares none. The result points into the header text and lives as long as the
+ * reader does. References must be requested in non-decreasing order. */
 const char *cm_bam_sq_checksum(cm_bam_sq_cursor *cursor, int32_t tid, size_t *len);

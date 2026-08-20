@@ -19,8 +19,7 @@ typedef struct {
  * template. A minimum of 0 keeps every base at its own score. */
 void phred_build(phred *table, int minimum);
 
-/* Returns the chance a base call is wrong. The value is read from the table, since every
- * base of every read needs it. */
+/* Returns the chance a base call is wrong. */
 static inline double phred_error(const phred *table, uint8_t quality)
 {
     return table->error[quality];
