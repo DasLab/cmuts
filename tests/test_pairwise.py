@@ -1,4 +1,4 @@
-"""What a pairwise count writes, whatever the alignment it was given.
+"""What a pairwise count writes for any alignment.
 
 `--pairwise` names the statistics to write, comma separated: the correlation of two
 positions being modified, and the probability one was modified in a read where the other
@@ -92,7 +92,7 @@ def test_a_statistic_brings_its_square_and_the_coverage(short, falsifiable, tmp_
     assert all(not holds(output, other) for other in others)
 
 
-def test_none_asks_for_nothing(short, falsifiable, tmp_path):
+def test_none_writes_no_pairwise_dataset(short, falsifiable, tmp_path):
     output = run_cmuts(short, tmp_path / "none.h5", pairwise="none")
 
     falsifiable(True)

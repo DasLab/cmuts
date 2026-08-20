@@ -1,7 +1,7 @@
 /* simulate.c -- alignments built from a reference and a mutation model.
  *
  * A read is first laid out as a list of single-base events, from which the CIGAR, SEQ, MD
- * and NM are all then derived. Nothing is written twice, so the four cannot contradict
+ * and NM are all then derived. No event is recorded twice, so the four cannot contradict
  * each other however the events fall.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
@@ -18,8 +18,8 @@ static const char BASES[] = "ACGT";
 /* How much room an MD string is given: a few characters per event, plus room for the
  * count it closes with.
  * Neither figure is what keeps the writing inside the buffer -- the cursor is held
- * short of the end at every step regardless -- so an underestimate costs a tag cut
- * short and nothing worse. MD_HEADROOM is the margin the loop keeps so that a tag cut
+ * short of the end at every step regardless -- so an underestimate costs only a tag cut
+ * short. MD_HEADROOM is the margin the loop keeps so that a tag cut
  * short ends after a whole event and not partway through a number. */
 #define MD_PER_EVENT 4
 #define MD_TAIL      32
@@ -333,7 +333,7 @@ static size_t append_base(char *md, size_t used, size_t cap, char base)
 }
 
 /* Builds the MD tag. It describes only the reference-consuming positions, so insertions
- * and soft clips contribute nothing. It opens and closes with a match count and carries
+ * and soft clips do not appear in it. It opens and closes with a match count and carries
  * one between every pair of events, which is why a run of zero is still written out.
  *
  * Every step leaves the cursor short of cap, so the closing count writes inside the buffer

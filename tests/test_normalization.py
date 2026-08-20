@@ -1,6 +1,6 @@
 """Dividing reactivity rates by one scale taken from the rates themselves.
 
-The result depends on the values in the input files and on nothing else, so the
+The result depends only on the values in the input files, so the
 inputs are written by hand and not counted from an alignment. inputs.py builds
 them and outputs.py describes the layout the programs share.
 
@@ -79,8 +79,8 @@ def recorded(path) -> float:
 
 
 def besides_the_scale(path) -> dict:
-    """The datasets an output holds other than the scale, which is what this program
-    adds to whatever it was given."""
+    """The datasets an output holds other than the scale, the one dataset this
+    program adds."""
     return {name: shape for name, shape in layout_of(path).items() if name != NORM}
 
 
@@ -178,7 +178,7 @@ def test_a_position_below_the_floor_does_not_reach_the_pool(build, normalize):
     assert recorded(output) == pytest.approx(0.2, rel=TOLERANCE)
 
 
-def test_nothing_clearing_the_floor_leaves_the_rates_alone(build, normalize):
+def test_no_position_clearing_the_floor_leaves_the_rates_alone(build, normalize):
     rates = build({COVERAGE: 1.0, REACTIVITY: random_values(REACTIVITY, seed=4)})
 
     output, = normalize(rates)
@@ -193,7 +193,7 @@ def test_lowering_the_floor_admits_more_of_the_pool(build, tmp_path):
     strict = run_normalize([rates], [tmp_path / "strict.h5"])
     loose = run_normalize([rates], [tmp_path / "loose.h5"], min_coverage="0")
 
-    assert recorded(strict[0]) == 1.0, "nothing cleared the default floor"
+    assert recorded(strict[0]) == 1.0
     assert recorded(loose[0]) == pytest.approx(factor(UBR, [rates], min_coverage=0),
                                                rel=TOLERANCE)
     assert recorded(loose[0]) != 1.0
@@ -217,7 +217,7 @@ def test_a_missing_rate_does_not_reach_the_pool(build, normalize):
     rates = build(covered({REACTIVITY: left}))
     output, = normalize(rates)
 
-    assert pool(UBR, [rates]).size < left.size, "nothing was missing"
+    assert pool(UBR, [rates]).size < left.size
     assert recorded(output) == pytest.approx(factor(UBR, [rates]), rel=TOLERANCE)
 
 
@@ -328,7 +328,7 @@ def test_a_bound_left_out_is_not_applied(build, tmp_path):
 
     unbounded = field_of(plain[0], REACTIVITY)
 
-    assert (unbounded > 0.5).any(), "nothing was above the bound"
+    assert (unbounded > 0.5).any()
     assert np.array_equal(field_of(above[0], REACTIVITY),
                           np.minimum(unbounded, np.float32(0.5)))
 
@@ -357,8 +357,8 @@ def test_the_columns_past_a_reference_stay_nan(build, normalize):
     result = field_of(output, REACTIVITY)
 
     for row, length in enumerate(lengths):
-        assert not np.isnan(result[row, :length]).any(), f"row {row} within"
-        assert np.isnan(result[row, length:]).all(), f"row {row} past its end"
+        assert not np.isnan(result[row, :length]).any(), row
+        assert np.isnan(result[row, length:]).all(), row
 
 
 def test_two_runs_agree_byte_for_byte(build, tmp_path):
@@ -464,7 +464,7 @@ def test_an_existing_output_is_not_replaced_without_overwrite(build, normalize):
     failed = try_normalize([rates], [output])
 
     assert failed.returncode != 0
-    assert output.read_bytes() == before, "the first result is untouched"
+    assert output.read_bytes() == before
 
 
 def test_overwrite_replaces_an_existing_output(build, normalize):

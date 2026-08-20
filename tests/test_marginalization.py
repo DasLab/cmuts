@@ -102,8 +102,7 @@ def read_rows(output, placements: int) -> dict:
     rows = fields_of(output, ROW_FIELDS)
 
     for name, values in rows.items():
-        assert len(values) == placements, \
-            f"{name}: {len(values)} rows for {placements} placements"
+        assert len(values) == placements, name
 
     return rows
 
@@ -138,15 +137,14 @@ def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
     for name, rows in written.items():
         for cigar, row in zip(cigars, rows):
             assert np.allclose(row, rows[0], atol=TOLERANCE, rtol=0,
-                               equal_nan=True), \
-                f"{name} at {cigar} differs from {cigars[0]}"
+                               equal_nan=True), f"{name}: {cigar}"
 
 
 @pytest.mark.parametrize("case", CONTROLS, ids=str)
 def test_a_band_narrower_than_the_gap_leaves_the_placements_apart(tmp_path, case):
     """Asserts over the reactivity: an inserted base covers no reference
     position at any placement, so the coverage can agree across placements even
-    where nothing has been marginalized."""
+    where no read has been marginalized."""
     reference, read, cigars = homopolymer(case)
     data = build_placements(tmp_path, "ambiguous", reference, read, cigars)
 

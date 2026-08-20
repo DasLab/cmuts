@@ -1,6 +1,6 @@
 """Dividing reactivity rates by a denatured control.
 
-The result depends on the values in the input files and on nothing else, so the
+The result depends only on the values in the input files, so the
 inputs are written by hand and not counted from an alignment. inputs.py builds
 them and outputs.py describes the layout the programs share.
 """
@@ -190,7 +190,7 @@ def test_a_value_either_input_lacks_is_missing_from_the_output(build, divide, na
     result = field_of(output, name)
 
     assert np.array_equal(np.isnan(result), np.isnan(left) | np.isnan(right))
-    assert not np.isnan(result[0]).any(), "nothing is lost where both are known"
+    assert not np.isnan(result[0]).any()
 
 
 def test_the_columns_past_a_reference_stay_nan(build, divide):
@@ -204,8 +204,8 @@ def test_the_columns_past_a_reference_stay_nan(build, divide):
     result = field_of(output, COVERAGE)
 
     for row, length in enumerate(lengths):
-        assert not np.isnan(result[row, :length]).any(), f"row {row} within"
-        assert np.isnan(result[row, length:]).all(), f"row {row} past its end"
+        assert not np.isnan(result[row, :length]).any(), row
+        assert np.isnan(result[row, length:]).all(), row
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +228,7 @@ def test_a_file_against_itself_leaves_a_reactivity_of_one(build, divide):
     result = field_of(divide(rates, rates), REACTIVITY)
     known = ~np.isnan(field_of(rates, REACTIVITY))
 
-    assert known.any(), "nothing was known, so nothing was tested"
+    assert known.any()
     assert np.all(result[known] == np.float32(1.0))
     assert np.isnan(result[~known]).all()
 
@@ -305,7 +305,7 @@ def test_an_input_missing_a_dataset_that_is_not_required_is_skipped(build, divid
     output = divide(delete_field(build(), missing), build())
 
     assert missing not in layout_of(output)
-    assert REACTIVITY in layout_of(output), "the output holds no reactivity either"
+    assert REACTIVITY in layout_of(output)
 
 
 
@@ -336,7 +336,7 @@ def test_an_existing_output_is_not_replaced_without_overwrite(build, divide):
     failed = try_divide(rates, control, output)
 
     assert failed.returncode != 0
-    assert output.read_bytes() == before, "the first result is untouched"
+    assert output.read_bytes() == before
 
 
 def test_overwrite_replaces_an_existing_output(build, divide):
@@ -458,7 +458,7 @@ def test_clipping_the_difference_holds_the_normalized_rate_at_zero(build, tmp_pa
 
 def test_a_clipped_rate_carries_no_uncertainty_from_the_control(build, tmp_path):
     """The error of a ratio scales the control's error by the rate, so at a rate
-    of zero the control contributes nothing and the error is the quadrature of
+    of zero the control contributes no term and the error is the quadrature of
     the two inputs divided by the control's rate."""
     treated = build({REACTIVITY: 0.25, ERROR: 0.3})
     untreated = build({REACTIVITY: 0.75, ERROR: 0.4})

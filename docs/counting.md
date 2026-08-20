@@ -6,7 +6,7 @@ Unmapped reads are counted separately and reach no reference. Secondary alignmen
 
 A read the pair HMM can find no alignment of is rejected as well. That happens where the rates give probability zero to something the read carries and `--band` is too narrow to reach around it, so it follows from the model and the band rather than from the read alone.
 
-Every mapped read is either counted or rejected, and both totals are written, so nothing goes missing between the file and the result.
+Every mapped read is either counted or rejected, and both totals are written, so no read goes missing between the file and the result.
 
 ## What counts as a modification
 
@@ -22,7 +22,7 @@ A deletion inside a run of the same base can be written after any base of the ru
 
 ## Positions that get a rate
 
-`--min-depth` is the evidence a position needs before a rate is written for it. Below it the reactivity and its error are missing rather than zero: a position nothing was observed at has no rate, which says something different from a position where nothing was modified.
+`--min-depth` is the evidence a position needs before a rate is written for it. Below it the reactivity and its error are missing rather than zero: a position with no observations has no rate, which says something different from a position where no modification was observed.
 
 The default of 1 is one whole observation. Below that, the standard error of a proportion is divided by a fraction and stops being bounded by a half, so a rate reported there would carry an error that says little.
 
@@ -46,7 +46,7 @@ A rate is missing wherever either input is missing one, since a difference needs
 | `coverage` | the two coverages added |
 | `reads/*` | the two counts added |
 
-Where the control measured nothing at a position, there is nothing to divide by and the rate and its error are missing there.
+Where the control's rate at a position is missing or zero, there is no denominator and the rate and its error are missing there.
 
 ## What normalization does to each dataset
 

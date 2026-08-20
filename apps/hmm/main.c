@@ -23,7 +23,7 @@ int hmm_main(int argc, char **argv)
     char     error[CM_ERROR_MAX];
 
     /* htslib writes its own report of a failure to stderr, which would appear alongside
-     * ours. Everything it reports it also returns, so nothing is lost by silencing it. */
+     * ours. Everything it reports it also returns, so silencing it loses no information. */
     hts_set_log_level(HTS_LOG_OFF);
 
     switch (cli_parse(&spec, argc, argv, &args)) {

@@ -201,7 +201,7 @@ static int parse_set(const cli_option *opt, const char *text, const char *progra
     }
 
     if (empty && chosen != 0) {
-        fprintf(stderr, "%s: --%s: \"%s\" asks for nothing alongside something\n",
+        fprintf(stderr, "%s: --%s: \"%s\" combines the empty choice with another\n",
                 program, opt->name, text);
         return -1;
     }
@@ -559,7 +559,7 @@ static void print_usage_line(const cli_spec *spec, FILE *out)
     fputc('\n', out);
 }
 
-/* Returns the widest invocation the help will print, so that nothing runs into its own
+/* Returns the widest invocation the help will print, so that no invocation runs into its own
  * description. Hidden options are left out and never printed. */
 static int help_column(const cli_spec *spec)
 {

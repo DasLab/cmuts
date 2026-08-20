@@ -35,8 +35,7 @@ def test_an_unavailable_mapping_quality_is_refused(data, falsifiable, tmp_path):
 
     summary = read_summary(run_cmuts(data, tmp_path / "out.h5", **UNFILTERED))
 
-    assert summary.kept == len(counted) - len(unavailable), \
-        "a read of unavailable mapping quality survived a threshold of zero"
+    assert summary.kept == len(counted) - len(unavailable)
 
 
 def test_rejecting_everything_leaves_a_valid_file(data, falsifiable, tmp_path):
@@ -61,11 +60,10 @@ def test_secondary_alignments_are_refused(data, falsifiable, tmp_path):
 
     summary = read_summary(run_cmuts(marked_data, tmp_path / "out.h5", **UNFILTERED))
 
-    assert summary.kept == samtools_kept(marked_data, **UNFILTERED), \
-        "agreement with samtools"
+    assert summary.kept == samtools_kept(marked_data, **UNFILTERED)
 
     # A marked read is rejected and not skipped, so it reaches the rejected
     # total. Other reads may be rejected alongside it, so the count of marked
     # reads is a lower bound and not the total.
-    assert summary.rejected >= marked, "a marked read was not refused"
-    assert summary.kept + summary.rejected == marked_data.mapped, "reads accounted for"
+    assert summary.rejected >= marked
+    assert summary.kept + summary.rejected == marked_data.mapped

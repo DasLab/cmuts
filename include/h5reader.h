@@ -13,8 +13,8 @@
 /* Reads the datasets h5writer produces, taking the same layout from output.h. Rows are read
  * one at a time, so memory is bounded by the longest reference and not by the size of the
  * file.
- * Values are returned in the type they are stored as, so that a file read here and written
- * back out passes through nothing wider.
+ * Values are returned in the type they are stored as, so a value read here and written
+ * back out is never widened on the way.
  * HDF5 is not thread-safe unless built for it, so a reader must be used from one thread
  * only. */
 typedef struct h5reader h5reader;

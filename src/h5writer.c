@@ -20,7 +20,7 @@
 
 /* A chunk of one field being gathered. */
 typedef struct {
-    int64_t        index;   /* -1 while the slot holds nothing */
+    int64_t        index;   /* -1 while the slot holds no chunk */
     unsigned char *values;
 } chunk_stage;
 
@@ -82,7 +82,7 @@ static int fail(h5writer *w, const char *what)
 /* ------------------------------------------------------------------------ */
 
 /* Returns whether the path holds a file with something in it. An empty file is what
- * mktemp and shell redirection leave behind, and has nothing to lose. */
+ * mktemp and shell redirection leave behind, and holds no data to lose. */
 static bool holds_data(const char *path)
 {
     struct stat info;
@@ -99,7 +99,7 @@ int h5writer_may_replace(const char *path, bool overwrite, bool *may_replace,
         return -1;
     }
 
-    /* Where nothing is at the path the create stays exclusive, so a file appearing
+    /* Where no file is at the path the create stays exclusive, so a file appearing
      * in between is not quietly replaced. An empty file already there has to be
      * truncated instead. */
     *may_replace = overwrite || access(path, F_OK) == 0;
@@ -235,8 +235,8 @@ static int create_field_groups(h5writer *w, const char *name)
     return 0;
 }
 
-/* Creates every group the field names imply, before any dataset is made in one. The names
- * are where the layout fixes which groups an output holds; nothing else declares them. */
+/* Creates every group the field names imply, before any dataset is made in one. The field
+ * names alone declare which groups an output holds. */
 static int create_groups(h5writer *w)
 {
     for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
@@ -609,10 +609,10 @@ static int send_settled(h5writer *w)
 /* Lifetime                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* Allocates a writer holding nothing yet, with every handle marked absent.
+/* Allocates a writer holding no handles yet, every one marked absent.
  *
  * The steps that build the rest may each fail and leave those after them undone, and the
- * writer is closed whatever happened, so it must be safe to close from here onwards: it
+ * writer is always closed, so it must be safe to close from here onwards: it
  * closes exactly what it opened. Zero, which calloc leaves behind, is a handle HDF5 would
  * accept, hence the marking. */
 static h5writer *writer_alloc(int32_t n_refs, size_t ref_cap)
@@ -742,7 +742,7 @@ h5writer *h5writer_create(const char *path, const char *program, int32_t n_refs,
     return w;
 }
 
-/* Finishes every chunk still gathering and writes whatever was never taken, filtering it
+/* Finishes every chunk still gathering and writes the chunks never taken, filtering them
  * here, before HDF5 shuts down: a chunk written after the datasets closed would be lost.
  * Chunks a caller took have all come back by now, as the interface requires. */
 static void finish_chunks(h5writer *w)
@@ -856,10 +856,10 @@ int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
 
 /* Writes the whole of one reference's row, in the type the field is stored as.
  *
- * Every column is given a value, so nothing is left to mark as outside the reference. This
+ * Every column is given a value, so no column is left to mark as outside the reference. This
  * is the path for values that were read from a file of the same layout: they are already
  * the stored type, and passing them through the double the accumulator uses would widen
- * and narrow them for nothing. */
+ * and narrow them without changing them. */
 int h5writer_row(h5writer *w, out_field_id id, int32_t tid, const void *values)
 {
     size_t width = out_values(id, w->ref_cap, w->ref_cap);

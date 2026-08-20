@@ -60,7 +60,7 @@ def write_params(path, **changed):
 
 def test_dumped_defaults_reproduce_a_default_run(data, falsifiable, tmp_path):
     """--dump-params writes the rates in the form --params reads, so a run given
-    them back is a run given nothing."""
+    them back is a run given no overrides."""
     dumped = execute_into(tmp_path / "dumped.txt", [*CMUTS_HMM, "--dump-params"])
 
     run_cmuts(data, tmp_path / "plain.h5")
@@ -93,8 +93,7 @@ def test_the_rates_are_read_in_any_order(data, falsifiable, tmp_path):
 @pytest.mark.parametrize("fmt", [NATIVE], indirect=True)
 @pytest.mark.parametrize("wrong", sorted(REFUSED))
 def test_a_refused_file_leaves_no_output(data, falsifiable, tmp_path, wrong):
-    """Refused before the alignments are opened, so nothing is written whatever
-    the dataset holds."""
+    """Refused before the alignments are opened, so no output file is written."""
     params = write_params(tmp_path / "params.txt", **REFUSED[wrong])
     output = tmp_path / "out.h5"
 
@@ -120,7 +119,7 @@ def test_a_missing_file_is_refused(data, falsifiable, tmp_path):
 
 
 @pytest.mark.parametrize("fmt", [NATIVE], indirect=True)
-def test_a_read_with_no_path_is_scored_by_nothing(data, falsifiable, tmp_path):
+def test_a_read_with_no_path_is_not_counted(data, falsifiable, tmp_path):
     params = write_params(tmp_path / "params.txt", **NO_SECOND_BASE)
 
     summary = read_summary(run_cmuts(data, tmp_path / "out.h5", params=params))
@@ -133,7 +132,7 @@ def test_a_read_with_no_path_is_scored_by_nothing(data, falsifiable, tmp_path):
 @pytest.mark.parametrize("fmt", [NATIVE], indirect=True)
 def test_a_read_with_no_path_is_counted_as_rejected(data, falsifiable, tmp_path):
     """Every mapped read lands in one of the two counts whether or not the model
-    can score it, so a run against rates that fit nothing still accounts for the
+    can score it, so a run against rates that fit no read still accounts for the
     file it read."""
     params = write_params(tmp_path / "params.txt", **NO_SECOND_BASE)
 

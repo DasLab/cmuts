@@ -36,10 +36,10 @@ def known_rates(output):
     return reactivity[known], error[known]
 
 
-def test_weighing_every_difference_at_zero_leaves_nothing_counted(data, falsifiable,
+def test_weighing_every_difference_at_zero_leaves_the_rates_at_zero(data, falsifiable,
                                                                   tmp_path):
-    """A difference with a weight of zero reaches no total, whatever kind of
-    difference it is: the rates come to zero and not to something small."""
+    """A difference of any kind with a weight of zero reaches no total: the
+    rates come to zero and not to something small."""
     output = tmp_path / "out.h5"
 
     run_cmuts(data, output, **dict.fromkeys(WEIGHTS, 0))
@@ -48,8 +48,8 @@ def test_weighing_every_difference_at_zero_leaves_nothing_counted(data, falsifia
 
     falsifiable(reactivity.size > 0)
 
-    assert (reactivity == 0).all(), f"a rate of {reactivity.max()} with nothing weighed"
-    assert (error == 0).all(), f"an error of {error.max()} with nothing weighed"
+    assert (reactivity == 0).all()
+    assert (error == 0).all()
 
 
 @pytest.mark.parametrize("scale", SCALES)
@@ -68,11 +68,9 @@ def test_scaling_the_weights_scales_every_rate_by_the_same_factor(data, falsifia
     before, after = field_of(full, REACTIVITY), field_of(scaled, REACTIVITY)
     known = ~np.isnan(before)
 
-    # A rate of zero scales to zero whatever the factor, so only a rate above
-    # zero can detect the scaling.
+    # A rate of zero scales to zero at any factor, so only a rate above zero
+    # can detect the scaling.
     falsifiable((before[known] > 0).any())
 
-    assert np.array_equal(np.isnan(before), np.isnan(after)), \
-        "the positions with a rate are not the same ones"
-    assert np.array_equal(after[known], scale * before[known]), \
-        "a rate is not the weights' own multiple of itself"
+    assert np.array_equal(np.isnan(before), np.isnan(after))
+    assert np.array_equal(after[known], scale * before[known])

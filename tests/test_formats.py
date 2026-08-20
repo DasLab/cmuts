@@ -1,7 +1,7 @@
 """The same alignments in each format htslib reads.
 
-The format of a file decides how the bases and the CIGAR are stored and nothing
-else, so a run over one format must answer as a run over another. Every other
+The format of a file decides only how the bases and the CIGAR are stored, so a
+run over one format must answer as a run over another. Every other
 test file runs over each format in turn; what is left here is the comparison
 between them, and the reference a CRAM reader is given.
 """
@@ -21,7 +21,7 @@ from programs import run_cmuts
 # The criteria a format is tried under. The whole matrix belongs to
 # test_filtering.py, which runs it over every dataset. A format can only change
 # what a filter reads, so what is needed here is one run reading everything a
-# filter can read and one run reading nothing.
+# filter can read and one run rejecting every read.
 CRITERIA = [{}, COMPOUND]
 
 
@@ -34,7 +34,7 @@ def fmt(request):
 
 @contextlib.contextmanager
 def moved_aside(path):
-    """Renames a file for the duration of the block, so that nothing can read
+    """Renames a file for the duration of the block, so that no run can open
     it."""
     aside = path.with_suffix(path.suffix + ".aside")
     os.rename(path, aside)

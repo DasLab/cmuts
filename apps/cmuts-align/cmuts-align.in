@@ -42,7 +42,7 @@ missing() {
 }
 
 # The help column is a floor of 28, widened by any invocation longer than it.
-# Nothing here reaches that, so the floor is what every row is set to.
+# No invocation here reaches that, so the floor is what every row is set to.
 option() {
     printf '  %-28s %s\n' "$1" "$2"
 }

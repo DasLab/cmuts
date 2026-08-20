@@ -1,7 +1,7 @@
 /* dataset.c -- writing the alignments and the reference they came from.
  *
  * A reference's reads are all placed before any of them is built, so the records can be
- * emitted in coordinate order however many there are and nothing has to be sorted afterwards.
+ * emitted in coordinate order however many there are and the file needs no sort afterwards.
  *
  * A reference's content derives from the seed and its index only, so any one of them is
  * reproducible without generating those before it.
@@ -88,7 +88,7 @@ static void seed_stream(rng *r, size_t seed, size_t tid, stream purpose)
 }
 
 /* Returns a count drawn from a distribution, held to limit. A spec may be written with
- * a negative bound, and nothing is drawn fewer than zero times. */
+ * a negative bound, and a negative draw is read as zero. */
 static size_t draw_count(const distribution *d, rng *r, size_t limit)
 {
     long drawn = distribution_draw(d, r);
@@ -215,7 +215,7 @@ static void write_fasta_record(FILE *fasta, const char *name, const char *seq, s
 /* ------------------------------------------------------------------------ */
 
 /* Both files, and everything reused from one read to the next. The buffers are sized to the
- * largest the configuration can produce, so nothing is allocated once writing has begun. */
+ * largest the configuration can produce, so no buffer is allocated once writing has begun. */
 typedef struct {
     const dataset_config *cfg;
 
@@ -343,7 +343,7 @@ static int write_reference_reads(writer *w, rng *r, int32_t tid, size_t reflen)
 }
 
 /* Writes one reference and its reads. The sequence is written whether or not the reference
- * receives any reads, a reference with none being a row the output holds and nothing in it --
+ * receives any reads, a reference with none being a row the output holds with no reads in it --
  * which is what a sparse experiment consists of. */
 static int write_reference(writer *w, size_t tid, size_t reflen)
 {

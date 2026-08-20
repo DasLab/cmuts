@@ -16,7 +16,7 @@ from outputs import COUNT_FIELDS, field_of, outputs_agree, read_summary
 from programs import run_cmuts, try_cmuts
 
 # Two and three leave every file holding a share of every busy reference.
-# Sixteen leaves most files holding nothing for most references.
+# Sixteen leaves most files holding no reads for most references.
 PARTS = [2, 3, 8, 16]
 
 # Enough files that reversing their order is a different order.

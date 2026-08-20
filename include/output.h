@@ -91,7 +91,7 @@ typedef struct {
 } out_written;
 
 /* The fields one program reads and writes. A program reads exactly these of its inputs,
- * ignores whatever else they carry, and writes exactly these. */
+ * ignores every other field, and writes exactly these. */
 typedef struct {
     const out_written *fields;
     size_t             n_fields;

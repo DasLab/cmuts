@@ -56,7 +56,7 @@ def write_structures(path, pairings: dict, sequences: dict = None):
 
 def alternating(length: int) -> str:
     """A pairing leaving every third base open, so that both classes are held
-    whatever the length."""
+    at every length."""
     return "".join(UNPAIRED if i % 3 == 0 else "(" for i in range(length))
 
 
@@ -86,7 +86,7 @@ def rows_of(text: str) -> dict:
     position."""
     lines = text.splitlines()
 
-    assert lines, "the table is empty"
+    assert lines
     assert lines[0] == ",".join(COLUMNS)
 
     rows = {}

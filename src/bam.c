@@ -242,7 +242,7 @@ const char *cm_bam_error(const cm_bam_reader *reader)
 
 /* Returns how far the reader has read, measured from the first alignment. An offset
  * points at the block being read and not past it, so it stops short of the end once
- * there is nothing left to read; the span is reported instead. */
+ * no alignment is left to read; the span is reported instead. */
 uint64_t cm_bam_position(const cm_bam_reader *reader)
 {
     uint64_t at;

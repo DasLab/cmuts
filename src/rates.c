@@ -12,9 +12,8 @@ rate_config rate_defaults(void)
     return (rate_config){ .min_depth = 1 };
 }
 
-/* Returns whether a position carries enough evidence to report on. Some is required
- * whatever depth was asked for, so a depth of zero means whatever there is and not
- * none. */
+/* Returns whether a position carries enough evidence to report on. Some is always
+ * required: a depth of zero does not report on a position with none. */
 static bool known_at(double wanted, double evidence)
 {
     return evidence > 0.0 && evidence >= wanted;

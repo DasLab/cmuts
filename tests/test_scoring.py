@@ -1,7 +1,7 @@
 """Measuring reactivity rates against a known structure.
 
-A row of the table depends on the values in the input file, the sequence and
-the pairing, and on nothing else, so all three are written by hand. scoring.py
+A row of the table depends only on the values in the input file, the sequence
+and the pairing, so all three are written by hand. scoring.py
 builds them and computes what each row should hold.
 """
 
@@ -339,9 +339,9 @@ def test_every_required_argument_is_required(build, tmp_path, missing):
 
 
 def test_cmuts_score_reads_what_cmuts_hmm_writes(data, falsifiable, tmp_path):
-    """A reference with no finite reactivity is scored by nothing, and a
-    dataset whose references are all such leaves nothing to score, so the run
-    is allowed to refuse it."""
+    """A reference with no finite reactivity is not scored, and a dataset whose
+    references are all such leaves no reference to score, so the run is
+    allowed to refuse it."""
     rates = run_cmuts(data, tmp_path / "rates.h5")
     sequences = sequences_of(data.fasta)
     structures = write_structures(

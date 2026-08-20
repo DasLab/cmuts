@@ -168,10 +168,10 @@ static int open_fields(h5reader *r)
     return 0;
 }
 
-/* Allocates a reader holding nothing yet, with every handle marked absent.
+/* Allocates a reader holding no handles yet, every one marked absent.
  *
  * The steps that build the rest may each fail and leave those after them undone, and the
- * reader is closed whatever happened, so it must be safe to close from here onwards: it
+ * reader is always closed, so it must be safe to close from here onwards: it
  * closes exactly what it opened. Zero, which calloc leaves behind, is a handle HDF5 would
  * accept, hence the marking. */
 static h5reader *reader_alloc(const out_manifest *manifest)

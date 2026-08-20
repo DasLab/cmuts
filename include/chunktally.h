@@ -24,7 +24,7 @@ void chunktally_expect(chunktally *t, int32_t tid);
 /* Records that a reference was written. */
 void chunktally_wrote(chunktally *t, int32_t tid);
 
-/* Records that nothing more will be opened. */
+/* Records that no further reference will be opened. */
 void chunktally_no_more(chunktally *t);
 
 /* Gives the next finished chunk, or -1 while none is. Each chunk is handed back exactly

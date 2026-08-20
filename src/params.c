@@ -87,8 +87,8 @@ static char *skip_blanks(char *text)
 /* Cuts the line at its first comment mark or line ending, and trims the blanks either
  * side of what is left. Returns the text, which is empty where the line carried none.
  *
- * The scan is bounded by the buffer so that the cut lands inside it whatever the file
- * holds. size counts the terminator, so the last index written is size - 1. */
+ * The scan is bounded by the buffer so that the cut always lands inside it. size counts
+ * the terminator, so the last index written is size - 1. */
 static char *content_of(char *line, size_t size)
 {
     size_t len = 0;

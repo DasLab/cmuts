@@ -33,8 +33,8 @@ hid_t h5layout_row_space(size_t cap, const bool *wanted);
  * memory row the values move through. The two are selected together so that they cannot
  * disagree on how many values move.
  *
- * The selections replace whatever was there, so both dataspaces may be kept for as long as
- * the file is open and reselected for each row. */
+ * Each call replaces the previous selections, so both dataspaces may be kept for as long
+ * as the file is open and reselected for each row. */
 int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
                          int32_t tid, size_t n);
 

@@ -1,6 +1,6 @@
 """Values written into an input file by hand.
 
-What a combination writes depends on the values in its inputs and on nothing
+What a combination writes depends only on the values in its inputs,
 else, so the files it is tested against are written by hand and not counted from
 an alignment. outputs.py describes the layout they share.
 """

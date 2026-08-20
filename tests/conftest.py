@@ -57,7 +57,7 @@ def catalogue(tmp_path_factory):
 
 @pytest.fixture(params=FORMATS)
 def fmt(request):
-    """One format htslib reads. A contract holds whatever format the alignments
+    """One format htslib reads. A contract holds for every format the alignments
     arrive in, so every test over the catalogue is run against each.
 
     A test overrides this fixture when it requires specific formats.

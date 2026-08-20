@@ -41,7 +41,7 @@ def sample_references(data) -> list:
 # ---------------------------------------------------------------------------
 
 
-def test_a_matching_checksum_changes_nothing_counted(data, falsifiable, tmp_path):
+def test_a_matching_checksum_leaves_the_counts_unchanged(data, falsifiable, tmp_path):
     """cmuts gen writes a matching checksum into every header, so every run in
     the suite already asserts that a matching one is accepted. This test
     asserts that checking it leaves the result unchanged."""
@@ -78,13 +78,12 @@ def test_a_reference_without_a_checksum_is_not_checked(data, falsifiable, tmp_pa
 
     kept = read_summary(run_cmuts(data, right)).kept
 
-    # Where every read was rejected, the two runs count nothing either way, so
+    # Where every read was rejected, the two runs count no reads either way, so
     # the bases they would have counted over cannot be told apart.
     falsifiable(kept > 0)
 
     if kept:
-        assert not outputs_agree(wrong, right), \
-            "the substituted bases are not the ones that were scored"
+        assert not outputs_agree(wrong, right)
 
 
 def test_a_substitution_in_any_reference_is_refused(data, falsifiable, tmp_path):
@@ -175,7 +174,7 @@ def test_a_length_the_header_does_not_declare_is_refused(data, falsifiable, tmp_
 # ---------------------------------------------------------------------------
 
 
-def test_a_checksum_is_read_whatever_its_case(data, falsifiable, tmp_path):
+def test_a_checksum_is_read_in_either_case(data, falsifiable, tmp_path):
     """The SAM spec fixes M5 as hexadecimal without fixing its case."""
     falsifiable(has_references(data))
 

@@ -216,7 +216,7 @@ static void worker_process_run(worker *w, void **slots, size_t n)
         worker_count_run(w, slots, n, &ref);
     }
 
-    /* The whole run's carriers go back at once. Nothing reads them afterwards:
+    /* The whole run's carriers go back at once. No thread reads them afterwards:
      * worker_process_batch scans only at or beyond the current head. */
     itempool_give_many(w->pipe->items, slots, n);
 
@@ -383,7 +383,7 @@ static refctx *pipeline_open_reference(const pipeline *p, int32_t tid)
 }
 
 /* Opens and closes a reference the reader passed over, so that its row is written unread.
- * A reference that received nothing is zero everywhere, which is what the accumulator a
+ * A reference that received no reads is zero everywhere, which is what the accumulator a
  * pooled context carries already holds. */
 static bool loader_emit_empty(loader *l, int32_t tid)
 {
@@ -401,8 +401,9 @@ static bool loader_emit_empty(loader *l, int32_t tid)
 }
 
 /* Opens and closes every reference the reader has passed since the last one it stopped at,
- * which checks each against the headers and writes whatever its fields need. A reference
- * that needs nothing written costs the open and no more. */
+ * which checks each against the headers and writes the fields an empty reference still
+ * needs. A reference
+ * that needs no field written costs the open and no more. */
 static bool loader_account_through(loader *l, int32_t upto)
 {
     while (l->owed < upto) {
@@ -503,7 +504,7 @@ static int loader_main(const pipeline *p, const failure_flag *f,
     while ((status = cm_bam_stream_next(p->bam, &rec)) == CM_ITER_OK) {
         progress_follow(p->bar);
 
-        /* A worker has failed, so reading on gains nothing. Not an error here: the
+        /* A worker has failed, so the rest of the file is left unread. Not an error here: the
          * worker reports it. */
         if (failure_seen(l.failure) != PHMM_OK) {
             break;
@@ -541,7 +542,7 @@ static int loader_main(const pipeline *p, const failure_flag *f,
      * is what --live-refs 1 sets. */
     loader_leave_reference(&l);
 
-    /* The references the reader stopped short of received nothing, as did those it
+    /* The references the reader stopped short of received no reads, as did those it
      * passed over between reads. */
     if (result == 0 && status == CM_ITER_EOF
         && !loader_account_through(&l, cm_bam_stream_nref(p->bam))) {
@@ -629,8 +630,7 @@ static void consumer_send_settled(consumer *c)
     }
 }
 
-/* Gives one reference its row. A reference no read arrived on hands over no accumulator,
- * having accumulated nothing for a field to be derived from. */
+/* Gives one reference its row. A reference no read arrived on hands over no accumulator. */
 static int consumer_row(consumer *c, refctx *ctx)
 {
     const accum *acc = refctx_accumulated(ctx) ? &ctx->acc : NULL;
@@ -639,13 +639,13 @@ static int consumer_row(consumer *c, refctx *ctx)
                         ctx->pr.cells ? &ctx->pr : NULL);
 }
 
-/* Writes one reference's row and reports it to the writer. The report is made whatever
- * the write did: a chunk settles only once every reference opened in it is accounted
+/* Writes one reference's row and reports it to the writer. The report is made even when
+ * the write fails: a chunk settles only once every reference opened in it is accounted
  * for. */
 static void consumer_write_reference(consumer *c, refctx *ctx)
 {
     /* Keep draining after a failure, or the loader and workers block on a queue
-     * nothing is emptying. */
+     * no consumer is emptying. */
     if (c->status == 0 && consumer_row(c, ctx) < 0) {
         consumer_fail(c);
     }
@@ -875,7 +875,7 @@ int pipeline_run(const pipeline_config *cfg, const char *program,
 
     tally_tables_build(&p.tally_tables, &cfg->tally_config);
 
-    /* Started last, so that nothing draws a bar and then fails before the first read. */
+    /* Started last, so that no setup step fails after the bar is drawn. */
     p.bar = progress_start(p.bam);
 
     cons.pipe = &p;

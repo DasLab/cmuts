@@ -89,8 +89,8 @@ static int fail_rule(out_field_id id, int status, char *error, size_t error_len)
 /* Summing                                                                   */
 /* ------------------------------------------------------------------------ */
 
-/* Accumulating in a local and storing once rounds only at the end, whatever width the
- * platform evaluates floats at. */
+/* Accumulating in a local and storing once rounds only at the end, so the sum does not
+ * depend on the width the platform evaluates floats at. */
 
 static void sum_f32(const combine_rows *rows, out_field_id id, float *out, size_t n)
 {

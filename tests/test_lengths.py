@@ -48,11 +48,10 @@ def compare_against_samtools(output, data, min_mapq: int) -> Compared:
     written = field_of(output, LENGTHS)
     width = written.shape[1]
 
-    assert width == 2 * max(lengths.values()), "the row is not the widest reference"
+    assert width == 2 * max(lengths.values())
 
     for name, histogram in expected.items():
-        assert np.array_equal(written[row_of[name]], expected_row(histogram, width)), \
-            f"{name}: histogram disagrees with samtools"
+        assert np.array_equal(written[row_of[name]], expected_row(histogram, width)), name
 
         outside += sum(count for length, count in histogram.items() if length > width)
 
@@ -69,9 +68,8 @@ def test_histogram_matches_samtools(data, falsifiable, tmp_path, min_mapq):
 
 def test_a_read_longer_than_the_range_is_counted_only_by_the_total(data, falsifiable,
                                                                    tmp_path):
-    """A row is short by the reads that no bin could hold and by nothing else.
-    Where no read is too long, every row sums to the reads counted for its
-    reference.
+    """A row is short by exactly the reads that no bin could hold. Where no
+    read is too long, every row sums to the reads counted for its reference.
     """
     output = tmp_path / "out.h5"
     run_cmuts(data, output, min_mapq=0)
@@ -88,6 +86,5 @@ def test_a_read_longer_than_the_range_is_counted_only_by_the_total(data, falsifi
 
     missing = counted - written
 
-    assert (missing >= 0).all(), "a row holds more reads than were counted"
-    assert missing.sum() == outside, \
-        "the reads outside the range are not what the total is short by"
+    assert (missing >= 0).all()
+    assert missing.sum() == outside

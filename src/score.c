@@ -419,7 +419,7 @@ static void warn_length(const cm_fasta_record *ref, const structure *known)
 /* What one reference of the FASTA came to. */
 typedef enum {
     REF_MEASURED,   /* the result is filled in */
-    REF_PASSED,     /* nothing to rank, and the run goes on */
+    REF_PASSED,     /* no positions to rank, and the run goes on */
     REF_FAILED,     /* the run cannot go on */
 } ref_status;
 
@@ -459,8 +459,8 @@ static ref_status measure_reference(context *ctx, const cm_fasta_record *ref,
 /* The table                                                                 */
 /* ------------------------------------------------------------------------ */
 
-/* Names the columns. Written before the first row, so that a run scoring nothing
- * writes nothing. */
+/* Names the columns. Written before the first row, so that a run scoring no reference
+ * writes no table. */
 static void print_header(FILE *out)
 {
     fprintf(out, "reference,paired,unpaired,auroc,auprc,mean_paired,mean_unpaired\n");
@@ -503,7 +503,7 @@ static void release(context *ctx)
     free(ctx->points);
 }
 
-/* Refuses a run that scored nothing, naming the lengths where they are the cause. */
+/* Refuses a run that scored no reference, naming the lengths where they are the cause. */
 static int check_scored(size_t scored, size_t skipped, char *error, size_t error_len)
 {
     if (scored > 0) {
@@ -555,8 +555,8 @@ static int score_all(context *ctx, const structures *set, char *error, size_t er
             continue;
         }
 
-        /* a structure of another length describes another molecule, so scoring the part
-         * that overlaps would give a number that means nothing */
+        /* a structure of another length describes another molecule, so a score over the
+         * overlapping part would describe neither */
         if (known->len != ref.len) {
             warn_length(&ref, known);
             skipped++;

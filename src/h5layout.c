@@ -76,8 +76,8 @@ hid_t h5layout_type(out_field_id id)
 }
 
 /* Returns the type a field's values are handed over in, which is the one it is stored
- * as. A value read from a file and written to another passes through nothing wider on
- * the way. */
+ * as. A value read from a file and written to another is never widened on the
+ * way. */
 hid_t h5layout_memory_type(out_field_id id)
 {
     switch (OUT_FIELDS[id].stored) {
@@ -174,7 +174,7 @@ hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank)
     }
 
     /* A dataset of rank zero holds one value, which is written the moment it is
-     * created. There is nothing to chunk, nothing to filter, and no position that
+     * created. It has no rows to chunk, no bytes to filter, and no position that
      * could go unwritten and need a fill. */
     if (rank == 0) {
         return dcpl;
@@ -202,7 +202,7 @@ hid_t h5layout_access_plist(out_field_id id, const hsize_t *chunk, int rank)
         return H5I_INVALID_HID;
     }
 
-    /* Nothing to cache where nothing is chunked. */
+    /* An unchunked dataset has no chunks to cache. */
     if (rank == 0) {
         return dapl;
     }

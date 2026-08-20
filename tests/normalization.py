@@ -71,8 +71,8 @@ def _outlier_factor(values) -> float:
 
 
 def factor(scheme, inputs, min_coverage=MIN_COVERAGE) -> float:
-    """The scale cmuts norm should divide every input by. A scale that says
-    nothing leaves the rates as they are."""
+    """The scale cmuts norm should divide every input by. Where the pool supports
+    no scale, the factor is one and the rates are left as they are."""
     values = pool(scheme, inputs, min_coverage)
     found = _ubr_factor(values) if scheme == UBR else _outlier_factor(values)
 

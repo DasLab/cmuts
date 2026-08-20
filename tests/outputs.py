@@ -38,7 +38,7 @@ class Field:
 
 
 # A rate is a float and NaN where it was not measured. A count is a whole
-# unsigned and zero where nothing was counted. The sequence is the reference
+# unsigned and zero where no read was counted. The sequence is the reference
 # itself, and is neither.
 FIELDS = (
     Field(COVERAGE, PER_BASE, "f4", 0.0),
@@ -187,8 +187,8 @@ def fields_of(path, names) -> dict:
 
 
 def attributes_of(path) -> dict:
-    """Reads the attributes of the root group, as text. HDF5 hands a string back
-    as bytes, whatever it was written from."""
+    """Reads the attributes of the root group, as text. HDF5 always hands a
+    string back as bytes."""
     with h5py.File(path, "r") as handle:
         return {name: value.decode() if isinstance(value, bytes) else value
                 for name, value in handle.attrs.items()}

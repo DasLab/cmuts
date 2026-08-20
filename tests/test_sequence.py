@@ -56,7 +56,7 @@ def test_every_reference_holds_its_own_bases(data, tmp_path, falsifiable):
     falsifiable(len(fasta) > 0)
 
     assert written.dtype == np.int8
-    assert written.shape[0] == len(fasta), "one row per reference"
+    assert written.shape[0] == len(fasta)
 
     for row, (name, bases) in enumerate(fasta.items()):
         assert np.array_equal(written[row], encoded(bases, written.shape[1])), name
@@ -107,7 +107,7 @@ def test_subtraction_omits_the_sequence_when_an_input_has_none(build, tmp_path):
     output = run_subtract(build(), older, tmp_path / "difference.h5")
 
     assert SEQUENCE not in layout_of(output)
-    assert REACTIVITY in layout_of(output), "the output holds no reactivity either"
+    assert REACTIVITY in layout_of(output)
 
 
 def test_normalization_omits_the_sequence_when_the_input_has_none(build, tmp_path):
@@ -115,5 +115,4 @@ def test_normalization_omits_the_sequence_when_the_input_has_none(build, tmp_pat
     run_normalize([older], [tmp_path / "norm.h5"])
 
     assert SEQUENCE not in layout_of(tmp_path / "norm.h5")
-    assert REACTIVITY in layout_of(tmp_path / "norm.h5"), \
-        "the output holds no reactivity either"
+    assert REACTIVITY in layout_of(tmp_path / "norm.h5")

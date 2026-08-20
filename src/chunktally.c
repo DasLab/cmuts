@@ -17,7 +17,7 @@ struct chunktally {
     bool           *touched;      /* received at least one reference */
     bool           *handed_back;
     int64_t         opened_high;  /* the furthest chunk the loader has reached */
-    bool            spent;        /* the loader will open nothing further */
+    bool            spent;        /* the loader will open no further reference */
     int64_t        *settled;      /* queue of chunks ready to be written */
     size_t          head;
     size_t          tail;

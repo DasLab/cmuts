@@ -41,7 +41,7 @@ typedef struct {
     double modification;
 } cell_terms;
 
-/* Emission of a comparison that distinguishes nothing: an inserted base, or a
+/* Emission of a comparison that carries no information: an inserted base, or a
  * base one side does not hold. */
 #define UNINFORMATIVE (1.0 / NUC_BASES)
 
@@ -519,10 +519,10 @@ static phmm_status forward(const context *ctx)
 /* Each reference position collects three totals: coverage, span, and
  * mutations. A pairing covers and spans the position it pairs, and adds as
  * mutation the part of its posterior that a template modification explains.
- * A deletion spans every position it passes over, covers none, and counts as
+ * A deletion spans every position it passes over, adds no coverage, and counts as
  * one mutation at the end of its run, since reverse transcription reads the
  * template from the 3' end. An insertion counts as a mutation at the position
- * it precedes and covers nothing; it spans the same weighted amount it counts
+ * it precedes and adds no coverage; it spans the same weighted amount it counts
  * as mutation, so a weight of zero removes it entirely. */
 
 /* The three window fields, each advanced to where the row's first cell enters
@@ -773,7 +773,7 @@ static void backward_row(const context *ctx, size_t i)
 }
 
 /* Fills the first row of the backward pass. The row precedes the first placed
- * base, so it contributes nothing to the window and is written only for
+ * base, so it adds no value to the window and is written only for
  * passes_agree to check. */
 static void backward_first_row(const context *ctx)
 {
@@ -873,7 +873,7 @@ void phmm_scratch_destroy(phmm_scratch *scratch)
 }
 
 /* Grows the per-row buffers. A buffer that grew is kept even when a later one
- * fails, so a failed grow leaves the scratch usable; nothing shrinks. This
+ * fails, so a failed grow leaves the scratch usable; the buffers never shrink. This
  * runs before grow_band, since the row count comes from the CIGAR while the
  * widest row is known only after the places are written. */
 static int grow_rows(phmm_scratch *scratch, size_t rows)

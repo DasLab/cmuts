@@ -1,6 +1,6 @@
 """Taking an untreated background off a treated run.
 
-The result depends on the values in the input files and on nothing else, so the
+The result depends only on the values in the input files, so the
 inputs are written by hand and not counted from an alignment. inputs.py builds
 them and outputs.py describes the layout the programs share.
 """
@@ -92,7 +92,7 @@ def test_the_layout_written_here_is_the_one_cmuts_hmm_writes(data, falsifiable,
         assert found == shape(field, n_refs, cap), field.name
         assert dtype == np.dtype(field.dtype), field.name
 
-    assert real[UNMAPPED][0] == (), "a run total belongs to no reference"
+    assert real[UNMAPPED][0] == ()
 
 
 def test_the_difference_names_the_program_that_wrote_it(build, subtract):
@@ -145,7 +145,7 @@ def test_clipping_leaves_a_difference_above_zero_alone(build, tmp_path):
 
     unclipped = field_of(plain, REACTIVITY)
 
-    assert (unclipped < 0).any(), "nothing was negative, so nothing was tested"
+    assert (unclipped < 0).any()
     assert np.array_equal(field_of(clipped, REACTIVITY), np.maximum(unclipped, 0))
 
 
@@ -203,7 +203,7 @@ def test_a_value_either_input_lacks_is_missing_from_the_output(build, subtract, 
     result = field_of(output, name)
 
     assert np.array_equal(np.isnan(result), np.isnan(left) | np.isnan(right))
-    assert not np.isnan(result[0]).any(), "nothing is lost where both are known"
+    assert not np.isnan(result[0]).any()
 
 
 def test_the_columns_past_a_reference_stay_nan(build, subtract):
@@ -217,8 +217,8 @@ def test_the_columns_past_a_reference_stay_nan(build, subtract):
     result = field_of(output, COVERAGE)
 
     for row, length in enumerate(lengths):
-        assert not np.isnan(result[row, :length]).any(), f"row {row} within"
-        assert np.isnan(result[row, length:]).all(), f"row {row} past its end"
+        assert not np.isnan(result[row, :length]).any(), row
+        assert np.isnan(result[row, length:]).all(), row
 
 
 # ---------------------------------------------------------------------------
@@ -240,7 +240,7 @@ def test_a_file_against_itself_leaves_a_reactivity_of_zero(build, subtract):
     result = field_of(subtract(treated, treated), REACTIVITY)
     known = ~np.isnan(field_of(treated, REACTIVITY))
 
-    assert known.any(), "nothing was known, so nothing was tested"
+    assert known.any()
     assert np.all(result[known] == 0)
     assert np.isnan(result[~known]).all()
 
@@ -260,9 +260,9 @@ def test_swapping_the_two_inputs_negates_only_the_reactivity(build, subtract, tm
 
 def test_a_background_of_zeros_leaves_the_treated_run_unchanged(build, subtract):
     treated = build(random_fields(seed=5))
-    nothing = build({REACTIVITY: 0.0, ERROR: 0.0})
+    zeros = build({REACTIVITY: 0.0, ERROR: 0.0})
 
-    output = subtract(treated, nothing)
+    output = subtract(treated, zeros)
 
     for name in ALL_FIELDS:
         assert np.array_equal(field_of(output, name), field_of(treated, name)), name
@@ -342,7 +342,7 @@ def test_an_input_missing_a_dataset_that_is_not_required_is_skipped(build, subtr
     output = subtract(delete_field(build(), missing), build())
 
     assert missing not in layout_of(output)
-    assert REACTIVITY in layout_of(output), "the output holds no reactivity either"
+    assert REACTIVITY in layout_of(output)
 
 
 
@@ -367,7 +367,7 @@ def test_an_existing_output_is_not_replaced_without_overwrite(build, subtract):
     failed = try_subtract(treated, untreated, output)
 
     assert failed.returncode != 0
-    assert output.read_bytes() == before, "the first result is untouched"
+    assert output.read_bytes() == before
 
 
 def test_overwrite_replaces_an_existing_output(build, subtract):

@@ -31,7 +31,7 @@
  * writing thread takes each finished chunk with h5writer_take_chunk, any thread runs
  * h5chunk_filter over it, and the writing thread hands it back through
  * h5writer_write_chunk. Every chunk taken must come back before the writer is closed;
- * whatever was never taken, the close filters and writes itself. */
+ * the close filters and writes the chunks never taken. */
 typedef struct h5writer h5writer;
 
 /* One finished chunk of one field, carrying its values and the buffer its filtered bytes
@@ -59,8 +59,8 @@ h5writer *h5writer_create(const char *path, const char *program, int32_t n_refs,
  * does not gather. */
 void h5writer_expect(h5writer *w, int32_t tid);
 
-/* Records that a reference's fields have all been given, and finishes the chunks nothing
- * further can land in. Called from the writing thread. Does nothing for a writer that
+/* Records that a reference's fields have all been given, and finishes the chunks no further
+ * reference can land in. Called from the writing thread. Does nothing for a writer that
  * does not gather. */
 int h5writer_wrote(h5writer *w, int32_t tid);
 
@@ -69,7 +69,7 @@ int h5writer_wrote(h5writer *w, int32_t tid);
 h5chunk *h5writer_take_chunk(h5writer *w);
 
 /* Filters a chunk: shuffle and deflate, as the datasets declare. Touches no HDF5 state
- * and nothing of the writer, so any thread may run it. */
+ * and no field of the writer, so any thread may run it. */
 void h5chunk_filter(h5chunk *chunk);
 
 /* Writes a filtered chunk and frees it, whether or not the write succeeds. */

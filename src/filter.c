@@ -61,7 +61,7 @@ static bool length_accepted(const filter_config *filter, const cm_bam_record *re
 }
 
 /* Returns whether the record stores a sequence. SAM spells its absence as a SEQ and
- * QUAL of "*", leaving nothing to compare against the reference. */
+ * QUAL of "*", leaving no bases to compare against the reference. */
 static bool sequence_present(const cm_bam_record *read)
 {
     return read->seq != NULL;

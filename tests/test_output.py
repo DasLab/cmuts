@@ -38,13 +38,14 @@ def test_an_existing_output_is_not_replaced_without_overwrite(data, falsifiable,
     attempt = try_cmuts(data, output)
 
     assert attempt.returncode != 0
-    assert output.read_bytes() == before, "the first result is untouched"
+    assert output.read_bytes() == before
 
 
 def test_overwrite_replaces_an_existing_output(data, falsifiable, tmp_path):
     """The two runs are given different criteria, so that agreeing with one of
     them identifies which result was left at the path. Where the criteria make
-    no difference to what a dataset counts, agreement identifies nothing."""
+    no difference to what a dataset counts, agreement cannot tell the two
+    apart."""
     output = tmp_path / "out.h5"
     first = read_summary(run_cmuts(data, output))
 
@@ -57,7 +58,7 @@ def test_overwrite_replaces_an_existing_output(data, falsifiable, tmp_path):
     assert outputs_agree(output, tmp_path / "separate.h5")
 
 
-def test_a_run_that_would_fail_destroys_nothing(data, falsifiable, catalogue, tmp_path):
+def test_a_run_that_would_fail_leaves_the_output_intact(data, falsifiable, catalogue, tmp_path):
     """The second run is given another dataset, so a result written before the
     refusal would be the wrong shape as well as the wrong values."""
     output = tmp_path / "out.h5"
@@ -88,7 +89,7 @@ def test_a_file_that_is_not_an_output_is_left_intact(data, falsifiable, tmp_path
     notes.write_text(NOTES)
 
     # cmuts hmm refuses on the file already at the path and never reads the
-    # alignments, so no dataset can leave this test with nothing to assert.
+    # alignments, so the refusal happens for every dataset.
     falsifiable(True)
 
     attempt = try_cmuts(data, notes)
@@ -100,7 +101,7 @@ def test_a_file_that_is_not_an_output_is_left_intact(data, falsifiable, tmp_path
 def test_outputs_are_labelled_with_the_program(data, falsifiable, tmp_path):
     output = tmp_path / "out.h5"
 
-    # The attribute is written by every run, whatever it counted.
+    # The attribute is written by every run.
     falsifiable(True)
 
     run_cmuts(data, output)

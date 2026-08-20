@@ -186,17 +186,17 @@ def samtools_length_histogram(
 def assert_counts_agree(summary, data, criteria: dict):
     """Asserts every claim a run makes about how many reads it saw, against
     samtools and against the run's own totals."""
-    assert summary.kept == samtools_kept(data, **criteria), "surviving reads"
+    assert summary.kept == samtools_kept(data, **criteria)
 
     # Every mapped read is either kept or rejected.
-    assert summary.kept + summary.rejected == data.mapped, "reads accounted for"
+    assert summary.kept + summary.rejected == data.mapped
 
     # An unmapped read aligns nowhere, so no filter can reach it.
-    assert summary.unmapped == data.unmapped, "unmapped reads"
+    assert summary.unmapped == data.unmapped
 
     # A reference that received any mapped read gets a row, whether or not any
     # of those reads passed the filter.
-    assert summary.rows == data.touched, "references written"
+    assert summary.rows == data.touched
 
 
 # ---------------------------------------------------------------------------

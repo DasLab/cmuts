@@ -17,7 +17,7 @@
  * the moment the stream moves past it and is visited once across every file.
  *
  * A record refers to its reference by an index into its own file's header, so the headers
- * must agree, which nothing here checks. */
+ * must agree, which this module does not check. */
 typedef struct cm_bam_stream cm_bam_stream;
 
 /* Opens every path and reads the first record of each. There must be at least one path.

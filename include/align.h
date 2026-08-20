@@ -16,13 +16,13 @@ typedef struct {
     int32_t end;    /* one past the last */
 } aln_span;
 
-/* Gives the placed span, empty where the alignment places nothing: a record carrying no
+/* Gives the placed span, empty where the alignment places no base: a record carrying no
  * CIGAR, one whose every operation is a clip, or one consuming reference but no read. */
 aln_span aln_placed_span(const cm_bam_record *read);
 
 /* How far into the reference the CIGAR has reached at one point of the placed span: first
- * once that base has been taken, last once whatever is skipped straight after has been
- * too. The two differ only where a deletion follows. */
+ * once that base has been taken, last once the deletion straight after it has been too.
+ * The two differ only where a deletion follows. */
 typedef struct {
     hts_pos_t first;
     hts_pos_t last;
