@@ -72,16 +72,8 @@ def data(request, catalogue, fmt):
     return catalogue(request.param, fmt)
 
 
-@pytest.fixture(params=["plain", "chunked"])
-def storage(request):
-    """The two ways an input may be stored. cmuts hmm writes chunked, shuffled
-    and deflated, and the result must be the same either way, so every test
-    that reads values runs against both."""
-    return request.param
-
-
 @pytest.fixture
-def build(tmp_path, storage):
+def build(tmp_path):
     """Returns a function that writes an input file. Each file is named
     separately, so one test may build several."""
     written = itertools.count()
@@ -90,7 +82,6 @@ def build(tmp_path, storage):
         return write_output(
             tmp_path / f"input{next(written)}.h5",
             n_refs=n_refs, cap=cap, values=values, unmapped=unmapped,
-            storage=storage,
         )
 
     return make

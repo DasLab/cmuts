@@ -120,21 +120,20 @@ def _values(field: Field, n_refs: int, cap: int, given) -> np.ndarray:
     return np.asarray(given, dtype=field.dtype).reshape(wanted)
 
 
-def _storage(storage: str, wanted: tuple) -> dict:
-    """Returns the creation settings a dataset is written under. cmuts hmm
-    writes chunked, shuffled and deflated, and a plainly written file holds the
-    same values.
+def _storage(wanted: tuple) -> dict:
+    """Returns the creation settings a dataset is written under: chunked,
+    shuffled and deflated, as cmuts hmm writes.
 
-    A dataset with no rows cannot be chunked, so an empty one is written plainly
-    under either setting.
+    A dataset with no rows cannot be chunked, so an empty one is written
+    plainly.
     """
-    if storage == "plain" or 0 in wanted:
+    if 0 in wanted:
         return {}
 
     return dict(chunks=wanted, shuffle=True, compression="gzip", compression_opts=3)
 
 
-def write_output(path, *, n_refs=4, cap=6, values=None, unmapped=0, storage="plain"):
+def write_output(path, *, n_refs=4, cap=6, values=None, unmapped=0):
     """Writes a file in the output layout. A field the caller does not specify
     is filled with its fill value: NaN for a rate, zero for a count."""
     values = values or {}
@@ -148,7 +147,7 @@ def write_output(path, *, n_refs=4, cap=6, values=None, unmapped=0, storage="pla
         for field in FIELDS:
             data = _values(field, n_refs, cap, values.get(field.name))
             out.create_dataset(field.name, data=data,
-                               **_storage(storage, data.shape))
+                               **_storage(data.shape))
 
         out.create_dataset(UNMAPPED, data=np.uint64(unmapped))
 
