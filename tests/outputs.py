@@ -60,7 +60,6 @@ def _field_names(matches) -> tuple:
 
 # The groups a test reasons about. Each is derived from the declaration above,
 # so a new field joins them without being listed a second time.
-RATE_FIELDS = _field_names(lambda field: field.rate)
 FLOAT_FIELDS = _field_names(lambda field: field.dtype.startswith("f"))
 
 # The fields holding counts, in which a zero is a measured value and not a
