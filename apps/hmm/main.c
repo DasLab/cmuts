@@ -10,6 +10,7 @@
 #include "cli.h"
 #include "error.h"
 #include "filter.h"
+#include "manifest.h"
 #include "options.h"
 #include "params.h"
 #include "pipeline.h"

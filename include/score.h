@@ -29,11 +29,8 @@ typedef struct {
     double      min_coverage;     /* reads a position needs before it is scored */
 } score_config;
 
-/* The fields cmuts score reads of the output it scores. It writes comma separated values
- * and no HDF5, so this names what it reads alone. */
-extern const out_manifest CMUTS_SCORE_READS;
-
 /* Writes one row per reference to out, as comma separated values, and a note on stderr
  * for each structure that cannot be scored. Returns 0, or -1 with a description in
  * error. */
-int score_run(const score_config *cfg, FILE *out, char *error, size_t error_len);
+int score_run(const score_config *cfg, const out_manifest *reads, FILE *out,
+              char *error, size_t error_len);

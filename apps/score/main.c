@@ -7,6 +7,7 @@
 
 #include "cli.h"
 #include "error.h"
+#include "manifest.h"
 #include "options.h"
 #include "score.h"
 #include "subcommands.h"
@@ -24,7 +25,7 @@ int score_main(int argc, char **argv)
         case CLI_OK:    break;
     }
 
-    if (score_run(&args.score, stdout, error, sizeof error) < 0) {
+    if (score_run(&args.score, &CMUTS_SCORE_READS, stdout, error, sizeof error) < 0) {
         fprintf(stderr, "%s: %s\n", spec.program, error);
         return 1;
     }

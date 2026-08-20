@@ -24,5 +24,3 @@ sub_args sub_defaults(void);
 /* The spec borrows defaults, which must outlive it. */
 cli_spec sub_spec(const sub_args *defaults);
 
-/* The datasets a run of this program writes. */
-extern const out_manifest CMUTS_SUB_WRITES;

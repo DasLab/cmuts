@@ -40,5 +40,3 @@ cli_spec norm_spec(const norm_args *defaults);
  * error. */
 int norm_take_arguments(norm_args *args, char *error, size_t error_len);
 
-/* The datasets a run of this program writes. */
-extern const out_manifest CMUTS_NORM_WRITES;

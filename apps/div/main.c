@@ -8,6 +8,7 @@
 #include "cli.h"
 #include "divide.h"
 #include "error.h"
+#include "manifest.h"
 #include "options.h"
 #include "subcommands.h"
 

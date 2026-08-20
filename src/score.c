@@ -40,17 +40,6 @@
 #define STRUCTURES_INITIAL_CAPACITY 64
 
 /* ------------------------------------------------------------------------ */
-/* What it reads                                                             */
-/* ------------------------------------------------------------------------ */
-
-static const out_written READS[] = {
-    { .id = OUT_COVERAGE,   .origin = OUT_REQUIRED },
-    { .id = OUT_REACTIVITY, .origin = OUT_REQUIRED },
-};
-
-const out_manifest CMUTS_SCORE_READS = { READS, sizeof READS / sizeof *READS };
-
-/* ------------------------------------------------------------------------ */
 /* The structures                                                            */
 /* ------------------------------------------------------------------------ */
 
@@ -595,7 +584,8 @@ done:
     return status;
 }
 
-int score_run(const score_config *cfg, FILE *out, char *error, size_t error_len)
+int score_run(const score_config *cfg, const out_manifest *reads, FILE *out,
+              char *error, size_t error_len)
 {
     context    ctx = { .cfg = cfg, .out = out };
     structures set = { 0 };
@@ -606,7 +596,7 @@ int score_run(const score_config *cfg, FILE *out, char *error, size_t error_len)
         return -1;
     }
 
-    ctx.reader = h5reader_open(cfg->input_path, &CMUTS_SCORE_READS);
+    ctx.reader = h5reader_open(cfg->input_path, reads);
 
     if (!ctx.reader) {
         structures_free(&set);

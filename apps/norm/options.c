@@ -5,6 +5,8 @@
 
 #include "options.h"
 
+#include "manifest.h"
+
 #include <math.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -17,28 +19,6 @@ static const cli_choice SCHEME_CHOICES[] = {
     { "outlier", NORM_OUTLIER },
     { NULL,      0            },
 };
-
-/* The datasets a run leaves behind: what it was given, divided by one norm, and that
- * norm alongside it. */
-static const out_written WRITTEN[] = {
-    { .id = OUT_REACTIVITY,
-      .note = "Divided by the norm.",
-      .origin = OUT_REQUIRED },
-    { .id = OUT_ERROR,
-      .note = "Divided by the norm." },
-    { .id = OUT_NORM,
-      .origin = OUT_MADE },
-    { .id = OUT_COVERAGE,
-      .origin = OUT_REQUIRED },
-    { .id = OUT_SEQUENCE },
-    { .id = OUT_LENGTHS },
-    { .id = OUT_READS },
-    { .id = OUT_REJECTED },
-    { .id = OUT_UNMAPPED },
-};
-
-
-const out_manifest CMUTS_NORM_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTEN };
 
 static void dump_layout(FILE *out)
 {
