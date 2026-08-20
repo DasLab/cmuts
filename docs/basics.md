@@ -66,15 +66,15 @@ All HDF5 files in `cmuts` have the same format, where `n` is the number of refer
 <!-- BEGIN GENERATED cmuts-norm LAYOUT -->
 | Dataset | Shape | Type | Fill |
 | --- | --- | --- | --- |
-| `coverage` | `(n, l)` | `float32` | `0` |
 | `reactivity` | `(n, l)` | `float32` | `NaN` |
 | `error` | `(n, l)` | `float32` | `NaN` |
+| `norm` | `()` | `float32` | `NaN` |
+| `coverage` | `(n, l)` | `float32` | `0` |
+| `sequence` | `(n, l)` | `int8` | `-1` |
 | `reads/lengths` | `(n, 2l)` | `uint64` | `0` |
 | `reads/counted` | `(n,)` | `uint64` | `0` |
 | `reads/rejected` | `(n,)` | `uint64` | `0` |
 | `reads/unmapped` | `()` | `uint64` | `0` |
-| `norm` | `()` | `float32` | `NaN` |
-| `sequence` | `(n, l)` | `int8` | `-1` |
 <!-- END GENERATED cmuts-norm LAYOUT -->
 
 See the [output](output.md) page for more detail on what each dataset contains.

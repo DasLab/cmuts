@@ -21,28 +21,20 @@ static const cli_choice SCHEME_CHOICES[] = {
 /* The datasets a run leaves behind: what it was given, divided by one norm, and that
  * norm alongside it. */
 static const out_written WRITTEN[] = {
-    { .id = OUT_COVERAGE,
-      .detail = "The number of reads in which this base was present.",
-      .origin = OUT_REQUIRED },
     { .id = OUT_REACTIVITY,
-      .detail = "The mutation rate divided by the norm this file records, so a rate reads against the norm rather than as a raw frequency.",
+      .note = "Divided by the norm.",
       .origin = OUT_REQUIRED },
     { .id = OUT_ERROR,
-      .detail = "Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors." },
-    { .id = OUT_LENGTHS,
-      .detail = "The number of reads passing all filters, binned by length." },
-    { .id = OUT_READS,
-      .detail = "The number of reads passing all filters." },
-    { .id = OUT_REJECTED,
-      .detail = "The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM" },
-    { .id = OUT_UNMAPPED,
-      .detail = "The number of reads not aligned to any reference." },
+      .note = "Divided by the norm." },
     { .id = OUT_NORM,
-      .detail = "The norm every rate in this file was divided by.",
       .origin = OUT_MADE },
-    { .id = OUT_SEQUENCE,
-      .detail = "The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.",
-},
+    { .id = OUT_COVERAGE,
+      .origin = OUT_REQUIRED },
+    { .id = OUT_SEQUENCE },
+    { .id = OUT_LENGTHS },
+    { .id = OUT_READS },
+    { .id = OUT_REJECTED },
+    { .id = OUT_UNMAPPED },
 };
 
 

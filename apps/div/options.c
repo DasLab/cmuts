@@ -9,27 +9,23 @@
 
 /* The datasets a run leaves behind, which are those every output holds: what it was
  * given, divided by the control it was given. */
+static const char SUMMED[] = "Summed over the inputs.";
+
 static const out_written WRITTEN[] = {
-    { .id = OUT_COVERAGE,
-      .detail = "The number of reads in which this base was present.",
-      .origin = OUT_REQUIRED },
     { .id = OUT_REACTIVITY,
-      .detail = "The mutation rate of the sample divided by that of the control, so a position reads as its rate relative to the denatured state.",
+      .note = "Sample over control.",
       .origin = OUT_REQUIRED },
     { .id = OUT_ERROR,
-      .detail = "Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors.",
+      .note = "Propagated from the inputs.",
       .origin = OUT_REQUIRED },
-    { .id = OUT_LENGTHS,
-      .detail = "The number of reads passing all filters, binned by length." },
-    { .id = OUT_READS,
-      .detail = "The number of reads passing all filters." },
-    { .id = OUT_REJECTED,
-      .detail = "The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM" },
-    { .id = OUT_UNMAPPED,
-      .detail = "The number of reads not aligned to any reference." },
-    { .id = OUT_SEQUENCE,
-      .detail = "The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.",
-},
+    { .id = OUT_COVERAGE,
+      .note = SUMMED,
+      .origin = OUT_REQUIRED },
+    { .id = OUT_SEQUENCE },
+    { .id = OUT_LENGTHS,   .note = SUMMED },
+    { .id = OUT_READS,     .note = SUMMED },
+    { .id = OUT_REJECTED,  .note = SUMMED },
+    { .id = OUT_UNMAPPED,  .note = SUMMED },
 };
 
 

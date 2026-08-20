@@ -45,6 +45,7 @@ typedef enum {
  * its dataset is the reference dimension followed by the extents of that row. */
 typedef struct {
     const char *name;
+    const char *detail;    /* what the dataset holds, in one sentence */
     shape_fn    row;       /* the extents one reference's values occupy */
     bool        per_ref;   /* whether there is one such row per reference */
     bool        from_ref;  /* whether its values are the reference's and not the reads' */
@@ -85,7 +86,9 @@ typedef enum {
 /* One field of one program's output. */
 typedef struct {
     out_field_id id;
-    const char  *detail;     /* what the numbers are here, in one sentence */
+    /* What this program changes about the field, in one sentence. NULL where the field's
+     * own detail says it all. */
+    const char  *note;
     const char  *condition;  /* what a run needs for it, where it is not written always */
     out_origin   origin;     /* where the run gets it */
 } out_written;

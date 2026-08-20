@@ -35,6 +35,31 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 
 <!-- BEGIN GENERATED cmuts-norm FIELDS -->
 {.field}
+### `reactivity`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+The reactivity at each base.
+
+*Divided by the norm.*
+
+{.field}
+### `error`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+Standard error of the reactivity values.
+
+*Divided by the norm.*
+
+{.field}
+### `norm`
+
+**Shape** `()` · **Type** `float32` · **Fill** `NaN`
+
+The norm every rate in this file was divided by.
+
+{.field}
 ### `coverage`
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `0`
@@ -42,18 +67,11 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 The number of reads in which this base was present.
 
 {.field}
-### `reactivity`
+### `sequence`
 
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+**Shape** `(n, l)` · **Type** `int8` · **Fill** `-1`
 
-The mutation rate divided by the norm this file records, so a rate reads against the norm rather than as a raw frequency.
-
-{.field}
-### `error`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
-
-Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors.
+The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.
 
 {.field}
 ### `reads/lengths`
@@ -74,7 +92,7 @@ The number of reads passing all filters.
 
 **Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
 
-The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM
+The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM.
 
 {.field}
 ### `reads/unmapped`
@@ -82,20 +100,6 @@ The number of reads rejected by at least one filter, or which couldn't be modell
 **Shape** `()` · **Type** `uint64` · **Fill** `0`
 
 The number of reads not aligned to any reference.
-
-{.field}
-### `norm`
-
-**Shape** `()` · **Type** `float32` · **Fill** `NaN`
-
-The norm every rate in this file was divided by.
-
-{.field}
-### `sequence`
-
-**Shape** `(n, l)` · **Type** `int8` · **Fill** `-1`
-
-The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.
 <!-- END GENERATED cmuts-norm FIELDS -->
 
 ## CLI Options

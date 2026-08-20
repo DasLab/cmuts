@@ -12,6 +12,7 @@
 const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     [OUT_COVERAGE] = {
         .name    = "coverage",
+        .detail  = "The number of reads in which this base was present.",
         .row     = shape_per_base,
         .per_ref = true,
         .stored  = OUT_F32,
@@ -19,6 +20,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     },
     [OUT_REACTIVITY] = {
         .name    = "reactivity",
+        .detail  = "The reactivity at each base.",
         .row     = shape_per_base,
         .per_ref = true,
         .stored  = OUT_F32,
@@ -26,6 +28,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     },
     [OUT_ERROR] = {
         .name    = "error",
+        .detail  = "Standard error of the reactivity values.",
         .row     = shape_per_base,
         .per_ref = true,
         .stored  = OUT_F32,
@@ -33,6 +36,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     },
     [OUT_LENGTHS] = {
         .name    = "reads/lengths",
+        .detail  = "The number of reads passing all filters, binned by length.",
         .row     = shape_per_length,
         .per_ref = true,
         .stored  = OUT_U64,
@@ -40,6 +44,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     },
     [OUT_READS] = {
         .name    = "reads/counted",
+        .detail  = "The number of reads passing all filters.",
         .row     = shape_none,
         .per_ref = true,
         .stored  = OUT_U64,
@@ -47,6 +52,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     },
     [OUT_REJECTED] = {
         .name    = "reads/rejected",
+        .detail  = "The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM.",
         .row     = shape_none,
         .per_ref = true,
         .stored  = OUT_U64,
@@ -54,6 +60,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     },
     [OUT_PAIRWISE_CORRELATION] = {
         .name     = "pairwise/correlation",
+        .detail   = "The Pearson correlation of mutations between this pair of bases.",
         .row      = shape_per_pair,
         .per_ref  = true,
         .stored   = OUT_F32,
@@ -61,6 +68,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     },
     [OUT_PAIRWISE_CONDITIONAL] = {
         .name     = "pairwise/conditional",
+        .detail   = "The probability that the base on the first axis was mutated in a read, given that the base on the second axis was.",
         .row      = shape_per_pair,
         .per_ref  = true,
         .stored   = OUT_F32,
@@ -68,6 +76,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     },
     [OUT_PAIRWISE_COVERAGE] = {
         .name     = "pairwise/coverage",
+        .detail   = "The number of reads in which this pair of bases was present.",
         .row      = shape_per_pair,
         .per_ref  = true,
         .stored   = OUT_F32,
@@ -75,6 +84,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     },
     [OUT_NORM] = {
         .name     = "norm",
+        .detail   = "The norm every rate in this file was divided by.",
         .row      = shape_none,
         .per_ref  = false,
         .stored   = OUT_F32,
@@ -82,6 +92,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     },
     [OUT_SEQUENCE] = {
         .name     = "sequence",
+        .detail   = "The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.",
         .row      = shape_per_base,
         .per_ref  = true,
         .from_ref = true,
@@ -90,6 +101,7 @@ const out_field OUT_FIELDS[OUT_N_FIELDS] = {
     },
     [OUT_UNMAPPED] = {
         .name    = "reads/unmapped",
+        .detail  = "The number of reads not aligned to any reference.",
         .row     = shape_none,
         .per_ref = false,
         .stored  = OUT_U64,
@@ -340,10 +352,10 @@ void out_dump_layout(FILE *out, const char *program, const out_manifest *manifes
     fprintf(out, "  ],\n  \"fields\": [\n");
 
     for (size_t i = 0; i < manifest->n_fields; i++) {
-        out_field_id     id     = manifest->fields[i].id;
-        const out_field *field  = &OUT_FIELDS[id];
-        const char      *detail = manifest->fields[i].detail;
-        const char      *needs  = manifest->fields[i].condition;
+        out_field_id     id    = manifest->fields[i].id;
+        const out_field *field = &OUT_FIELDS[id];
+        const char      *note  = manifest->fields[i].note;
+        const char      *needs = manifest->fields[i].condition;
         char             fill[32];
 
         fill_name(id, fill, sizeof fill);
@@ -369,7 +381,11 @@ void out_dump_layout(FILE *out, const char *program, const out_manifest *manifes
                 needs ? "\"" : "", needs ? needs : "null", needs ? "\"" : "",
                 stored_name(field->stored), fill);
 
-        print_detail(out, detail);
+        print_detail(out, field->detail);
+
+        fprintf(out, ",\n      \"note\": ");
+
+        print_detail(out, note);
 
         fprintf(out, "\n    }%s\n", i + 1 < manifest->n_fields ? "," : "");
     }

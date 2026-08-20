@@ -114,6 +114,9 @@ def fields(program: list) -> str:
         if field["detail"]:
             written += [field["detail"], ""]
 
+        if field["note"]:
+            written += [f"*{field['note']}*", ""]
+
     return "\n".join(written).rstrip()
 
 

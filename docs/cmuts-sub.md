@@ -31,25 +31,38 @@ High coverage in the output dataset does not imply high-quality data, since it i
 
 <!-- BEGIN GENERATED cmuts-sub FIELDS -->
 {.field}
-### `coverage`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `0`
-
-The number of reads in which this base was present.
-
-{.field}
 ### `reactivity`
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
 
-The mutation rate of the treated sample less that of the untreated one, so what remains is the signal the treatment added.
+The reactivity at each base.
+
+*Treated less untreated.*
 
 {.field}
 ### `error`
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
 
-Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors.
+Standard error of the reactivity values.
+
+*Propagated from the inputs.*
+
+{.field}
+### `coverage`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `0`
+
+The number of reads in which this base was present.
+
+*Summed over the inputs.*
+
+{.field}
+### `sequence`
+
+**Shape** `(n, l)` · **Type** `int8` · **Fill** `-1`
+
+The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.
 
 {.field}
 ### `reads/lengths`
@@ -58,6 +71,8 @@ Standard error of the reactivity values. Purely the statistical error introduced
 
 The number of reads passing all filters, binned by length.
 
+*Summed over the inputs.*
+
 {.field}
 ### `reads/counted`
 
@@ -65,12 +80,16 @@ The number of reads passing all filters, binned by length.
 
 The number of reads passing all filters.
 
+*Summed over the inputs.*
+
 {.field}
 ### `reads/rejected`
 
 **Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
 
-The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM
+The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM.
+
+*Summed over the inputs.*
 
 {.field}
 ### `reads/unmapped`
@@ -79,12 +98,7 @@ The number of reads rejected by at least one filter, or which couldn't be modell
 
 The number of reads not aligned to any reference.
 
-{.field}
-### `sequence`
-
-**Shape** `(n, l)` · **Type** `int8` · **Fill** `-1`
-
-The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.
+*Summed over the inputs.*
 <!-- END GENERATED cmuts-sub FIELDS -->
 
 ## CLI Options

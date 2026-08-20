@@ -31,9 +31,27 @@ A read carrying the paired flag also ends the run. Two mates read one molecule, 
 The length check is required to avoid buffer overflows and cannot be disabled.
 ```
 
+## Error Computation
+
+`cmuts hmm` computes a per-base estimate for the reactivity error. This is purely the statistical error introduced by finite read depths; it does not account for experimental or systemic errors.
+
 ## Output
 
 <!-- BEGIN GENERATED cmuts-hmm FIELDS -->
+{.field}
+### `reactivity`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+The reactivity at each base.
+
+{.field}
+### `error`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+Standard error of the reactivity values.
+
 {.field}
 ### `coverage`
 
@@ -42,18 +60,11 @@ The length check is required to avoid buffer overflows and cannot be disabled.
 The number of reads in which this base was present.
 
 {.field}
-### `reactivity`
+### `sequence`
 
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+**Shape** `(n, l)` · **Type** `int8` · **Fill** `-1`
 
-The mutation rate at this base, weighted by PHRED scores and in accordance with the HMM parameters.
-
-{.field}
-### `error`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
-
-Standard error of the reactivity values. Purely the statistical error introduced by finite read depths; does not account for experimental or systemic errors.
+The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.
 
 {.field}
 ### `reads/lengths`
@@ -74,7 +85,7 @@ The number of reads passing all filters.
 
 **Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
 
-The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM
+The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM.
 
 {.field}
 ### `reads/unmapped`
@@ -82,13 +93,6 @@ The number of reads rejected by at least one filter, or which couldn't be modell
 **Shape** `()` · **Type** `uint64` · **Fill** `0`
 
 The number of reads not aligned to any reference.
-
-{.field}
-### `sequence`
-
-**Shape** `(n, l)` · **Type** `int8` · **Fill** `-1`
-
-The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.
 
 {.field}
 ### `pairwise/correlation`
