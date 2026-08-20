@@ -16,6 +16,7 @@
 #include "h5reader.h"
 #include "h5writer.h"
 #include "output.h"
+#include "progress.h"
 
 struct combine_rows {
     void **value;  /* n_inputs * OUT_N_FIELDS buffers, indexed by input then field */
@@ -207,14 +208,20 @@ static int write_reference(combination *c, int32_t tid, char *error, size_t erro
 
 static int combine_references(combination *c, char *error, size_t error_len)
 {
-    for (int32_t tid = 0; tid < c->n_refs; tid++) {
+    progress *bar    = progress_start((uint64_t)c->n_refs);
+    int       status = 0;
+
+    for (int32_t tid = 0; tid < c->n_refs && status == 0; tid++) {
         if (read_reference(c, tid, error, error_len) < 0 ||
             write_reference(c, tid, error, error_len) < 0) {
-            return -1;
+            status = -1;
         }
+
+        progress_follow(bar, (uint64_t)tid + 1);
     }
 
-    return 0;
+    progress_finish(bar);
+    return status;
 }
 
 /* ------------------------------------------------------------------------ */

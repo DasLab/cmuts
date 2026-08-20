@@ -18,6 +18,7 @@
 #include "h5reader.h"
 #include "h5writer.h"
 #include "output.h"
+#include "progress.h"
 
 /* The rate the ubr scale sits at, as a fraction of the way up the pool. */
 #define UBR_PERCENTILE 0.90
@@ -346,7 +347,7 @@ done:
 /* Reads every input in turn, so a file that cannot be read fails before any output is
  * created. */
 static int gather(const normalize_config *cfg, const out_manifest *writes, rate_pool *p,
-                  char *error, size_t error_len)
+                  progress *bar, char *error, size_t error_len)
 {
     for (size_t i = 0; i < cfg->n_files; i++) {
         h5reader *in     = h5reader_open(cfg->inputs[i], writes);
@@ -373,6 +374,8 @@ static int gather(const normalize_config *cfg, const out_manifest *writes, rate_
         if (status < 0) {
             return -1;
         }
+
+        progress_follow(bar, i + 1);
     }
 
     return 0;
@@ -582,12 +585,14 @@ static int check_outputs(const normalize_config *cfg, char *error, size_t error_
 
 static int write_outputs(const normalize_config *cfg, const char *program,
                          const out_manifest *writes, double factor,
-                         char *error, size_t error_len)
+                         progress *bar, char *error, size_t error_len)
 {
     for (size_t i = 0; i < cfg->n_files; i++) {
         if (write_output(cfg, i, program, writes, factor, error, error_len) < 0) {
             return -1;
         }
+
+        progress_follow(bar, cfg->n_files + i + 1);
     }
 
     return 0;
@@ -599,16 +604,21 @@ int normalize_run(const normalize_config *cfg, const char *program,
 {
     rate_pool p      = { 0 };
     int       status = -1;
+    progress *bar;
 
     if (check_outputs(cfg, error, error_len) < 0) {
         return -1;
     }
 
-    if (gather(cfg, writes, &p, error, error_len) == 0) {
+    /* One unit per input per pass: every input is read for the pool, then written. */
+    bar = progress_start(2 * (uint64_t)cfg->n_files);
+
+    if (gather(cfg, writes, &p, bar, error, error_len) == 0) {
         status = write_outputs(cfg, program, writes, pooled_factor(cfg, &p),
-                               error, error_len);
+                               bar, error, error_len);
     }
 
+    progress_finish(bar);
     rate_pool_free(&p);
     return status;
 }
