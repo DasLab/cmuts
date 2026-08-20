@@ -1,4 +1,4 @@
-# cmuts score
+# `cmuts score`
 
 ## Purpose
 
@@ -6,7 +6,7 @@ Score reactivity rates against known structures.
 
 ## Requires
 
-- Reactivity rates, in a cmuts-compatible HDF5 file
+- Reactivity rates, in a `cmuts`-compatible HDF5 file
 - Dot-bracket secondary structures
 - The reference library FASTA
 

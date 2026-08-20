@@ -1,6 +1,6 @@
 # Outputs
 
-cmuts writes HDF5 files with a consistent schema, containing output reactivity values, statistical errors, and coverage statistics.
+`cmuts` writes HDF5 files with a consistent schema, containing output reactivity values, statistical errors, and coverage statistics.
 
 ## File Attributes
 
@@ -10,7 +10,7 @@ Every file records metadata on the root group. These are attributes and not data
 | Attribute | Description |
 | --- | --- |
 | `program` | The name of the program that produced this file. |
-| `version` | The version of cmuts that produced this file. |
+| `version` | The version of `cmuts` that produced this file. |
 <!-- END GENERATED cmuts-hmm ATTRIBUTES -->
 
 ```python

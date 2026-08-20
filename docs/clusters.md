@@ -1,6 +1,6 @@
 # Cluster notes
 
-An incomplete list of the clusters cmuts has been built and run on.
+An incomplete list of the clusters `cmuts` has been built and run on.
 
 ## Stanford Sherlock
 

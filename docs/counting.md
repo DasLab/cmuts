@@ -1,4 +1,4 @@
-# How cmuts counts
+# How `cmuts` counts
 
 ## Reads that never count
 
@@ -16,7 +16,7 @@ Insertions are weighed at zero by default. An inserted base sits between two ref
 
 ## Gaps that could be written anywhere
 
-A deletion inside a run of the same base can be written after any base of the run, and every CIGAR that writes it describes the same alignment. cmuts marginalizes over the placements the aligner might have chosen instead, so a result does not depend on which one it did choose.
+A deletion inside a run of the same base can be written after any base of the run, and every CIGAR that writes it describes the same alignment. `cmuts` marginalizes over the placements the aligner might have chosen instead, so a result does not depend on which one it did choose.
 
 `--band` is how far either side of the CIGAR the marginal looks, in reference positions. It must be at least as wide as a gap for the placements of that gap to agree. The default of 2 covers the gaps that occur in practice, and a wider band costs time. A band too narrow to reach around a gap can leave the reads carrying one with no alignment at all, which counts them as rejected.
 

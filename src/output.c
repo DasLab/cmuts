@@ -104,7 +104,7 @@ const out_attribute OUT_ATTRIBUTES[OUT_N_ATTRS] = {
     },
     [OUT_ATTR_VERSION] = {
         .name   = "version",
-        .detail = "The version of cmuts that produced this file.",
+        .detail = "The version of `cmuts` that produced this file.",
     },
 };
 

@@ -1,4 +1,4 @@
-# cmuts div
+# `cmuts div`
 
 ## Purpose
 
@@ -6,10 +6,10 @@ Normalization of reactivity rates against a denatured control.
 
 ## Requires
 
-- Reactivity rates, usually the output of [cmuts sub](cmuts-sub.md)
+- Reactivity rates, usually the output of [`cmuts sub`](cmuts-sub.md)
 - Denatured control reactivity rates
 
-Both must be in cmuts-compatible HDF5 files.
+Both must be in `cmuts`-compatible HDF5 files.
 
 ## Usage
 

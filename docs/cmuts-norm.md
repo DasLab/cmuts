@@ -1,4 +1,4 @@
-# cmuts norm
+# `cmuts norm`
 
 ## Purpose
 
@@ -6,7 +6,7 @@ Experiment-independent normalization of reactivity rates.
 
 ## Requires
 
-- One or more sets of reactivity rates, in cmuts-compatible HDF5 files
+- One or more sets of reactivity rates, in `cmuts`-compatible HDF5 files
 
 ## Usage
 

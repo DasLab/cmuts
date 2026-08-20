@@ -1,4 +1,4 @@
-# cmuts align
+# `cmuts align`
 
 ## Purpose
 

@@ -1,8 +1,8 @@
-# Building cmuts
+# Building `cmuts`
 
 ## Dependencies
 
-In order to build and run cmuts from source, you need
+In order to build and run `cmuts` from source, you need
 
 - A C11 compiler (GCC 6 or newer, or Clang 9 or newer) and `make`,
 - [htslib](https://github.com/samtools/htslib) 1.12 or newer,

@@ -1,6 +1,6 @@
 # Basics
 
-The cmuts pipeline comprises five subcommands of the `cmuts` binary:
+The `cmuts` pipeline comprises five subcommands of the `cmuts` binary:
 
 {.field}
 [`cmuts align`](cmuts-align.md)\
@@ -15,23 +15,23 @@ The cmuts pipeline comprises five subcommands of the `cmuts` binary:
 {.field}
 [`cmuts sub`](cmuts-sub.md)\
 **Purpose:** Background subtraction of reactivity rates\
-**Requires:** Treated and untreated reactivity rates, in cmuts-compatible HDF5 files
+**Requires:** Treated and untreated reactivity rates, in `cmuts`-compatible HDF5 files
 
 {.field}
 [`cmuts div`](cmuts-div.md)\
 **Purpose:** Normalization of reactivity rates against a denatured control\
-**Requires:** Reactivity rates and denatured control rates, in cmuts-compatible HDF5 files
+**Requires:** Reactivity rates and denatured control rates, in `cmuts`-compatible HDF5 files
 
 {.field}
 [`cmuts norm`](cmuts-norm.md)\
 **Purpose:** Normalization of reactivity values across experiments\
-**Requires:** One or more sets of reactivity rates, in cmuts-compatible HDF5 files
+**Requires:** One or more sets of reactivity rates, in `cmuts`-compatible HDF5 files
 
 This page goes over basic, end-to-end usage of these programs on standard data. For a full list of the arguments each command takes, please read their respective pages.
 
 ## Standard Usage
 
-The canonical use case of the cmuts pipeline is to generate reactivity profiles from a MaP-seq experiment, where the cDNA of treated and untreated RNA has been sequenced.
+The canonical use case of the `cmuts` pipeline is to generate reactivity profiles from a MaP-seq experiment, where the cDNA of treated and untreated RNA has been sequenced.
 
 The first step is to align the reads against the reference library.
 
@@ -40,7 +40,7 @@ cmuts align -f references.fasta -x sr -o treated.bam treated.fastq.gz
 cmuts align -f references.fasta -x sr -o untreated.bam untreated.fastq.gz
 ```
 
-`-x` names the platform the reads were sequenced with, and is required. See the [cmuts align](cmuts-align.md) page for the presets it accepts and the rest of its options.
+`-x` names the platform the reads were sequenced with, and is required. See the [`cmuts align`](cmuts-align.md) page for the presets it accepts and the rest of its options.
 
 Then, pass the alignments to the HMM in order to compute reactivity rates.
 
@@ -61,7 +61,7 @@ The final step is normalizing the reactivity.
 cmuts norm -o normalized-reactivity.h5 reactivity.h5
 ```
 
-All HDF5 files in cmuts have the same format, where `n` is the number of references and `l` the length of the longest of them.
+All HDF5 files in `cmuts` have the same format, where `n` is the number of references and `l` the length of the longest of them.
 
 <!-- BEGIN GENERATED cmuts-norm LAYOUT -->
 | Dataset | Shape | Type | Fill |
