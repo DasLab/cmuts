@@ -121,27 +121,47 @@ static bool length_matches(refseq_source *src, size_t file, int32_t tid)
     return false;
 }
 
-/* The current record's MD5, computed once for any number of files that need it, and not
- * at all where none does. */
+/* The spellings of the record a declared M5 can be taken over. An aligner may have seen
+ * the sequence in either alphabet, and the swap between them is a bijection on the bases,
+ * so each spelling's digest identifies the sequence as well as the record's own. */
+typedef enum {
+    DIGEST_AS_WRITTEN,
+    DIGEST_AS_DNA,      /* U replaced by T */
+    DIGEST_AS_RNA,      /* T replaced by U */
+    DIGEST_N_FORMS,
+} digest_form;
+
+/* The base each form replaces and what it puts there; zero replaces nothing. */
+static const char DIGEST_SWAPS[DIGEST_N_FORMS][2] = {
+    [DIGEST_AS_WRITTEN] = { 0,   0   },
+    [DIGEST_AS_DNA]     = { 'U', 'T' },
+    [DIGEST_AS_RNA]     = { 'T', 'U' },
+};
+
+/* The current record's MD5s, each form computed once for any number of files that need
+ * it, and not at all where none does. */
 typedef struct {
-    char value[CHECKSUM_LEN + 1];
-    bool taken;
+    char value[DIGEST_N_FORMS][CHECKSUM_LEN + 1];
+    bool taken[DIGEST_N_FORMS];
 } digest;
 
-static const char *digest_of(digest *md5, const cm_fasta_record *record)
+static const char *digest_of(digest *md5, const cm_fasta_record *record, digest_form form)
 {
-    if (!md5->taken) {
-        if (!checksum_sequence(record->seq, record->len, md5->value)) {
+    if (!md5->taken[form]) {
+        if (!checksum_sequence_swapped(record->seq, record->len,
+                                       DIGEST_SWAPS[form][0], DIGEST_SWAPS[form][1],
+                                       md5->value[form])) {
             return NULL;
         }
 
-        md5->taken = true;
+        md5->taken[form] = true;
     }
 
-    return md5->value;
+    return md5->value[form];
 }
 
-/* Returns whether the sequence matches the M5 the header declares for it.
+/* Returns whether the sequence matches the M5 the header declares for it, in any of the
+ * digest forms.
  *
  * A name and a length describe a reference without identifying it; only M5, taken over
  * the bases, does. It is optional and frequently absent, so a reference declaring none
@@ -171,24 +191,27 @@ static bool checksum_matches(refseq_source *src, size_t file, int32_t tid, diges
         return false;
     }
 
-    computed = digest_of(md5, &src->record);
+    for (digest_form form = 0; form < DIGEST_N_FORMS; form++) {
+        computed = digest_of(md5, &src->record, form);
 
-    if (!computed) {
-        snprintf(src->error, sizeof src->error,
-                 "unable to compute a checksum for reference \"%s\"",
-                 src->record.name);
-        return false;
-    }
+        if (!computed) {
+            snprintf(src->error, sizeof src->error,
+                     "unable to compute a checksum for reference \"%s\"",
+                     src->record.name);
+            return false;
+        }
 
-    if (strncasecmp(declared, computed, CHECKSUM_LEN) == 0) {
-        return true;
+        if (strncasecmp(declared, computed, CHECKSUM_LEN) == 0) {
+            return true;
+        }
     }
 
     snprintf(src->error, sizeof src->error,
              "reference \"%s\" in the FASTA is not the sequence the alignments "
-             "were made against: %s declares MD5 %.*s, the FASTA holds %s",
+             "were made against, in the DNA or the RNA alphabet: %s declares "
+             "MD5 %.*s, the FASTA holds %s",
              src->record.name, path_of(src, file), (int)CHECKSUM_LEN, declared,
-             computed);
+             md5->value[DIGEST_AS_WRITTEN]);
     return false;
 }
 

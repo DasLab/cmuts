@@ -17,3 +17,8 @@
  * SAM takes the digest over the sequence uppercased and stripped of whitespace, so this is
  * not in general the digest of the bytes as the file holds them. */
 bool checksum_sequence(const char *seq, size_t len, char *hex);
+
+/* As checksum_sequence, with every `from` base replaced by `to` after uppercasing.
+ * A `from` of zero replaces nothing. */
+bool checksum_sequence_swapped(const char *seq, size_t len, char from, char to,
+                               char *hex);
