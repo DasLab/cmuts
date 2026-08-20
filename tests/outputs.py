@@ -27,7 +27,7 @@ SCALAR = "scalar"
 
 @dataclass(frozen=True)
 class Field:
-    """A dataset of the output, as declared in output.h."""
+    """A dataset of the output, as declared in format.h."""
 
     name: str
     kind: str

@@ -9,7 +9,7 @@
 #include <stddef.h>
 
 #include "filter.h"
-#include "output.h"
+#include "format.h"
 #include "rates.h"
 #include "refseq.h"
 #include "tally.h"
@@ -43,4 +43,4 @@ pipeline_config pipeline_defaults(void);
  * recorded in the output as what produced it, and comes from the command line the caller
  * declared. Returns 0, or -1 with a description in error. */
 int pipeline_run(const pipeline_config *cfg, const char *program,
-                 const out_manifest *writes, char *error, size_t error_len);
+                 const fmt_manifest *writes, char *error, size_t error_len);

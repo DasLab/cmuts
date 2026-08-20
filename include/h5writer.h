@@ -9,7 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "output.h"
+#include "format.h"
 
 /* Writes one dataset per field of the output format: (n_refs, width) for a row field,
  * (n_refs,) for one value per reference, and a scalar for a total belonging to the run.
@@ -76,30 +76,30 @@ void h5chunk_filter(h5chunk *chunk);
 int h5writer_write_chunk(h5writer *w, h5chunk *chunk);
 
 /* Whether the writer holds a field. */
-bool h5writer_holds(const h5writer *w, out_field_id id);
+bool h5writer_holds(const h5writer *w, fmt_field_id id);
 
 /* Writes one reference's block of a field whose row has two extents. The columns and rows
  * past the reference keep the dataset's fill, so only the block itself is written. */
-int h5writer_block(h5writer *w, out_field_id id, int32_t tid, size_t len,
+int h5writer_block(h5writer *w, fmt_field_id id, int32_t tid, size_t len,
                    const double *values);
 void      h5writer_close(h5writer *w);
 
 /* Writes one field's values for a reference of len bases, narrowing the accumulated
  * doubles to the field's stored type. The columns past them keep the dataset's fill.
  * Pass ref_cap as len to write a full-width row. */
-int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
+int h5writer_field(h5writer *w, fmt_field_id id, int32_t tid, size_t len,
                    const double *values);
 
 /* Writes one field's whole row for a reference, in the type the field is stored as.
- * values must hold out_values(id, ref_cap, ref_cap) of that type. */
-int h5writer_row(h5writer *w, out_field_id id, int32_t tid, const void *values);
+ * values must hold fmt_values(id, ref_cap, ref_cap) of that type. */
+int h5writer_row(h5writer *w, fmt_field_id id, int32_t tid, const void *values);
 
 /* Writes the whole of a field belonging to the run and not to any one reference. */
-int h5writer_total(h5writer *w, out_field_id id, size_t value);
+int h5writer_total(h5writer *w, fmt_field_id id, size_t value);
 
 /* Writes a field holding one value for the run, narrowed to the type it is stored as.
  * The counterpart for a field holding a count is h5writer_total. */
-int h5writer_value(h5writer *w, out_field_id id, double value);
+int h5writer_value(h5writer *w, fmt_field_id id, double value);
 
 
 const char *h5writer_error(const h5writer *w);

@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "output.h"
+#include "format.h"
 
 #include "cli.h"
 #include "pipeline.h"

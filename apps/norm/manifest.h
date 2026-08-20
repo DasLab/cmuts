@@ -5,6 +5,6 @@
 
 #pragma once
 
-#include "output.h"
+#include "format.h"
 
-extern const out_manifest CMUTS_NORM_WRITES;
+extern const fmt_manifest CMUTS_NORM_WRITES;

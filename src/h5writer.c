@@ -25,7 +25,7 @@ typedef struct {
 } chunk_stage;
 
 struct h5chunk {
-    out_field_id    id;
+    fmt_field_id    id;
     int64_t         index;
     unsigned char  *values;
     unsigned char  *bytes;      /* where the filtered form goes */
@@ -49,24 +49,24 @@ typedef struct {
 
 struct h5writer {
     hid_t   file;
-    hid_t   dataset[OUT_N_FIELDS];
+    hid_t   dataset[FMT_N_FIELDS];
     /* A dataspace apiece, kept for the life of the writer. Only the selection
      * differs between one row and the next, and a writer is used from one thread,
      * so the handles are made once and reselected. */
-    hid_t   filespace[OUT_N_FIELDS];
+    hid_t   filespace[FMT_N_FIELDS];
     hid_t   memspace;   /* one row of the widest field, selected down to size */
     int32_t n_refs;
     size_t  ref_cap;
     const bool *wanted; /* the optional fields this run writes; NULL for all of them */
 
-    chunkfield gathered[OUT_N_FIELDS];
+    chunkfield gathered[FMT_N_FIELDS];
     h5chunk   *ready;        /* finished chunks not yet taken, oldest first */
     h5chunk   *ready_tail;
 
     char    error[CM_ERROR_MAX];
 };
 
-static bool gathers(const h5writer *w, out_field_id id)
+static bool gathers(const h5writer *w, fmt_field_id id)
 {
     return w->gathered[id].tally != NULL;
 }
@@ -147,20 +147,20 @@ done:
 }
 
 
-/* Records which program wrote the file, and at which version. output.h names the
+/* Records which program wrote the file, and at which version. format.h names the
  * attributes; the values are what this run holds.
  *
  * Neither value varies between two runs over one input, which is what leaves two such
  * runs identical byte for byte. */
 static int stamp_identity(h5writer *w, const char *program)
 {
-    const char *value[OUT_N_ATTRS] = {
-        [OUT_ATTR_PROGRAM] = program,
-        [OUT_ATTR_VERSION] = CMUTS_VERSION,
+    const char *value[FMT_N_ATTRS] = {
+        [FMT_ATTR_PROGRAM] = program,
+        [FMT_ATTR_VERSION] = CMUTS_VERSION,
     };
 
-    for (out_attr_id id = 0; id < OUT_N_ATTRS; id++) {
-        if (write_identity(w->file, OUT_ATTRIBUTES[id].name, value[id]) < 0) {
+    for (fmt_attr_id id = 0; id < FMT_N_ATTRS; id++) {
+        if (write_identity(w->file, FMT_ATTRIBUTES[id].name, value[id]) < 0) {
             return -1;
         }
     }
@@ -172,7 +172,7 @@ static int stamp_identity(h5writer *w, const char *program)
 /* Groups                                                                    */
 /* ------------------------------------------------------------------------ */
 
-/* Long enough for any name in OUT_FIELDS. A name outgrowing it fails the create rather
+/* Long enough for any name in FMT_FIELDS. A name outgrowing it fails the create rather
  * than being truncated into a group it does not belong to. */
 #define GROUP_PATH_MAX 256
 
@@ -239,12 +239,12 @@ static int create_field_groups(h5writer *w, const char *name)
  * names alone declare which groups an output holds. */
 static int create_groups(h5writer *w)
 {
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (!out_wanted(id, w->wanted)) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
+        if (!fmt_wanted(id, w->wanted)) {
             continue;
         }
 
-        if (create_field_groups(w, OUT_FIELDS[id].name) < 0) {
+        if (create_field_groups(w, FMT_FIELDS[id].name) < 0) {
             return fail(w, "unable to create a group");
         }
     }
@@ -256,11 +256,11 @@ static int create_groups(h5writer *w)
 /* Dataset construction                                                      */
 /* ------------------------------------------------------------------------ */
 
-static hid_t create_field(h5writer *w, out_field_id id)
+static hid_t create_field(h5writer *w, fmt_field_id id)
 {
-    hsize_t dims[OUT_RANK_MAX]  = { 0, 0 };
-    hsize_t chunk[OUT_RANK_MAX] = { 0, 0 };
-    int     rank                = out_rank(id);
+    hsize_t dims[FMT_RANK_MAX]  = { 0, 0 };
+    hsize_t chunk[FMT_RANK_MAX] = { 0, 0 };
+    int     rank                = fmt_rank(id);
     hid_t   space, dcpl, dapl, dataset;
 
     h5layout_shape(id, w->n_refs, w->ref_cap, dims, chunk);
@@ -273,7 +273,7 @@ static hid_t create_field(h5writer *w, out_field_id id)
     if (space < 0 || dcpl < 0 || dapl < 0) {
         dataset = H5I_INVALID_HID;
     } else {
-        dataset = H5Dcreate2(w->file, OUT_FIELDS[id].name, h5layout_type(id),
+        dataset = H5Dcreate2(w->file, FMT_FIELDS[id].name, h5layout_type(id),
                              space, H5P_DEFAULT, dcpl, dapl);
     }
 
@@ -288,7 +288,7 @@ static hid_t create_field(h5writer *w, out_field_id id)
 /* Chunks in and out                                                         */
 /* ------------------------------------------------------------------------ */
 
-static h5chunk *chunk_open(const h5writer *w, out_field_id id, int64_t index,
+static h5chunk *chunk_open(const h5writer *w, fmt_field_id id, int64_t index,
                            unsigned char *values)
 {
     h5chunk *chunk = calloc(1, sizeof *chunk);
@@ -361,7 +361,7 @@ void h5chunk_filter(h5chunk *chunk)
 
 int h5writer_write_chunk(h5writer *w, h5chunk *chunk)
 {
-    hsize_t offset[OUT_RANK_MAX] = { (hsize_t)chunk->index *
+    hsize_t offset[FMT_RANK_MAX] = { (hsize_t)chunk->index *
                                      w->gathered[chunk->id].rows };
     int     status               = 0;
 
@@ -425,11 +425,11 @@ static chunk_stage *stage_more(chunkfield *f)
 }
 
 /* Writes the field's fill across a fresh chunk, value by value. */
-static void prefill(const chunkfield *f, out_field_id id, unsigned char *values)
+static void prefill(const chunkfield *f, fmt_field_id id, unsigned char *values)
 {
-    out_value fill;
+    fmt_value fill;
 
-    if (out_fill_value(id, &fill) < 0) {
+    if (fmt_fill_value(id, &fill) < 0) {
         return;
     }
 
@@ -439,7 +439,7 @@ static void prefill(const chunkfield *f, out_field_id id, unsigned char *values)
 }
 
 /* The stage gathering this chunk, begun on its first row. NULL only out of memory. */
-static chunk_stage *stage_for(chunkfield *f, out_field_id id, int64_t index)
+static chunk_stage *stage_for(chunkfield *f, fmt_field_id id, int64_t index)
 {
     chunk_stage *s = stage_holding(f, index);
 
@@ -476,10 +476,10 @@ static unsigned char *stage_row(const chunkfield *f, chunk_stage *s, int32_t tid
 
 /* Narrows accumulated doubles to the type the field is stored as, which the datatype
  * conversion in H5Dwrite would otherwise do on the writing thread. */
-static void narrow(void *dst, out_stored stored, const double *src, size_t n)
+static void narrow(void *dst, fmt_stored stored, const double *src, size_t n)
 {
     switch (stored) {
-        case OUT_F32: {
+        case FMT_F32: {
             float *to = dst;
 
             for (size_t i = 0; i < n; i++) {
@@ -487,7 +487,7 @@ static void narrow(void *dst, out_stored stored, const double *src, size_t n)
             }
             return;
         }
-        case OUT_U64: {
+        case FMT_U64: {
             uint64_t *to = dst;
 
             for (size_t i = 0; i < n; i++) {
@@ -495,7 +495,7 @@ static void narrow(void *dst, out_stored stored, const double *src, size_t n)
             }
             return;
         }
-        case OUT_I8: {
+        case FMT_I8: {
             int8_t *to = dst;
 
             for (size_t i = 0; i < n; i++) {
@@ -503,7 +503,7 @@ static void narrow(void *dst, out_stored stored, const double *src, size_t n)
             }
             return;
         }
-        case OUT_N_STORED:
+        case FMT_N_STORED:
             break;
     }
 }
@@ -514,7 +514,7 @@ static int64_t gathered_chunk(const chunkfield *f, int32_t tid)
 }
 
 /* Copies one reference's span of a gathered field into its chunk. */
-static int gather_span(h5writer *w, out_field_id id, int32_t tid, size_t held,
+static int gather_span(h5writer *w, fmt_field_id id, int32_t tid, size_t held,
                        const double *values)
 {
     chunkfield  *f = &w->gathered[id];
@@ -524,20 +524,20 @@ static int gather_span(h5writer *w, out_field_id id, int32_t tid, size_t held,
         return fail(w, "out of memory gathering an output chunk");
     }
 
-    narrow(stage_row(f, s, tid), OUT_FIELDS[id].stored, values, held);
+    narrow(stage_row(f, s, tid), FMT_FIELDS[id].stored, values, held);
     return 0;
 }
 
 /* Copies one reference's block of a gathered field into its chunk, a row of the block at
  * a time, at the stride of the full-width row. The columns and rows past the block keep
  * the fill the chunk was prefilled with. */
-static int gather_block(h5writer *w, out_field_id id, int32_t tid, size_t len,
+static int gather_block(h5writer *w, fmt_field_id id, int32_t tid, size_t len,
                         const double *values)
 {
     chunkfield  *f = &w->gathered[id];
     chunk_stage *s = stage_for(f, id, gathered_chunk(f, tid));
-    size_t       full[OUT_RANK_MAX];
-    size_t       part[OUT_RANK_MAX];
+    size_t       full[FMT_RANK_MAX];
+    size_t       part[FMT_RANK_MAX];
     size_t       stride, rows, cols;
     int          rank;
     unsigned char *row;
@@ -548,15 +548,15 @@ static int gather_block(h5writer *w, out_field_id id, int32_t tid, size_t len,
 
     /* A block spans two extents -- there is no other shape wider than one -- so its
      * dataset has the reference dimension and those two, and rank is 3. */
-    rank   = out_dims(id, 1, len, part);
-    out_dims(id, 1, w->ref_cap, full);
+    rank   = fmt_dims(id, 1, len, part);
+    fmt_dims(id, 1, w->ref_cap, full);
     stride = full[rank - 1];
     cols   = part[rank - 1];
     rows   = part[1];
 
     row = stage_row(f, s, tid);
     for (size_t i = 0; i < rows; i++) {
-        narrow(row + i * stride * f->elem, OUT_FIELDS[id].stored,
+        narrow(row + i * stride * f->elem, FMT_FIELDS[id].stored,
                values + i * cols, cols);
     }
 
@@ -565,7 +565,7 @@ static int gather_block(h5writer *w, out_field_id id, int32_t tid, size_t len,
 
 /* Lines up a finished chunk of one field for h5writer_take_chunk. The buffer travels
  * with the chunk, so the stage is left empty. */
-static int send_chunk(h5writer *w, out_field_id id, int64_t index)
+static int send_chunk(h5writer *w, fmt_field_id id, int64_t index)
 {
     chunkfield  *f = &w->gathered[id];
     chunk_stage *s = stage_holding(f, index);
@@ -588,7 +588,7 @@ static int send_chunk(h5writer *w, out_field_id id, int64_t index)
 
 static int send_settled(h5writer *w)
 {
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
         int64_t index;
 
         if (!gathers(w, id)) {
@@ -627,7 +627,7 @@ static h5writer *writer_alloc(int32_t n_refs, size_t ref_cap)
      * turned off. */
     H5Eset_auto2(H5E_DEFAULT, NULL, NULL);
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
         w->dataset[id]   = H5I_INVALID_HID;
         w->filespace[id] = H5I_INVALID_HID;
     }
@@ -669,8 +669,8 @@ static int create_file(h5writer *w, const char *path, bool overwrite)
 /* Creates a dataset per field, and the dataspace each of its rows is selected from. */
 static int create_fields(h5writer *w)
 {
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (!out_wanted(id, w->wanted)) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
+        if (!fmt_wanted(id, w->wanted)) {
             continue;
         }
 
@@ -693,12 +693,12 @@ static int create_fields(h5writer *w)
  * which would hold nearly the whole output in stages. */
 static int build_chunkfields(h5writer *w)
 {
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        hsize_t     dims[OUT_RANK_MAX], chunk[OUT_RANK_MAX];
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
+        hsize_t     dims[FMT_RANK_MAX], chunk[FMT_RANK_MAX];
         chunkfield *f     = &w->gathered[id];
-        size_t      width = out_values(id, w->ref_cap, w->ref_cap);
+        size_t      width = fmt_values(id, w->ref_cap, w->ref_cap);
 
-        if (!OUT_FIELDS[id].per_ref || !out_wanted(id, w->wanted) || width <= 1) {
+        if (!FMT_FIELDS[id].per_ref || !fmt_wanted(id, w->wanted) || width <= 1) {
             continue;
         }
 
@@ -706,7 +706,7 @@ static int build_chunkfields(h5writer *w)
 
         f->rows      = chunk[0];
         f->width     = width;
-        f->elem      = out_stored_bytes(id);
+        f->elem      = fmt_stored_bytes(id);
         f->raw_bytes = (size_t)f->rows * width * f->elem;
         f->tally     = chunktally_create(w->n_refs, (size_t)f->rows);
 
@@ -749,7 +749,7 @@ static void finish_chunks(h5writer *w)
 {
     h5chunk *chunk;
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
         if (gathers(w, id)) {
             chunktally_no_more(w->gathered[id].tally);
         }
@@ -762,7 +762,7 @@ static void finish_chunks(h5writer *w)
         h5writer_write_chunk(w, chunk);
     }
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
         chunkfield *f = &w->gathered[id];
 
         for (size_t i = 0; i < f->n_stages; i++) {
@@ -782,7 +782,7 @@ void h5writer_close(h5writer *w)
 
     finish_chunks(w);
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
         if (w->filespace[id] >= 0) {
             H5Sclose(w->filespace[id]);
         }
@@ -819,7 +819,7 @@ int h5writer_fail(const h5writer *w, const char *path, char *error, size_t error
 /* Rows                                                                      */
 /* ------------------------------------------------------------------------ */
 
-static int write_span(h5writer *w, out_field_id id, int32_t tid, size_t n,
+static int write_span(h5writer *w, fmt_field_id id, int32_t tid, size_t n,
                       const double *values)
 {
     herr_t status;
@@ -838,10 +838,10 @@ static int write_span(h5writer *w, out_field_id id, int32_t tid, size_t n,
     return status < 0 ? fail(w, "unable to write an output row") : 0;
 }
 
-int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
+int h5writer_field(h5writer *w, fmt_field_id id, int32_t tid, size_t len,
                    const double *values)
 {
-    size_t held = out_values(id, len, w->ref_cap);
+    size_t held = fmt_values(id, len, w->ref_cap);
 
     if (tid < 0 || tid >= w->n_refs) {
         return fail(w, "reference index outside the output");
@@ -860,9 +860,9 @@ int h5writer_field(h5writer *w, out_field_id id, int32_t tid, size_t len,
  * is the path for values that were read from a file of the same layout: they are already
  * the stored type, and passing them through the double the accumulator uses would widen
  * and narrow them without changing them. */
-int h5writer_row(h5writer *w, out_field_id id, int32_t tid, const void *values)
+int h5writer_row(h5writer *w, fmt_field_id id, int32_t tid, const void *values)
 {
-    size_t width = out_values(id, w->ref_cap, w->ref_cap);
+    size_t width = fmt_values(id, w->ref_cap, w->ref_cap);
     herr_t status;
 
     if (tid < 0 || tid >= w->n_refs) {
@@ -885,7 +885,7 @@ void h5writer_expect(h5writer *w, int32_t tid)
         return;
     }
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
         if (gathers(w, id)) {
             chunktally_expect(w->gathered[id].tally, tid);
         }
@@ -898,7 +898,7 @@ int h5writer_wrote(h5writer *w, int32_t tid)
         return 0;
     }
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
         if (gathers(w, id)) {
             chunktally_wrote(w->gathered[id].tally, tid);
         }
@@ -907,12 +907,12 @@ int h5writer_wrote(h5writer *w, int32_t tid)
     return send_settled(w);
 }
 
-bool h5writer_holds(const h5writer *w, out_field_id id)
+bool h5writer_holds(const h5writer *w, fmt_field_id id)
 {
-    return out_wanted(id, w->wanted);
+    return fmt_wanted(id, w->wanted);
 }
 
-int h5writer_block(h5writer *w, out_field_id id, int32_t tid, size_t len,
+int h5writer_block(h5writer *w, fmt_field_id id, int32_t tid, size_t len,
                    const double *values)
 {
     herr_t status;
@@ -940,12 +940,12 @@ int h5writer_block(h5writer *w, out_field_id id, int32_t tid, size_t len,
 /* ------------------------------------------------------------------------ */
 
 /* Writes the whole of a field that belongs to the run and not to a reference. */
-int h5writer_value(h5writer *w, out_field_id id, double value)
+int h5writer_value(h5writer *w, fmt_field_id id, double value)
 {
     float  stored = (float)value;
     herr_t status;
 
-    if (OUT_FIELDS[id].per_ref) {
+    if (FMT_FIELDS[id].per_ref) {
         return fail(w, "a field with a row per reference holds no single value");
     }
 
@@ -957,12 +957,12 @@ int h5writer_value(h5writer *w, out_field_id id, double value)
 
 /* Transferred as an unsigned and not through the double every row passes through, since
  * a run total is counted whole and never accumulated. */
-int h5writer_total(h5writer *w, out_field_id id, size_t value)
+int h5writer_total(h5writer *w, fmt_field_id id, size_t value)
 {
     uint64_t stored = value;
     herr_t   status;
 
-    if (OUT_FIELDS[id].per_ref) {
+    if (FMT_FIELDS[id].per_ref) {
         return fail(w, "a field with a row per reference has no run total");
     }
 

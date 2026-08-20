@@ -8,7 +8,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "output.h"
+#include "format.h"
 
 typedef struct {
     const char *rates_path;
@@ -21,5 +21,5 @@ typedef struct {
  * program is recorded in the output as what produced it. Returns 0, or -1 with a
  * description in error. */
 int divide_run(const divide_config *cfg, const char *program,
-               const out_manifest *writes, char *error,
+               const fmt_manifest *writes, char *error,
                size_t error_len);

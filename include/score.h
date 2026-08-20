@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#include "output.h"
+#include "format.h"
 
 /* The bases a reagent modifies, as the set of them. T and U name one base, so a structure
  * written as RNA and a reference written as DNA give the same bit. */
@@ -32,5 +32,5 @@ typedef struct {
 /* Writes one row per reference to out, as comma separated values, and a note on stderr
  * for each structure that cannot be scored. Returns 0, or -1 with a description in
  * error. */
-int score_run(const score_config *cfg, const out_manifest *reads, FILE *out,
+int score_run(const score_config *cfg, const fmt_reads *reads, FILE *out,
               char *error, size_t error_len);

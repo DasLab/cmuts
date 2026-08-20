@@ -7,8 +7,8 @@
 
 #include <stdlib.h>
 
+#include "format.h"
 #include "nuc.h"
-#include "output.h"
 
 struct refrow {
     h5writer   *out;      /* borrowed */
@@ -20,7 +20,7 @@ refrow *refrow_create(h5writer *out, rate_config rates, size_t ref_cap,
                       const bool *wanted)
 {
     refrow *r      = calloc(1, sizeof *r);
-    size_t  widest = out_widest(ref_cap, wanted);
+    size_t  widest = fmt_widest(ref_cap, wanted);
 
     if (!r) {
         return NULL;
@@ -52,14 +52,14 @@ void refrow_destroy(refrow *r)
  * time. What is accumulated is the triangle; the square is written whole, so a reader
  * indexes it either way round. Only the conditional differs with the order: an entry
  * conditions on the position of its column. */
-static void pair_square(refrow *r, out_field_id id, const pairs *pr, size_t len)
+static void pair_square(refrow *r, fmt_field_id id, const pairs *pr, size_t len)
 {
     for (size_t i = 0; i < len; i++) {
         double *row = r->row + i * len;
 
-        if (id == OUT_PAIRWISE_CORRELATION) {
+        if (id == FMT_PAIRWISE_CORRELATION) {
             pairs_correlation(pr, len, r->rates.min_depth, i, row);
-        } else if (id == OUT_PAIRWISE_CONDITIONAL) {
+        } else if (id == FMT_PAIRWISE_CONDITIONAL) {
             pairs_conditional(pr, len, r->rates.min_depth, i, row);
         } else {
             pairs_coverage(pr, len, i, row);
@@ -85,10 +85,10 @@ static void sequence(refrow *r, const char *seq, size_t len)
  * The accumulated fields and the written ones do not correspond one to one, so every field
  * is listed below and none is defaulted: one added without a source of its own is caught by
  * the switch. */
-static const double *values(refrow *r, out_field_id id, const char *seq, const accum *acc,
+static const double *values(refrow *r, fmt_field_id id, const char *seq, const accum *acc,
                             const pairs *pr, size_t len)
 {
-    if (out_values_needed(id)) {
+    if (fmt_values_needed(id)) {
         sequence(r, seq, len);
         return r->row;
     }
@@ -98,23 +98,23 @@ static const double *values(refrow *r, out_field_id id, const char *seq, const a
     }
 
     switch (id) {
-        case OUT_COVERAGE:   return accum_const_data(acc, ACCUM_COVERAGE);
-        case OUT_LENGTHS:    return accum_const_data(acc, ACCUM_LENGTHS);
-        case OUT_READS:      return accum_const_data(acc, ACCUM_READS);
-        case OUT_REJECTED:   return accum_const_data(acc, ACCUM_FILTERED);
-        case OUT_SEQUENCE:
-        case OUT_NORM:
-        case OUT_UNMAPPED:
-        case OUT_N_FIELDS:   break;
-        case OUT_REACTIVITY:
+        case FMT_COVERAGE:   return accum_const_data(acc, ACCUM_COVERAGE);
+        case FMT_LENGTHS:    return accum_const_data(acc, ACCUM_LENGTHS);
+        case FMT_READS:      return accum_const_data(acc, ACCUM_READS);
+        case FMT_REJECTED:   return accum_const_data(acc, ACCUM_FILTERED);
+        case FMT_SEQUENCE:
+        case FMT_NORM:
+        case FMT_UNMAPPED:
+        case FMT_N_FIELDS:   break;
+        case FMT_REACTIVITY:
             rate_reactivity(&r->rates, acc, len, r->row);
             return r->row;
-        case OUT_ERROR:
+        case FMT_ERROR:
             rate_error(&r->rates, acc, len, r->row);
             return r->row;
-        case OUT_PAIRWISE_CORRELATION:
-        case OUT_PAIRWISE_CONDITIONAL:
-        case OUT_PAIRWISE_COVERAGE:
+        case FMT_PAIRWISE_CORRELATION:
+        case FMT_PAIRWISE_CONDITIONAL:
+        case FMT_PAIRWISE_COVERAGE:
             if (!pr) {
                 break;
             }
@@ -127,12 +127,12 @@ static const double *values(refrow *r, out_field_id id, const char *seq, const a
 
 /* Whether a field's row spans more than one extent, and so is written as a block rather
  * than as a row. */
-static bool is_block(out_field_id id, size_t len)
+static bool is_block(fmt_field_id id, size_t len)
 {
-    return shape_rank(OUT_FIELDS[id].row(len, len)) > 1;
+    return shape_rank(FMT_FIELDS[id].row(len, len)) > 1;
 }
 
-static int write_values(refrow *r, out_field_id id, int32_t tid, size_t len,
+static int write_values(refrow *r, fmt_field_id id, int32_t tid, size_t len,
                         const double *row)
 {
     return is_block(id, len)
@@ -147,10 +147,10 @@ int refrow_write(refrow *r, int32_t tid, size_t len, const char *seq, const accu
         return 0;
     }
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
         const double *row;
 
-        if (!OUT_FIELDS[id].per_ref || !h5writer_holds(r->out, id)) {
+        if (!FMT_FIELDS[id].per_ref || !h5writer_holds(r->out, id)) {
             continue;
         }
 

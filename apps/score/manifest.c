@@ -5,9 +5,10 @@
 
 #include "manifest.h"
 
-static const out_written READS[] = {
-    { .id = OUT_COVERAGE,   .origin = OUT_REQUIRED },
-    { .id = OUT_REACTIVITY, .origin = OUT_REQUIRED },
+const fmt_reads CMUTS_SCORE_READS = {
+    .fields = {
+        { FMT_COVERAGE,   .required = true },
+        { FMT_REACTIVITY, .required = true },
+    },
+    .n_fields = 2,
 };
-
-const out_manifest CMUTS_SCORE_READS = { READS, sizeof READS / sizeof *READS };

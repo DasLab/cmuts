@@ -64,7 +64,7 @@ typedef struct {
     size_t         batch;
     size_t         ref_cap;    /* longest reference, sizing every accumulator */
     bool           pairwise;
-    bool           wanted[OUT_N_FIELDS];   /* the optional fields this run writes */
+    bool           wanted[FMT_N_FIELDS];   /* the optional fields this run writes */
 } pipeline;
 
 /* The pipeline is filled in while the run is assembled and only read once it starts,
@@ -841,7 +841,7 @@ static int worker_start_all(worker *workers, size_t n, const pipeline *p,
 }
 
 int pipeline_run(const pipeline_config *cfg, const char *program,
-                 const out_manifest *writes, char *error, size_t error_len)
+                 const fmt_manifest *writes, char *error, size_t error_len)
 {
     pipeline     p           = { 0 };
     failure_flag failed      = { 0 };
@@ -860,10 +860,10 @@ int pipeline_run(const pipeline_config *cfg, const char *program,
     /* The manifest says what a run of this program writes; the squares among it are
      * written only where they were asked for, and the pairwise coverage whenever any
      * statistic is. */
-    out_selection(writes, p.wanted);
-    p.wanted[OUT_PAIRWISE_CORRELATION] &= (cfg->pairwise & PAIRS_CORRELATION) != 0;
-    p.wanted[OUT_PAIRWISE_CONDITIONAL] &= (cfg->pairwise & PAIRS_CONDITIONAL) != 0;
-    p.wanted[OUT_PAIRWISE_COVERAGE]    &= cfg->pairwise != 0;
+    fmt_selection(writes, p.wanted);
+    p.wanted[FMT_PAIRWISE_CORRELATION] &= (cfg->pairwise & PAIRS_CORRELATION) != 0;
+    p.wanted[FMT_PAIRWISE_CONDITIONAL] &= (cfg->pairwise & PAIRS_CONDITIONAL) != 0;
+    p.wanted[FMT_PAIRWISE_COVERAGE]    &= cfg->pairwise != 0;
 
     if (h5writer_may_replace(cfg->output_path, cfg->overwrite, &may_replace,
                              error, error_len) < 0 ||
@@ -908,7 +908,7 @@ int pipeline_run(const pipeline_config *cfg, const char *program,
     /* The consumer has been joined, so the writer is reachable from one thread again and
      * the run totals can be attached. */
     if (status == 0 && (cons.status < 0 ||
-                        h5writer_total(p.out, OUT_UNMAPPED, unmapped) < 0)) {
+                        h5writer_total(p.out, FMT_UNMAPPED, unmapped) < 0)) {
         status = h5writer_fail(p.out, cfg->output_path, error, error_len);
     }
 

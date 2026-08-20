@@ -23,8 +23,8 @@
 #include "error.h"
 #include "fasta.h"
 #include "h5reader.h"
+#include "format.h"
 #include "nuc.h"
-#include "output.h"
 
 /* What a dot bracket record may hold. A base is paired under any bracket, open under a
  * dot, and unknown under anything else, which is left out of the scoring. */
@@ -388,8 +388,8 @@ static size_t collect(context *ctx, const cm_fasta_record *ref,
 /* Reads one reference's row into the context. */
 static int read_row(context *ctx, int32_t tid, char *error, size_t error_len)
 {
-    if (h5reader_field(ctx->reader, OUT_REACTIVITY, tid, ctx->reactivity) < 0
-        || h5reader_field(ctx->reader, OUT_COVERAGE, tid, ctx->coverage) < 0) {
+    if (h5reader_field(ctx->reader, FMT_REACTIVITY, tid, ctx->reactivity) < 0
+        || h5reader_field(ctx->reader, FMT_COVERAGE, tid, ctx->coverage) < 0) {
         snprintf(error, error_len, "%s: %s", ctx->cfg->input_path,
                  h5reader_error(ctx->reader));
         return -1;
@@ -474,8 +474,8 @@ static int fail_memory(char *error, size_t error_len)
 static int allocate(context *ctx, size_t cap, char *error, size_t error_len)
 {
     ctx->cap        = cap;
-    ctx->reactivity = malloc(out_values(OUT_REACTIVITY, cap, cap) * sizeof *ctx->reactivity);
-    ctx->coverage   = malloc(out_values(OUT_COVERAGE, cap, cap) * sizeof *ctx->coverage);
+    ctx->reactivity = malloc(fmt_values(FMT_REACTIVITY, cap, cap) * sizeof *ctx->reactivity);
+    ctx->coverage   = malloc(fmt_values(FMT_COVERAGE, cap, cap) * sizeof *ctx->coverage);
     ctx->points     = malloc(cap * sizeof *ctx->points);
 
     if (!ctx->reactivity || !ctx->coverage || !ctx->points) {
@@ -584,7 +584,7 @@ done:
     return status;
 }
 
-int score_run(const score_config *cfg, const out_manifest *reads, FILE *out,
+int score_run(const score_config *cfg, const fmt_reads *reads, FILE *out,
               char *error, size_t error_len)
 {
     context    ctx = { .cfg = cfg, .out = out };

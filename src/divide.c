@@ -11,7 +11,7 @@
 #include <math.h>
 
 #include "combine.h"
-#include "output.h"
+#include "format.h"
 
 typedef enum {
     DIV_RATES,
@@ -26,15 +26,15 @@ typedef enum {
     DIV_RATIO_ERROR,
 } div_rule;
 
-static const div_rule RULES[OUT_N_FIELDS] = {
-    [OUT_COVERAGE]   = DIV_SUM,
-    [OUT_REACTIVITY] = DIV_RATIO,
-    [OUT_ERROR]      = DIV_RATIO_ERROR,
-    [OUT_LENGTHS]    = DIV_SUM,
-    [OUT_READS]      = DIV_SUM,
-    [OUT_REJECTED]   = DIV_SUM,
-    [OUT_UNMAPPED]   = DIV_SUM,
-    [OUT_SEQUENCE]   = DIV_SAME,
+static const div_rule RULES[FMT_N_FIELDS] = {
+    [FMT_COVERAGE]   = DIV_SUM,
+    [FMT_REACTIVITY] = DIV_RATIO,
+    [FMT_ERROR]      = DIV_RATIO_ERROR,
+    [FMT_LENGTHS]    = DIV_SUM,
+    [FMT_READS]      = DIV_SUM,
+    [FMT_REJECTED]   = DIV_SUM,
+    [FMT_UNMAPPED]   = DIV_SUM,
+    [FMT_SEQUENCE]   = DIV_SAME,
 };
 
 /* ------------------------------------------------------------------------ */
@@ -58,10 +58,10 @@ static void ratio_f32(const float *rates, const float *control, float *out, size
  * control does. */
 static void ratio_error_f32(const combine_rows *rows, float *out, size_t n)
 {
-    const float *rate          = combine_row(rows, DIV_RATES, OUT_REACTIVITY);
-    const float *control       = combine_row(rows, DIV_CONTROL, OUT_REACTIVITY);
-    const float *rate_error    = combine_row(rows, DIV_RATES, OUT_ERROR);
-    const float *control_error = combine_row(rows, DIV_CONTROL, OUT_ERROR);
+    const float *rate          = combine_row(rows, DIV_RATES, FMT_REACTIVITY);
+    const float *control       = combine_row(rows, DIV_CONTROL, FMT_REACTIVITY);
+    const float *rate_error    = combine_row(rows, DIV_RATES, FMT_ERROR);
+    const float *control_error = combine_row(rows, DIV_CONTROL, FMT_ERROR);
 
     for (size_t i = 0; i < n; i++) {
         float d = control[i];
@@ -77,7 +77,7 @@ static void ratio_error_f32(const combine_rows *rows, float *out, size_t n)
 /* Rules                                                                     */
 /* ------------------------------------------------------------------------ */
 
-static int combine_f32(const combine_rows *rows, out_field_id id, div_rule how, float *out,
+static int combine_f32(const combine_rows *rows, fmt_field_id id, div_rule how, float *out,
                        size_t n)
 {
     switch (how) {
@@ -96,7 +96,7 @@ static int combine_f32(const combine_rows *rows, out_field_id id, div_rule how, 
     return COMBINE_NO_RULE;
 }
 
-static int divide_field(const combine_rows *rows, out_field_id id, void *out, size_t n,
+static int divide_field(const combine_rows *rows, fmt_field_id id, void *out, size_t n,
                         const void *ctx)
 {
     (void)ctx;
@@ -110,7 +110,7 @@ static int divide_field(const combine_rows *rows, out_field_id id, void *out, si
         return combine_same(rows, id, out, n);
     }
 
-    if (OUT_FIELDS[id].stored != OUT_F32) {
+    if (FMT_FIELDS[id].stored != FMT_F32) {
         return COMBINE_NO_RULE;
     }
 
@@ -122,7 +122,7 @@ static int divide_field(const combine_rows *rows, out_field_id id, void *out, si
 /* ------------------------------------------------------------------------ */
 
 int divide_run(const divide_config *cfg, const char *program,
-               const out_manifest *writes, char *error,
+               const fmt_manifest *writes, char *error,
                size_t error_len)
 {
     const char *paths[DIV_N_INPUTS];

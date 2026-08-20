@@ -7,19 +7,19 @@
 
 /* The datasets a run leaves behind. Every output holds the first of them; the pairwise
  * squares are written only when they are asked for. */
-static const out_written WRITTEN[] = {
-    { .id = OUT_REACTIVITY },
-    { .id = OUT_ERROR },
-    { .id = OUT_COVERAGE },
-    { .id = OUT_SEQUENCE },
-    { .id = OUT_LENGTHS },
-    { .id = OUT_READS },
-    { .id = OUT_REJECTED },
-    { .id = OUT_UNMAPPED },
-    { .id = OUT_PAIRWISE_CORRELATION, .condition = "--pairwise correlation" },
-    { .id = OUT_PAIRWISE_CONDITIONAL, .condition = "--pairwise conditional" },
-    { .id = OUT_PAIRWISE_COVERAGE,    .condition = "--pairwise" },
+static const fmt_written WRITTEN[] = {
+    { .id = FMT_REACTIVITY },
+    { .id = FMT_ERROR },
+    { .id = FMT_COVERAGE },
+    { .id = FMT_SEQUENCE },
+    { .id = FMT_LENGTHS },
+    { .id = FMT_READS },
+    { .id = FMT_REJECTED },
+    { .id = FMT_UNMAPPED },
+    { .id = FMT_PAIRWISE_CORRELATION, .condition = "--pairwise correlation" },
+    { .id = FMT_PAIRWISE_CONDITIONAL, .condition = "--pairwise conditional" },
+    { .id = FMT_PAIRWISE_COVERAGE,    .condition = "--pairwise" },
 };
 
 
-const out_manifest CMUTS_HMM_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTEN };
+const fmt_manifest CMUTS_HMM_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTEN };

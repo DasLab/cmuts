@@ -22,7 +22,7 @@ static const cli_choice SCHEME_CHOICES[] = {
 
 static void dump_layout(FILE *out)
 {
-    out_dump_layout(out, "cmuts norm", &CMUTS_NORM_WRITES);
+    fmt_dump_layout(out, "cmuts norm", &CMUTS_NORM_WRITES);
 }
 
 static const cli_option OPTIONS[] = {

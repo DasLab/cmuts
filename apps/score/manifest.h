@@ -5,6 +5,6 @@
 
 #pragma once
 
-#include "output.h"
+#include "format.h"
 
-extern const out_manifest CMUTS_SCORE_READS;
+extern const fmt_reads CMUTS_SCORE_READS;

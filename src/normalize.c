@@ -15,9 +15,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "format.h"
 #include "h5reader.h"
 #include "h5writer.h"
-#include "output.h"
 #include "progress.h"
 
 /* The rate the ubr scale sits at, as a fraction of the way up the pool. */
@@ -267,9 +267,9 @@ static void clip_f32(float *row, size_t n, double above)
 
 /* Whether the scale divides this field. The rate and its error take it; every count is
  * left as it stands. */
-static bool is_scaled(out_field_id id)
+static bool is_scaled(fmt_field_id id)
 {
-    return id == OUT_REACTIVITY || id == OUT_ERROR;
+    return id == FMT_REACTIVITY || id == FMT_ERROR;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -313,7 +313,7 @@ static int gather_input(const normalize_config *cfg, rate_pool *p, h5reader *in,
                         const char *path, char *error, size_t error_len)
 {
     size_t  cap    = h5reader_capacity(in);
-    size_t  values = out_values(OUT_REACTIVITY, cap, cap);
+    size_t  values = fmt_values(FMT_REACTIVITY, cap, cap);
     float  *rate   = calloc(values, sizeof *rate);
     float  *cover  = calloc(values, sizeof *cover);
     int     status = -1;
@@ -324,8 +324,8 @@ static int gather_input(const normalize_config *cfg, rate_pool *p, h5reader *in,
     }
 
     for (int32_t tid = 0; tid < h5reader_refs(in); tid++) {
-        if (h5reader_field(in, OUT_REACTIVITY, tid, rate) < 0 ||
-            h5reader_field(in, OUT_COVERAGE, tid, cover) < 0) {
+        if (h5reader_field(in, FMT_REACTIVITY, tid, rate) < 0 ||
+            h5reader_field(in, FMT_COVERAGE, tid, cover) < 0) {
             h5reader_fail(in, path, error, error_len);
             goto done;
         }
@@ -346,11 +346,15 @@ done:
 
 /* Reads every input in turn, so a file that cannot be read fails before any output is
  * created. */
-static int gather(const normalize_config *cfg, const out_manifest *writes, rate_pool *p,
+static int gather(const normalize_config *cfg, const fmt_manifest *writes, rate_pool *p,
                   progress *bar, char *error, size_t error_len)
 {
+    fmt_reads reads;
+
+    fmt_reads_of(writes, &reads);
+
     for (size_t i = 0; i < cfg->n_files; i++) {
-        h5reader *in     = h5reader_open(cfg->inputs[i], writes);
+        h5reader *in     = h5reader_open(cfg->inputs[i], &reads);
         int       status = -1;
 
         if (!in) {
@@ -387,9 +391,10 @@ static int gather(const normalize_config *cfg, const out_manifest *writes, rate_
 
 typedef struct {
     const normalize_config *cfg;
-    const out_manifest     *manifest;               /* what it reads and writes */
+    const fmt_manifest     *manifest;               /* what it writes */
+    fmt_reads               reads;                  /* derived from the manifest */
     double                  factor;
-    bool                    writes[OUT_N_FIELDS];   /* what this run leaves behind */
+    bool                    writes[FMT_N_FIELDS];   /* what this run leaves behind */
 
     h5reader   *in;
     h5writer   *out;
@@ -402,7 +407,7 @@ typedef struct {
     size_t  ref_cap;
 } transfer;
 
-static void transfer_row(const transfer *t, out_field_id id, size_t n)
+static void transfer_row(const transfer *t, fmt_field_id id, size_t n)
 {
     if (!is_scaled(id)) {
         return;
@@ -410,7 +415,7 @@ static void transfer_row(const transfer *t, out_field_id id, size_t n)
 
     scale_f32(t->row, n, divisor(t->factor));
 
-    if (id == OUT_REACTIVITY) {
+    if (id == FMT_REACTIVITY) {
         clip_f32(t->row, n, t->cfg->clip_above);
     }
 }
@@ -418,8 +423,8 @@ static void transfer_row(const transfer *t, out_field_id id, size_t n)
 static int transfer_reference(const transfer *t, int32_t tid, char *error,
                               size_t error_len)
 {
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (!OUT_FIELDS[id].per_ref || !out_wanted(id, t->writes)) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
+        if (!FMT_FIELDS[id].per_ref || !fmt_wanted(id, t->writes)) {
             continue;
         }
 
@@ -427,7 +432,7 @@ static int transfer_reference(const transfer *t, int32_t tid, char *error,
             return h5reader_fail(t->in, t->in_path, error, error_len);
         }
 
-        transfer_row(t, id, out_values(id, t->ref_cap, t->ref_cap));
+        transfer_row(t, id, fmt_values(id, t->ref_cap, t->ref_cap));
 
         if (h5writer_row(t->out, id, tid, t->row) < 0) {
             return h5writer_fail(t->out, t->out_path, error, error_len);
@@ -439,10 +444,10 @@ static int transfer_reference(const transfer *t, int32_t tid, char *error,
 
 static int transfer_totals(const transfer *t, char *error, size_t error_len)
 {
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
         size_t total;
 
-        if (OUT_FIELDS[id].per_ref || !h5reader_holds(t->in, id)) {
+        if (FMT_FIELDS[id].per_ref || !h5reader_holds(t->in, id)) {
             continue;
         }
 
@@ -470,31 +475,34 @@ static int transfer_file(const transfer *t, char *error, size_t error_len)
         return -1;
     }
 
-    if (h5writer_value(t->out, OUT_NORM, t->factor) < 0) {
+    if (h5writer_value(t->out, FMT_NORM, t->factor) < 0) {
         return h5writer_fail(t->out, t->out_path, error, error_len);
     }
 
     return 0;
 }
 
-/* Clears from writes every field the input does not carry. What remains is read, copied
- * and written alike. */
+/* Clears from writes every field that depends on one the input does not carry. What
+ * remains is read, copied and written alike. */
 static void drop_absent_fields(transfer *t)
 {
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (out_origin_of(t->manifest, id) == OUT_MADE) {
-            continue;
-        }
+    for (size_t i = 0; i < t->manifest->n_fields; i++) {
+        const fmt_written *field = &t->manifest->fields[i];
 
-        if (!h5reader_holds(t->in, id)) {
-            t->writes[id] = false;
+        for (const fmt_field_id *dep = field->depends;
+             dep && *dep != FMT_N_FIELDS; dep++) {
+            if (!h5reader_holds(t->in, *dep)) {
+                t->writes[field->id] = false;
+            }
         }
     }
 }
 
 static int open_transfer(transfer *t, bool may_replace, char *error, size_t error_len)
 {
-    t->in = h5reader_open(t->in_path, t->manifest);
+    fmt_reads_of(t->manifest, &t->reads);
+
+    t->in = h5reader_open(t->in_path, &t->reads);
 
     if (!t->in) {
         return fail_memory(error, error_len);
@@ -508,7 +516,7 @@ static int open_transfer(transfer *t, bool may_replace, char *error, size_t erro
 
     t->n_refs  = h5reader_refs(t->in);
     t->ref_cap = h5reader_capacity(t->in);
-    t->row     = calloc(out_widest(t->ref_cap, t->writes), out_widest_bytes());
+    t->row     = calloc(fmt_widest(t->ref_cap, t->writes), fmt_widest_bytes());
 
     if (!t->row) {
         return fail_memory(error, error_len);
@@ -531,7 +539,7 @@ static void transfer_teardown(transfer *t)
 }
 
 static int write_output(const normalize_config *cfg, size_t which, const char *program,
-                        const out_manifest *writes,
+                        const fmt_manifest *writes,
                         double factor, char *error, size_t error_len)
 {
     transfer t = {
@@ -545,7 +553,7 @@ static int write_output(const normalize_config *cfg, size_t which, const char *p
     bool may_replace = false;
     int  status      = -1;
 
-    out_selection(writes, t.writes);
+    fmt_selection(writes, t.writes);
 
     /* Asked again here rather than carried over from check_outputs, so that a file
      * appearing at the path since then is seen. */
@@ -584,7 +592,7 @@ static int check_outputs(const normalize_config *cfg, char *error, size_t error_
 }
 
 static int write_outputs(const normalize_config *cfg, const char *program,
-                         const out_manifest *writes, double factor,
+                         const fmt_manifest *writes, double factor,
                          progress *bar, char *error, size_t error_len)
 {
     for (size_t i = 0; i < cfg->n_files; i++) {
@@ -599,7 +607,7 @@ static int write_outputs(const normalize_config *cfg, const char *program,
 }
 
 int normalize_run(const normalize_config *cfg, const char *program,
-                  const out_manifest *writes, char *error,
+                  const fmt_manifest *writes, char *error,
                   size_t error_len)
 {
     rate_pool p      = { 0 };

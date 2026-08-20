@@ -11,7 +11,7 @@
 
 /* The quantities every accumulator carries. This enum and ACCUM_FIELDS are the single
  * source of truth for the layout: allocation, zeroing and merging all derive from them.
- * These are not the fields written out; output.h keeps a table of its own. */
+ * These are not the fields written out; format.h keeps a table of its own. */
 typedef enum {
     ACCUM_COVERAGE,
     ACCUM_SPANNED,

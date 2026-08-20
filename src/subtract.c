@@ -12,7 +12,7 @@
 #include <stdbool.h>
 
 #include "combine.h"
-#include "output.h"
+#include "format.h"
 
 typedef enum {
     SUB_TREATED,
@@ -27,15 +27,15 @@ typedef enum {
     SUB_QUADRATURE,
 } sub_rule;
 
-static const sub_rule RULES[OUT_N_FIELDS] = {
-    [OUT_COVERAGE]   = SUB_SUM,
-    [OUT_REACTIVITY] = SUB_DIFFERENCE,
-    [OUT_ERROR]      = SUB_QUADRATURE,
-    [OUT_LENGTHS]    = SUB_SUM,
-    [OUT_READS]      = SUB_SUM,
-    [OUT_REJECTED]   = SUB_SUM,
-    [OUT_UNMAPPED]   = SUB_SUM,
-    [OUT_SEQUENCE]   = SUB_SAME,
+static const sub_rule RULES[FMT_N_FIELDS] = {
+    [FMT_COVERAGE]   = SUB_SUM,
+    [FMT_REACTIVITY] = SUB_DIFFERENCE,
+    [FMT_ERROR]      = SUB_QUADRATURE,
+    [FMT_LENGTHS]    = SUB_SUM,
+    [FMT_READS]      = SUB_SUM,
+    [FMT_REJECTED]   = SUB_SUM,
+    [FMT_UNMAPPED]   = SUB_SUM,
+    [FMT_SEQUENCE]   = SUB_SAME,
 };
 
 /* ------------------------------------------------------------------------ */
@@ -81,7 +81,7 @@ static void propagate_f32(const float *treated, const float *untreated, float *o
 /* Rules                                                                     */
 /* ------------------------------------------------------------------------ */
 
-static int combine_f32(const combine_rows *rows, out_field_id id, sub_rule how, bool clip,
+static int combine_f32(const combine_rows *rows, fmt_field_id id, sub_rule how, bool clip,
                        float *out, size_t n)
 {
     const float *treated   = combine_row(rows, SUB_TREATED, id);
@@ -105,7 +105,7 @@ static int combine_f32(const combine_rows *rows, out_field_id id, sub_rule how, 
     return COMBINE_NO_RULE;
 }
 
-static int subtract_field(const combine_rows *rows, out_field_id id, void *out, size_t n,
+static int subtract_field(const combine_rows *rows, fmt_field_id id, void *out, size_t n,
                           const void *ctx)
 {
     const subtract_config *cfg = ctx;
@@ -119,7 +119,7 @@ static int subtract_field(const combine_rows *rows, out_field_id id, void *out, 
         return combine_same(rows, id, out, n);
     }
 
-    if (OUT_FIELDS[id].stored != OUT_F32) {
+    if (FMT_FIELDS[id].stored != FMT_F32) {
         return COMBINE_NO_RULE;
     }
 
@@ -131,7 +131,7 @@ static int subtract_field(const combine_rows *rows, out_field_id id, void *out, 
 /* ------------------------------------------------------------------------ */
 
 int subtract_run(const subtract_config *cfg, const char *program,
-                 const out_manifest *writes, char *error,
+                 const fmt_manifest *writes, char *error,
                  size_t error_len)
 {
     const char *paths[SUB_N_INPUTS];

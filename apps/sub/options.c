@@ -11,7 +11,7 @@
 
 static void dump_layout(FILE *out)
 {
-    out_dump_layout(out, "cmuts sub", &CMUTS_SUB_WRITES);
+    fmt_dump_layout(out, "cmuts sub", &CMUTS_SUB_WRITES);
 }
 
 static const cli_option OPTIONS[] = {

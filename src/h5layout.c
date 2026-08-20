@@ -41,11 +41,11 @@ static hsize_t rows_per_chunk(size_t row_bytes, int32_t n_refs)
     return rows;
 }
 
-void h5layout_shape(out_field_id id, int32_t n_refs, size_t cap,
+void h5layout_shape(fmt_field_id id, int32_t n_refs, size_t cap,
                     hsize_t *dims, hsize_t *chunk)
 {
-    size_t extents[OUT_RANK_MAX];
-    int    rank = out_dims(id, n_refs, cap, extents);
+    size_t extents[FMT_RANK_MAX];
+    int    rank = fmt_dims(id, n_refs, cap, extents);
 
     for (int i = 0; i < rank; i++) {
         dims[i] = chunk[i] = (hsize_t)extents[i];
@@ -54,8 +54,8 @@ void h5layout_shape(out_field_id id, int32_t n_refs, size_t cap,
     /* A chunk spans whole rows and as many of them as fit, so only the reference
      * dimension is cut down. A field with no reference dimension is one value, and is
      * not chunked at all. */
-    if (OUT_FIELDS[id].per_ref) {
-        chunk[0] = rows_per_chunk(out_values(id, cap, cap) * out_stored_bytes(id), n_refs);
+    if (FMT_FIELDS[id].per_ref) {
+        chunk[0] = rows_per_chunk(fmt_values(id, cap, cap) * fmt_stored_bytes(id), n_refs);
     }
 }
 
@@ -63,13 +63,13 @@ void h5layout_shape(out_field_id id, int32_t n_refs, size_t cap,
 /* Storage                                                                   */
 /* ------------------------------------------------------------------------ */
 
-hid_t h5layout_type(out_field_id id)
+hid_t h5layout_type(fmt_field_id id)
 {
-    switch (OUT_FIELDS[id].stored) {
-        case OUT_F32:      return H5T_IEEE_F32LE;
-        case OUT_U64:      return H5T_STD_U64LE;
-        case OUT_I8:       return H5T_STD_I8LE;
-        case OUT_N_STORED: break;
+    switch (FMT_FIELDS[id].stored) {
+        case FMT_F32:      return H5T_IEEE_F32LE;
+        case FMT_U64:      return H5T_STD_U64LE;
+        case FMT_I8:       return H5T_STD_I8LE;
+        case FMT_N_STORED: break;
     }
 
     return H5I_INVALID_HID;
@@ -78,13 +78,13 @@ hid_t h5layout_type(out_field_id id)
 /* Returns the type a field's values are handed over in, which is the one it is stored
  * as. A value read from a file and written to another is never widened on the
  * way. */
-hid_t h5layout_memory_type(out_field_id id)
+hid_t h5layout_memory_type(fmt_field_id id)
 {
-    switch (OUT_FIELDS[id].stored) {
-        case OUT_F32:      return H5T_NATIVE_FLOAT;
-        case OUT_U64:      return H5T_NATIVE_UINT64;
-        case OUT_I8:       return H5T_NATIVE_INT8;
-        case OUT_N_STORED: break;
+    switch (FMT_FIELDS[id].stored) {
+        case FMT_F32:      return H5T_NATIVE_FLOAT;
+        case FMT_U64:      return H5T_NATIVE_UINT64;
+        case FMT_I8:       return H5T_NATIVE_INT8;
+        case FMT_N_STORED: break;
     }
 
     return H5I_INVALID_HID;
@@ -96,7 +96,7 @@ hid_t h5layout_memory_type(out_field_id id)
 
 hid_t h5layout_row_space(size_t cap, const bool *wanted)
 {
-    hsize_t widest = (hsize_t)out_widest(cap, wanted);
+    hsize_t widest = (hsize_t)fmt_widest(cap, wanted);
 
     return H5Screate_simple(1, &widest, NULL);
 }
@@ -104,13 +104,13 @@ hid_t h5layout_row_space(size_t cap, const bool *wanted)
 /* Selects n values of one reference's row, in the file and in memory together. A
  * scalar field has one value per reference, so the column plays no part in selecting
  * it: the arrays are filled in full and the rank bounds how much is read. */
-int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
+int h5layout_select_span(hid_t filespace, hid_t memspace, fmt_field_id id,
                          int32_t tid, size_t n)
 {
-    hsize_t start[OUT_RANK_MAX] = { (hsize_t)tid, 0 };
-    hsize_t count[OUT_RANK_MAX] = { 1, (hsize_t)n };
+    hsize_t start[FMT_RANK_MAX] = { (hsize_t)tid, 0 };
+    hsize_t count[FMT_RANK_MAX] = { 1, (hsize_t)n };
     hsize_t offset              = 0;
-    hsize_t extent              = out_rank(id) > 1 ? (hsize_t)n : 1;
+    hsize_t extent              = fmt_rank(id) > 1 ? (hsize_t)n : 1;
 
     if (H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, count, NULL) < 0) {
         return -1;
@@ -120,13 +120,13 @@ int h5layout_select_span(hid_t filespace, hid_t memspace, out_field_id id,
                                &extent, NULL);
 }
 
-int h5layout_select_block(hid_t filespace, hid_t memspace, out_field_id id,
+int h5layout_select_block(hid_t filespace, hid_t memspace, fmt_field_id id,
                           int32_t tid, size_t len)
 {
-    size_t  extents[OUT_RANK_MAX];
-    int     rank    = out_dims(id, 1, len, extents);
-    hsize_t start[OUT_RANK_MAX] = { (hsize_t)tid };
-    hsize_t count[OUT_RANK_MAX] = { 1 };
+    size_t  extents[FMT_RANK_MAX];
+    int     rank    = fmt_dims(id, 1, len, extents);
+    hsize_t start[FMT_RANK_MAX] = { (hsize_t)tid };
+    hsize_t count[FMT_RANK_MAX] = { 1 };
     hsize_t offset              = 0;
     hsize_t held                = 1;
 
@@ -163,10 +163,10 @@ hid_t h5layout_untimed_plist(hid_t class_id)
     return plist;
 }
 
-hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank)
+hid_t h5layout_creation_plist(fmt_field_id id, const hsize_t *chunk, int rank)
 {
-    out_value fill;
-    bool      filled = out_fill_value(id, &fill) == 0;
+    fmt_value fill;
+    bool      filled = fmt_fill_value(id, &fill) == 0;
     hid_t     dcpl   = h5layout_untimed_plist(H5P_DATASET_CREATE);
 
     if (dcpl < 0) {
@@ -193,10 +193,10 @@ hid_t h5layout_creation_plist(out_field_id id, const hsize_t *chunk, int rank)
     return dcpl;
 }
 
-hid_t h5layout_access_plist(out_field_id id, const hsize_t *chunk, int rank)
+hid_t h5layout_access_plist(fmt_field_id id, const hsize_t *chunk, int rank)
 {
     hid_t  dapl  = H5Pcreate(H5P_DATASET_ACCESS);
-    size_t bytes = out_stored_bytes(id);
+    size_t bytes = fmt_stored_bytes(id);
 
     if (dapl < 0) {
         return H5I_INVALID_HID;

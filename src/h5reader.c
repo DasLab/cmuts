@@ -15,16 +15,16 @@
 /* The field whose shape gives the rest. Reactivity is one value per base and required by
  * every program that reads an output, so the width of its row is the capacity every
  * other field's width derives from. */
-#define SHAPE_FIELD OUT_REACTIVITY
+#define SHAPE_FIELD FMT_REACTIVITY
 
 struct h5reader {
     hid_t   file;
-    hid_t   dataset[OUT_N_FIELDS];
+    hid_t   dataset[FMT_N_FIELDS];
     /* A dataspace apiece, kept for the life of the reader as the writer keeps its
      * own: only the selection differs between one row and the next. */
-    hid_t   filespace[OUT_N_FIELDS];
-    const out_manifest *manifest;  /* what the program reads, and what of it it requires */
-    bool    taken[OUT_N_FIELDS];   /* the fields it opened */
+    hid_t   filespace[FMT_N_FIELDS];
+    const fmt_reads *reads;        /* what the program reads, and what of it it requires */
+    bool    taken[FMT_N_FIELDS];   /* the fields it opened */
     hid_t   memspace;   /* one row of the widest field, selected down to size */
     int32_t n_refs;
     size_t  ref_cap;
@@ -38,9 +38,9 @@ static int fail(h5reader *r, const char *what)
     return -1;
 }
 
-static int fail_field(h5reader *r, out_field_id id, const char *what)
+static int fail_field(h5reader *r, fmt_field_id id, const char *what)
 {
-    snprintf(r->error, sizeof r->error, "%s: %s", OUT_FIELDS[id].name, what);
+    snprintf(r->error, sizeof r->error, "%s: %s", FMT_FIELDS[id].name, what);
     return -1;
 }
 
@@ -73,15 +73,15 @@ static int dataset_dims(hid_t dataset, int rank, hsize_t *dims)
  * the capacity itself. Every other field is then checked against them. */
 static int probe_shape(h5reader *r)
 {
-    hid_t   dataset = H5Dopen2(r->file, OUT_FIELDS[SHAPE_FIELD].name, H5P_DEFAULT);
-    hsize_t dims[OUT_RANK_MAX];
+    hid_t   dataset = H5Dopen2(r->file, FMT_FIELDS[SHAPE_FIELD].name, H5P_DEFAULT);
+    hsize_t dims[FMT_RANK_MAX];
     int     status;
 
     if (dataset < 0) {
         return fail_field(r, SHAPE_FIELD, "not present; this is not a cmuts output");
     }
 
-    status = dataset_dims(dataset, out_rank(SHAPE_FIELD), dims);
+    status = dataset_dims(dataset, fmt_rank(SHAPE_FIELD), dims);
     H5Dclose(dataset);
 
     if (status < 0) {
@@ -98,10 +98,10 @@ static int probe_shape(h5reader *r)
     return 0;
 }
 
-static int check_shape(h5reader *r, out_field_id id, const hsize_t *expected)
+static int check_shape(h5reader *r, fmt_field_id id, const hsize_t *expected)
 {
-    int     rank = out_rank(id);
-    hsize_t dims[OUT_RANK_MAX];
+    int     rank = fmt_rank(id);
+    hsize_t dims[FMT_RANK_MAX];
 
     if (dataset_dims(r->dataset[id], rank, dims) < 0) {
         return fail_field(r, id, "has an unexpected number of dimensions");
@@ -120,25 +120,25 @@ static int check_shape(h5reader *r, out_field_id id, const hsize_t *expected)
 /* Lifetime                                                                  */
 /* ------------------------------------------------------------------------ */
 
-static int open_field(h5reader *r, out_field_id id)
+static int open_field(h5reader *r, fmt_field_id id)
 {
-    hsize_t dims[OUT_RANK_MAX]  = { 0, 0 };
-    hsize_t chunk[OUT_RANK_MAX] = { 0, 0 };
+    hsize_t dims[FMT_RANK_MAX]  = { 0, 0 };
+    hsize_t chunk[FMT_RANK_MAX] = { 0, 0 };
     hid_t   dapl;
 
     h5layout_shape(id, r->n_refs, r->ref_cap, dims, chunk);
 
-    dapl = h5layout_access_plist(id, chunk, out_rank(id));
+    dapl = h5layout_access_plist(id, chunk, fmt_rank(id));
     if (dapl < 0) {
         return fail(r, "unable to prepare a dataset for reading");
     }
 
-    r->dataset[id] = H5Dopen2(r->file, OUT_FIELDS[id].name, dapl);
+    r->dataset[id] = H5Dopen2(r->file, FMT_FIELDS[id].name, dapl);
     H5Pclose(dapl);
 
-    /* A field the manifest does not require is skipped where the file lacks it. */
+    /* A field the reads do not require is skipped where the file lacks it. */
     if (r->dataset[id] < 0) {
-        if (out_origin_of(r->manifest, id) == OUT_REQUIRED) {
+        if (fmt_read_required(r->reads, id)) {
             return fail_field(r, id, "not present");
         }
 
@@ -155,11 +155,11 @@ static int open_field(h5reader *r, out_field_id id)
     return r->filespace[id] < 0 ? fail_field(r, id, "cannot be described") : 0;
 }
 
-/* Opens the fields the manifest names. */
+/* Opens the fields the reads name. */
 static int open_fields(h5reader *r)
 {
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (!out_wanted(id, r->taken)) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
+        if (!fmt_wanted(id, r->taken)) {
             continue;
         }
 
@@ -184,8 +184,8 @@ static herr_t note_ignored(hid_t obj, const char *name, const H5O_info2_t *info,
         return 0;
     }
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (r->taken[id] && strcmp(name, OUT_FIELDS[id].name) == 0) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
+        if (r->taken[id] && strcmp(name, FMT_FIELDS[id].name) == 0) {
             return 0;
         }
     }
@@ -209,7 +209,7 @@ static void find_ignored(h5reader *r)
  * reader is always closed, so it must be safe to close from here onwards: it
  * closes exactly what it opened. Zero, which calloc leaves behind, is a handle HDF5 would
  * accept, hence the marking. */
-static h5reader *reader_alloc(const out_manifest *manifest)
+static h5reader *reader_alloc(const fmt_reads *reads)
 {
     h5reader *r = calloc(1, sizeof *r);
 
@@ -217,21 +217,14 @@ static h5reader *reader_alloc(const out_manifest *manifest)
         return NULL;
     }
 
-    r->manifest = manifest;
-    out_selection(manifest, r->taken);
-
-    /* A field the run makes is written and not read. */
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (out_origin_of(manifest, id) == OUT_MADE) {
-            r->taken[id] = false;
-        }
-    }
+    r->reads = reads;
+    fmt_reads_selection(reads, r->taken);
 
     /* Report failures through h5reader_error, with HDF5's own stack trace on stderr
      * turned off. */
     H5Eset_auto2(H5E_DEFAULT, NULL, NULL);
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
         r->dataset[id]   = H5I_INVALID_HID;
         r->filespace[id] = H5I_INVALID_HID;
     }
@@ -258,9 +251,9 @@ static int build_memspace(h5reader *r)
     return r->memspace < 0 ? fail(r, "unable to prepare the file for reading") : 0;
 }
 
-h5reader *h5reader_open(const char *path, const out_manifest *manifest)
+h5reader *h5reader_open(const char *path, const fmt_reads *reads)
 {
-    h5reader *r = reader_alloc(manifest);
+    h5reader *r = reader_alloc(reads);
 
     if (!r) {
         return NULL;
@@ -282,7 +275,7 @@ void h5reader_close(h5reader *r)
         return;
     }
 
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
         if (r->filespace[id] >= 0) {
             H5Sclose(r->filespace[id]);
         }
@@ -334,16 +327,16 @@ size_t h5reader_capacity(const h5reader *r)
 /* Rows                                                                      */
 /* ------------------------------------------------------------------------ */
 
-bool h5reader_holds(const h5reader *r, out_field_id id)
+bool h5reader_holds(const h5reader *r, fmt_field_id id)
 {
     (void)r;
 
-    return out_wanted(id, r->taken);
+    return fmt_wanted(id, r->taken);
 }
 
-int h5reader_field(h5reader *r, out_field_id id, int32_t tid, void *values)
+int h5reader_field(h5reader *r, fmt_field_id id, int32_t tid, void *values)
 {
-    size_t width = out_values(id, r->ref_cap, r->ref_cap);
+    size_t width = fmt_values(id, r->ref_cap, r->ref_cap);
     herr_t status;
 
     if (tid < 0 || tid >= r->n_refs) {
@@ -364,12 +357,12 @@ int h5reader_field(h5reader *r, out_field_id id, int32_t tid, void *values)
 /* Totals                                                                    */
 /* ------------------------------------------------------------------------ */
 
-int h5reader_total(h5reader *r, out_field_id id, size_t *value)
+int h5reader_total(h5reader *r, fmt_field_id id, size_t *value)
 {
     uint64_t stored = 0;
     herr_t   status;
 
-    if (OUT_FIELDS[id].per_ref) {
+    if (FMT_FIELDS[id].per_ref) {
         return fail(r, "a field with a row per reference has no run total");
     }
 

@@ -13,13 +13,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "format.h"
 #include "h5reader.h"
 #include "h5writer.h"
-#include "output.h"
 #include "progress.h"
 
 struct combine_rows {
-    void **value;  /* n_inputs * OUT_N_FIELDS buffers, indexed by input then field */
+    void **value;  /* n_inputs * FMT_N_FIELDS buffers, indexed by input then field */
     size_t n_inputs;
 };
 
@@ -28,38 +28,39 @@ typedef struct {
 
     h5reader **input;
     h5writer  *out;
+    fmt_reads  reads;   /* derived from the spec's manifest */
 
     combine_rows rows;
     void        *result;
 
     int32_t n_refs;
     size_t  ref_cap;
-    bool    writes[OUT_N_FIELDS];   /* what the spec says this run leaves behind */
+    bool    writes[FMT_N_FIELDS];   /* what the spec says this run leaves behind */
 } combination;
 
 /* ------------------------------------------------------------------------ */
 /* Rows                                                                      */
 /* ------------------------------------------------------------------------ */
 
-static void *row_at(const combine_rows *rows, size_t input, out_field_id id)
+static void *row_at(const combine_rows *rows, size_t input, fmt_field_id id)
 {
-    return rows->value[(input * OUT_N_FIELDS) + id];
+    return rows->value[(input * FMT_N_FIELDS) + id];
 }
 
-const void *combine_row(const combine_rows *rows, size_t input, out_field_id id)
+const void *combine_row(const combine_rows *rows, size_t input, fmt_field_id id)
 {
     return row_at(rows, input, id);
 }
 
 /* Gives the values one row of a field holds: one for a field with no row, and none for a
  * field this program does not write, so no buffer is taken for it. */
-static size_t row_values(const combination *c, out_field_id id, size_t ref_cap)
+static size_t row_values(const combination *c, fmt_field_id id, size_t ref_cap)
 {
-    if (!out_wanted(id, c->writes)) {
+    if (!fmt_wanted(id, c->writes)) {
         return 0;
     }
 
-    return OUT_FIELDS[id].per_ref ? out_values(id, ref_cap, ref_cap) : 1;
+    return FMT_FIELDS[id].per_ref ? fmt_values(id, ref_cap, ref_cap) : 1;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -76,13 +77,13 @@ static int fail_output(const combination *c, char *error, size_t error_len)
     return h5writer_fail(c->out, c->spec->output, error, error_len);
 }
 
-static int fail_rule(out_field_id id, int status, char *error, size_t error_len)
+static int fail_rule(fmt_field_id id, int status, char *error, size_t error_len)
 {
     const char *why = status == COMBINE_MISMATCH
                     ? "the inputs disagree on it, so they were not made against one FASTA"
                     : "no rule combines a field of this type";
 
-    snprintf(error, error_len, "%s: %s", OUT_FIELDS[id].name, why);
+    snprintf(error, error_len, "%s: %s", FMT_FIELDS[id].name, why);
     return -1;
 }
 
@@ -93,7 +94,7 @@ static int fail_rule(out_field_id id, int status, char *error, size_t error_len)
 /* Accumulating in a local and storing once rounds only at the end, so the sum does not
  * depend on the width the platform evaluates floats at. */
 
-static void sum_f32(const combine_rows *rows, out_field_id id, float *out, size_t n)
+static void sum_f32(const combine_rows *rows, fmt_field_id id, float *out, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
         float total = ((const float *)row_at(rows, 0, id))[i];
@@ -106,7 +107,7 @@ static void sum_f32(const combine_rows *rows, out_field_id id, float *out, size_
     }
 }
 
-static void sum_u64(const combine_rows *rows, out_field_id id, uint64_t *out, size_t n)
+static void sum_u64(const combine_rows *rows, fmt_field_id id, uint64_t *out, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
         uint64_t total = ((const uint64_t *)row_at(rows, 0, id))[i];
@@ -119,26 +120,26 @@ static void sum_u64(const combine_rows *rows, out_field_id id, uint64_t *out, si
     }
 }
 
-int combine_sum(const combine_rows *rows, out_field_id id, void *out, size_t n)
+int combine_sum(const combine_rows *rows, fmt_field_id id, void *out, size_t n)
 {
-    switch (OUT_FIELDS[id].stored) {
-        case OUT_F32:
+    switch (FMT_FIELDS[id].stored) {
+        case FMT_F32:
             sum_f32(rows, id, out, n);
             return 0;
-        case OUT_U64:
+        case FMT_U64:
             sum_u64(rows, id, out, n);
             return 0;
-        case OUT_I8:
-        case OUT_N_STORED:
+        case FMT_I8:
+        case FMT_N_STORED:
             break;
     }
 
     return COMBINE_NO_RULE;
 }
 
-int combine_same(const combine_rows *rows, out_field_id id, void *out, size_t n)
+int combine_same(const combine_rows *rows, fmt_field_id id, void *out, size_t n)
 {
-    size_t      bytes = n * out_stored_bytes(id);
+    size_t      bytes = n * fmt_stored_bytes(id);
     const void *first = combine_row(rows, 0, id);
 
     for (size_t i = 1; i < rows->n_inputs; i++) {
@@ -158,8 +159,8 @@ int combine_same(const combine_rows *rows, out_field_id id, void *out, size_t n)
 static int read_reference(combination *c, int32_t tid, char *error, size_t error_len)
 {
     for (size_t i = 0; i < c->spec->n_inputs; i++) {
-        for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-            if (!OUT_FIELDS[id].per_ref || !out_wanted(id, c->writes)) {
+        for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
+            if (!FMT_FIELDS[id].per_ref || !fmt_wanted(id, c->writes)) {
                 continue;
             }
 
@@ -172,7 +173,7 @@ static int read_reference(combination *c, int32_t tid, char *error, size_t error
     return 0;
 }
 
-static int combine_field(const combination *c, out_field_id id, size_t n, char *error,
+static int combine_field(const combination *c, fmt_field_id id, size_t n, char *error,
                          size_t error_len)
 {
     int status = c->spec->field(&c->rows, id, c->result, n, c->spec->ctx);
@@ -186,8 +187,8 @@ static int combine_field(const combination *c, out_field_id id, size_t n, char *
 
 static int write_reference(combination *c, int32_t tid, char *error, size_t error_len)
 {
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (!OUT_FIELDS[id].per_ref || !out_wanted(id, c->writes)) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
+        if (!FMT_FIELDS[id].per_ref || !fmt_wanted(id, c->writes)) {
             continue;
         }
 
@@ -234,10 +235,10 @@ static int combine_references(combination *c, char *error, size_t error_len)
 static int read_totals(combination *c, char *error, size_t error_len)
 {
     for (size_t i = 0; i < c->spec->n_inputs; i++) {
-        for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
+        for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
             size_t total;
 
-            if (OUT_FIELDS[id].per_ref || !out_wanted(id, c->writes)) {
+            if (FMT_FIELDS[id].per_ref || !fmt_wanted(id, c->writes)) {
                 continue;
             }
 
@@ -254,8 +255,8 @@ static int read_totals(combination *c, char *error, size_t error_len)
 
 static int write_totals(combination *c, char *error, size_t error_len)
 {
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (OUT_FIELDS[id].per_ref || !out_wanted(id, c->writes)) {
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
+        if (FMT_FIELDS[id].per_ref || !fmt_wanted(id, c->writes)) {
             continue;
         }
 
@@ -301,20 +302,19 @@ static int check_agreement(combination *c, char *error, size_t error_len)
     return 0;
 }
 
-/* Clears from writes every field an input does not carry. What remains is read, allocated
- * for and written alike. */
+/* Clears from writes every field that depends on one some input does not carry. What
+ * remains is read, allocated for and written alike. */
 static void drop_absent_fields(combination *c)
 {
-    for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-        if (!out_wanted(id, c->writes)
-            || out_origin_of(c->spec->writes, id) == OUT_MADE) {
-            continue;
-        }
+    for (size_t i = 0; i < c->spec->writes->n_fields; i++) {
+        const fmt_written *field = &c->spec->writes->fields[i];
 
-        for (size_t i = 0; i < c->spec->n_inputs; i++) {
-            if (!h5reader_holds(c->input[i], id)) {
-                c->writes[id] = false;
-                break;
+        for (const fmt_field_id *dep = field->depends;
+             dep && *dep != FMT_N_FIELDS; dep++) {
+            for (size_t k = 0; k < c->spec->n_inputs; k++) {
+                if (!h5reader_holds(c->input[k], *dep)) {
+                    c->writes[field->id] = false;
+                }
             }
         }
     }
@@ -329,8 +329,10 @@ static int open_inputs(combination *c, char *error, size_t error_len)
         return -1;
     }
 
+    fmt_reads_of(c->spec->writes, &c->reads);
+
     for (size_t i = 0; i < c->spec->n_inputs; i++) {
-        c->input[i] = h5reader_open(c->spec->inputs[i], c->spec->writes);
+        c->input[i] = h5reader_open(c->spec->inputs[i], &c->reads);
 
         if (!c->input[i]) {
             snprintf(error, error_len, "out of memory");
@@ -363,7 +365,7 @@ static int open_inputs(combination *c, char *error, size_t error_len)
 static int build_rows(combination *c, char *error, size_t error_len)
 {
     c->rows.n_inputs = c->spec->n_inputs;
-    c->rows.value    = calloc(c->spec->n_inputs * OUT_N_FIELDS, sizeof *c->rows.value);
+    c->rows.value    = calloc(c->spec->n_inputs * FMT_N_FIELDS, sizeof *c->rows.value);
 
     if (!c->rows.value) {
         snprintf(error, error_len, "out of memory");
@@ -371,8 +373,8 @@ static int build_rows(combination *c, char *error, size_t error_len)
     }
 
     for (size_t i = 0; i < c->spec->n_inputs; i++) {
-        for (out_field_id id = 0; id < OUT_N_FIELDS; id++) {
-            void **slot = &c->rows.value[(i * OUT_N_FIELDS) + id];
+        for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
+            void **slot = &c->rows.value[(i * FMT_N_FIELDS) + id];
 
             size_t values = row_values(c, id, c->ref_cap);
 
@@ -380,7 +382,7 @@ static int build_rows(combination *c, char *error, size_t error_len)
                 continue;
             }
 
-            *slot = calloc(values, out_stored_bytes(id));
+            *slot = calloc(values, fmt_stored_bytes(id));
 
             if (!*slot) {
                 snprintf(error, error_len, "out of memory");
@@ -389,7 +391,7 @@ static int build_rows(combination *c, char *error, size_t error_len)
         }
     }
 
-    c->result = calloc(out_widest(c->ref_cap, c->writes), out_widest_bytes());
+    c->result = calloc(fmt_widest(c->ref_cap, c->writes), fmt_widest_bytes());
 
     if (!c->result) {
         snprintf(error, error_len, "out of memory");
@@ -422,7 +424,7 @@ static void combination_teardown(combination *c)
     }
 
     if (c->rows.value) {
-        for (size_t i = 0; i < c->spec->n_inputs * OUT_N_FIELDS; i++) {
+        for (size_t i = 0; i < c->spec->n_inputs * FMT_N_FIELDS; i++) {
             free(c->rows.value[i]);
         }
     }
@@ -436,7 +438,7 @@ int combine_run(const combine_spec *spec, char *error, size_t error_len)
 {
     combination c           = { .spec = spec };
 
-    out_selection(spec->writes, c.writes);
+    fmt_selection(spec->writes, c.writes);
     bool        may_replace = false;
     int         status      = -1;
 

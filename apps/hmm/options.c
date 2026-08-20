@@ -10,7 +10,7 @@
 #include <stddef.h>
 
 #include "filter.h"
-#include "output.h"
+#include "format.h"
 #include "pairs.h"
 #include "params.h"
 #include "phmm.h"
@@ -38,7 +38,7 @@ static const cli_choice STRAND_CHOICES[] = {
 
 static void dump_layout(FILE *out)
 {
-    out_dump_layout(out, "cmuts hmm", &CMUTS_HMM_WRITES);
+    fmt_dump_layout(out, "cmuts hmm", &CMUTS_HMM_WRITES);
 }
 
 static const cli_option OPTIONS[] = {
