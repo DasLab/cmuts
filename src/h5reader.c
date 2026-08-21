@@ -78,7 +78,7 @@ static int probe_shape(h5reader *r)
     int     status;
 
     if (dataset < 0) {
-        return fail_field(r, SHAPE_FIELD, "not present; this is not a cmuts output");
+        return fail_field(r, SHAPE_FIELD, "not present; the file must hold this dataset");
     }
 
     status = dataset_dims(dataset, fmt_rank(SHAPE_FIELD), dims);
