@@ -25,6 +25,7 @@ struct h5reader {
     hid_t   filespace[FMT_N_FIELDS];
     bool    taken[FMT_N_FIELDS];     /* the fields it opened */
     bool    required[FMT_N_FIELDS];  /* the fields the caller's requests insist on */
+    bool    skipped[FMT_N_FIELDS];   /* optional fields present with a non-numeric type */
     hid_t   memspace;   /* one row of the widest field, selected down to size */
     int32_t n_refs;
     size_t  ref_cap;
@@ -120,6 +121,35 @@ static int check_shape(h5reader *r, fmt_field_id id, const hsize_t *expected)
 /* Lifetime                                                                  */
 /* ------------------------------------------------------------------------ */
 
+/* Returns whether the opened dataset's stored class is integer or float, the classes
+ * HDF5 converts to every field's memory type. A type that cannot be inspected counts
+ * as non-numeric. */
+static bool field_is_numeric(h5reader *r, fmt_field_id id)
+{
+    hid_t       type = H5Dget_type(r->dataset[id]);
+    H5T_class_t class;
+
+    if (type < 0) {
+        return false;
+    }
+
+    class = H5Tget_class(type);
+    H5Tclose(type);
+
+    return class == H5T_INTEGER || class == H5T_FLOAT;
+}
+
+/* Drops an open dataset from the fields the reader holds, leaving it to be listed
+ * among the ignored datasets. */
+static void skip_field(h5reader *r, fmt_field_id id)
+{
+    H5Dclose(r->dataset[id]);
+
+    r->dataset[id] = H5I_INVALID_HID;
+    r->taken[id]   = false;
+    r->skipped[id] = true;
+}
+
 static int open_field(h5reader *r, fmt_field_id id)
 {
     hsize_t dims[FMT_RANK_MAX]  = { 0, 0 };
@@ -143,6 +173,15 @@ static int open_field(h5reader *r, fmt_field_id id)
         }
 
         r->taken[id] = false;
+        return 0;
+    }
+
+    if (!field_is_numeric(r, id)) {
+        if (r->required[id]) {
+            return fail_field(r, id, "is not a numeric type");
+        }
+
+        skip_field(r, id);
         return 0;
     }
 
@@ -175,8 +214,9 @@ static int open_fields(h5reader *r)
 static herr_t note_ignored(hid_t obj, const char *name, const H5O_info2_t *info,
                            void *op_data)
 {
-    h5reader *r    = op_data;
-    size_t    used = strlen(r->ignored);
+    h5reader   *r      = op_data;
+    size_t      used   = strlen(r->ignored);
+    const char *reason = "";
 
     (void)obj;
 
@@ -185,13 +225,23 @@ static herr_t note_ignored(hid_t obj, const char *name, const H5O_info2_t *info,
     }
 
     for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
-        if (r->taken[id] && strcmp(name, FMT_FIELDS[id].name) == 0) {
+        if (strcmp(name, FMT_FIELDS[id].name) != 0) {
+            continue;
+        }
+
+        if (r->taken[id]) {
             return 0;
         }
+
+        if (r->skipped[id]) {
+            reason = " (not a numeric type)";
+        }
+
+        break;
     }
 
-    snprintf(r->ignored + used, sizeof r->ignored - used, "%s%s",
-             used ? ", " : "", name);
+    snprintf(r->ignored + used, sizeof r->ignored - used, "%s%s%s",
+             used ? ", " : "", name, reason);
     return 0;
 }
 
