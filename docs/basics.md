@@ -1,5 +1,9 @@
 # Basics
 
+This page goes over basic, end-to-end usage of `cmuts` on standard data. For a full list of the arguments each program takes, please read their respective pages.
+
+## Overview
+
 The `cmuts` pipeline comprises five subcommands of the `cmuts` binary:
 
 {.field}
@@ -9,7 +13,7 @@ The `cmuts` pipeline comprises five subcommands of the `cmuts` binary:
 
 {.field}
 [`cmuts hmm`](cmuts-hmm.md)\
-**Purpose:** Computing reactivity rates from alignment files via the pair-HMM\
+**Purpose:** Computing reactivity rates from alignment files via the pair HMM\
 **Requires:** One or more coordinate-sorted alignment (SAM, BAM, or CRAM) files, the FASTA library
 
 {.field}
@@ -26,8 +30,6 @@ The `cmuts` pipeline comprises five subcommands of the `cmuts` binary:
 [`cmuts norm`](cmuts-norm.md)\
 **Purpose:** Normalization of reactivity values across experiments\
 **Requires:** One or more sets of reactivity rates, in [`cmuts`-compatible HDF5 files](format.md)
-
-This page goes over basic, end-to-end usage of these programs on standard data. For a full list of the arguments each command takes, please read their respective pages.
 
 ## Standard Usage
 

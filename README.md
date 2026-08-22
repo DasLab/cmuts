@@ -26,7 +26,7 @@ Alternatively, you can [build from source](https://daslab.stanford.edu/cmuts/fro
 
 ## Usage
 
-Compute reactivity rates via the pair-HMM on a specific experiment:
+Compute reactivity rates via the pair HMM on a specific experiment:
 
 ```sh
 cmuts hmm -f references.fasta -o treated.h5 treated.bam
@@ -46,8 +46,8 @@ cmuts norm -o apo-normalized.h5 -o holo-normalized.h5 apo.h5 holo.h5
 
 ## Documentation
 
-See the [docs](https://daslab.stanford.edu/cmuts) for more details.
+See the [docs](https://daslab.stanford.edu/cmuts) for more details on each program, the HDF5 outputs, and special use cases.
 
 ## Development
 
-See `CONTRIBUTING.md` for information on development builds and running tests.
+See [`CONTRIBUTING.md`](https://github.com/DasLab/cmuts?tab=contributing-ov-file) for information on development builds and running tests.

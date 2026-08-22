@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Computing reactivity rates from alignment files via the pair-HMM.
+Computing reactivity rates from alignment files via the pair HMM.
 
 ## Requires
 

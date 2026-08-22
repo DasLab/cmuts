@@ -4,7 +4,7 @@
 
 cmuts v2 is a rewrite of cmuts that makes it more accurate, portable, and, in specific cases, faster. The headline features are
 
-**Pair-HMM**: Gone is the ad-hoc and exponentially-expensive deletion spreading from v1, replaced by a variable-bandwidth pair-HMM that marginalizes over all alignments in a band around the CIGAR. The change also adds handling for ambiguous insertions and merging of nearby mutations for free.
+**Pair HMM**: Gone is the ad-hoc and exponentially-expensive deletion spreading from v1, replaced by a variable-bandwidth pair HMM that marginalizes over all alignments in a band around the CIGAR. The change also adds handling for ambiguous insertions and merging of nearby mutations for free.
 
 **One binary**: The pipeline is now subcommands of one `cmuts` binary: `cmuts align`, `cmuts hmm`, `cmuts sub`, `cmuts div`, `cmuts norm`, and `cmuts gen`. Each release carries this binary statically linked for Linux (x86_64, aarch64) and macOS (arm64), so running it needs no compiler and no libraries.
 
@@ -49,7 +49,7 @@ cmuts v2 is a rewrite of cmuts that makes it more accurate, portable, and, in sp
 
 - The `sm-dms` and `sm-shape` normalization schemes, and per-reference normalization. `cmuts norm` offers `ubr` and `outlier`, and takes one norm over every input given to a run; to normalize experiments separately, run it once per experiment.
 - Termination (RT stop) counting. It may return in a later release.
-- The deletion-spreading modes (`--uniform-spread`, `--no-spread`, `--disable-ambiguous`) and `--collapse`, which the pair-HMM subsumes.
+- The deletion-spreading modes (`--uniform-spread`, `--no-spread`, `--disable-ambiguous`) and `--collapse`, which the pair HMM subsumes.
 - `--max-indel-length`, which was found to hurt performance.
 - The filters without a v2 counterpart: `--max-hamming`, `--secondary`, `--downsample`, `--ignore-bases`, and the `--blank-5p` and `--blank-3p` masking.
 - The `modification-spectra` dataset, the tokenized sequences under `meta`, and the raw `probability` and `pairwise-coverage` counts.
