@@ -6,7 +6,7 @@ Experiment-independent normalization of reactivity rates.
 
 ## Requires
 
-- One or more sets of reactivity rates, in `cmuts`-compatible HDF5 files
+- One or more sets of reactivity rates, in [`cmuts`-compatible HDF5 files](format.md)
 
 ## Usage
 
@@ -33,74 +33,19 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 
 ## Output
 
-<!-- BEGIN GENERATED cmuts-norm FIELDS -->
-{.field}
-### `reactivity`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
-
-The reactivity at each base.
-
-*Divided by the norm.*
-
-{.field}
-### `error`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
-
-Standard error of the reactivity values.
-
-*Divided by the norm.*
-
-{.field}
-### `norm`
-
-**Shape** `()` · **Type** `float32` · **Fill** `NaN`
-
-The norm every rate in this file was divided by.
-
-{.field}
-### `coverage`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `0`
-
-The number of reads in which this base was present.
-
-{.field}
-### `sequence`
-
-**Shape** `(n, l)` · **Type** `int8` · **Fill** `-1`
-
-The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.
-
-{.field}
-### `reads/lengths`
-
-**Shape** `(n, 2l)` · **Type** `uint64` · **Fill** `0`
-
-The number of reads passing all filters, binned by length.
-
-{.field}
-### `reads/counted`
-
-**Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
-
-The number of reads passing all filters.
-
-{.field}
-### `reads/rejected`
-
-**Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
-
-The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM.
-
-{.field}
-### `reads/unmapped`
-
-**Shape** `()` · **Type** `uint64` · **Fill** `0`
-
-The number of reads not aligned to any reference.
-<!-- END GENERATED cmuts-norm FIELDS -->
+<!-- BEGIN GENERATED cmuts-norm DATASETS -->
+| Dataset | Source |
+| --- | --- |
+| [`reactivity`](format.md#reactivity) | Divided by the norm. |
+| [`error`](format.md#error) | Divided by the norm. |
+| [`norm`](format.md#norm) | Estimated per the specified scheme. |
+| [`coverage`](format.md#coverage) | Copied from the input. |
+| [`sequence`](format.md#sequence) | Copied from the input. |
+| [`reads/lengths`](format.md#readslengths) | Copied from the input. |
+| [`reads/counted`](format.md#readscounted) | Copied from the input. |
+| [`reads/rejected`](format.md#readsrejected) | Copied from the input. |
+| [`reads/unmapped`](format.md#readsunmapped) | Copied from the input. |
+<!-- END GENERATED cmuts-norm DATASETS -->
 
 ## CLI Options
 

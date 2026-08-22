@@ -40,7 +40,7 @@ Alternatively, you can [build from source](from-source.md), which may provide ma
 self
 from-source
 basics
-output
+format
 ```
 
 ```{toctree}
@@ -60,6 +60,5 @@ cmuts-gen
 :hidden:
 :caption: Reference
 
-counting
 clusters
 ```

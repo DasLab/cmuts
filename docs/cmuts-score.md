@@ -6,7 +6,7 @@ Score reactivity rates against known structures.
 
 ## Requires
 
-- Reactivity rates, in a `cmuts`-compatible HDF5 file
+- Reactivity rates, in a [`cmuts`-compatible HDF5 file](format.md)
 - Dot-bracket secondary structures
 - The reference library FASTA
 
@@ -28,6 +28,17 @@ The structure file holds dot-bracket records, each matched to its reactivity pro
 ```
 
 Positions containing neither dots nor brackets are not scored.
+
+## Input
+
+<!-- BEGIN GENERATED cmuts-score DATASETS -->
+| Dataset | Input |
+| --- | --- |
+| [`coverage`](format.md#coverage) | required |
+| [`reactivity`](format.md#reactivity) | required |
+
+All other datasets in an input are ignored.
+<!-- END GENERATED cmuts-score DATASETS -->
 
 ## Output
 
@@ -82,4 +93,5 @@ Accepted, and left out of `--help`.
 | Option | Description |
 | --- | --- |
 | `--dump-options` | describe every argument as JSON and exit |
+| `--dump-layout` | describe the input format as JSON and exit |
 <!-- END GENERATED cmuts-score OPTIONS -->

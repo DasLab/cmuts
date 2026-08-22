@@ -5,7 +5,10 @@
 
 #include "options.h"
 
+#include "manifest.h"
+
 #include <stddef.h>
+#include <stdio.h>
 
 /* U names the base that a DNA reference writes as T, since the two are one base and the
  * scoring reads a reference of either alphabet. */
@@ -16,6 +19,11 @@ static const cli_choice BASE_CHOICES[] = {
     { "U",  SCORE_BASE_U },
     { NULL, 0            },
 };
+
+static void dump_layout(FILE *out)
+{
+    fmt_dump_reads(out, "cmuts score", CMUTS_SCORE_READS, CMUTS_SCORE_N_READS);
+}
 
 static const cli_option OPTIONS[] = {
     {
@@ -83,6 +91,15 @@ static const cli_option OPTIONS[] = {
         .help   = "describe every argument as JSON and exit",
         .hidden = true,
         .action = CLI_DUMP_OPTIONS,
+    },
+    {
+        .group  = "Information",
+        .name   = "dump-layout",
+        .type   = OPT_FLAG,
+        .help   = "describe the input format as JSON and exit",
+        .hidden = true,
+        .action = CLI_PRINT,
+        .print  = dump_layout,
     },
 };
 

@@ -12,7 +12,7 @@
 const fmt_field FMT_FIELDS[FMT_N_FIELDS] = {
     [FMT_COVERAGE] = {
         .name    = "coverage",
-        .detail  = "The number of reads in which this base was present.",
+        .detail  = "The number of reads in which each base was present.",
         .row     = shape_per_base,
         .per_ref = true,
         .stored  = FMT_F32,
@@ -36,7 +36,7 @@ const fmt_field FMT_FIELDS[FMT_N_FIELDS] = {
     },
     [FMT_LENGTHS] = {
         .name    = "reads/lengths",
-        .detail  = "The number of reads passing all filters, binned by length.",
+        .detail  = "The number of reads contributing to the reactivity, binned by length.",
         .row     = shape_per_length,
         .per_ref = true,
         .stored  = FMT_U64,
@@ -44,7 +44,7 @@ const fmt_field FMT_FIELDS[FMT_N_FIELDS] = {
     },
     [FMT_READS] = {
         .name    = "reads/counted",
-        .detail  = "The number of reads passing all filters.",
+        .detail  = "The number of reads contributing to the reactivity.",
         .row     = shape_none,
         .per_ref = true,
         .stored  = FMT_U64,
@@ -52,7 +52,7 @@ const fmt_field FMT_FIELDS[FMT_N_FIELDS] = {
     },
     [FMT_REJECTED] = {
         .name    = "reads/rejected",
-        .detail  = "The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM.",
+        .detail  = "The number of reads aligned to the reference but not contributing to the reactivity.",
         .row     = shape_none,
         .per_ref = true,
         .stored  = FMT_U64,
@@ -76,7 +76,7 @@ const fmt_field FMT_FIELDS[FMT_N_FIELDS] = {
     },
     [FMT_PAIRWISE_COVERAGE] = {
         .name     = "pairwise/coverage",
-        .detail   = "The number of reads in which this pair of bases was present.",
+        .detail   = "The number of reads in which each pair of bases was present.",
         .row      = shape_per_pair,
         .per_ref  = true,
         .stored   = FMT_F32,
@@ -362,52 +362,112 @@ static void dump_attributes(FILE *out)
     }
 }
 
-/* cmuts_version is the version of the program dumping this, which is not the version
- * attribute above: that one is written into a file and says what produced it. */
-void fmt_dump_layout(FILE *out, const char *program, const fmt_manifest *manifest)
+/* Every dataset the program reads of an input, as the objects of a JSON array. */
+static void print_inputs(FILE *out, const fmt_request *requests, size_t n)
 {
-    fprintf(out, "{\n  \"program\": \"%s\",\n  \"cmuts_version\": \"%s\",\n"
-                 "  \"attributes\": [\n", program, CMUTS_VERSION);
+    fputs("  \"inputs\": [\n", out);
+
+    for (size_t i = 0; i < n; i++) {
+        fprintf(out, "    { \"name\": \"%s\", \"required\": %s }%s\n",
+                FMT_FIELDS[requests[i].id].name,
+                requests[i].required ? "true" : "false",
+                i + 1 < n ? "," : "");
+    }
+
+    fputs("  ]", out);
+}
+
+/* Every field one manifest entry reads to write its own, as a JSON array of names. */
+static void print_depends(FILE *out, const fmt_field_id *depends)
+{
+    fputc('[', out);
+
+    for (const fmt_field_id *dep = depends; dep && *dep != FMT_N_FIELDS; dep++) {
+        fprintf(out, "%s\"%s\"", dep == depends ? "" : ", ", FMT_FIELDS[*dep].name);
+    }
+
+    fputc(']', out);
+}
+
+void fmt_dump_reads(FILE *out, const char *program, const fmt_request *requests,
+                    size_t n)
+{
+    fprintf(out, "{\n  \"program\": \"%s\",\n  \"cmuts_version\": \"%s\",\n",
+            program, CMUTS_VERSION);
+
+    print_inputs(out, requests, n);
+
+    fputs("\n}\n", out);
+}
+
+/* cmuts_version is the version of the binary dumping this, which is not the version
+ * attribute above: that one is written into a file and says what produced it. */
+void fmt_dump_format(FILE *out)
+{
+    fprintf(out, "{\n  \"cmuts_version\": \"%s\",\n  \"attributes\": [\n",
+            CMUTS_VERSION);
 
     dump_attributes(out);
 
     fprintf(out, "  ],\n  \"fields\": [\n");
 
-    for (size_t i = 0; i < manifest->n_fields; i++) {
-        fmt_field_id     id    = manifest->fields[i].id;
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
         const fmt_field *field = &FMT_FIELDS[id];
-        const char      *note  = manifest->fields[i].note;
-        const char      *needs = manifest->fields[i].condition;
         char             fill[32];
 
         fill_name(id, fill, sizeof fill);
 
-        fprintf(out,
-                "    {\n"
-                "      \"name\": \"%s\",\n"
-                "      \"row\": \"%s\",\n"
-                "      \"per_reference\": %s,\n"
-                "      \"rank\": %d,\n"
-                "      \"extents\": ",
-                field->name, shape_name(field->row),
-                field->per_ref ? "true" : "false", fmt_rank(id));
+        fprintf(out, "    {\n      \"name\": \"%s\",\n      \"extents\": ",
+                field->name);
 
         print_extents(out, id);
 
         fprintf(out,
                 ",\n"
-                "      \"condition\": %s%s%s,\n"
                 "      \"type\": \"%s\",\n"
                 "      \"absent\": \"%s\",\n"
                 "      \"detail\": ",
-                needs ? "\"" : "", needs ? needs : "null", needs ? "\"" : "",
                 stored_name(field->stored), fill);
 
         print_detail(out, field->detail);
 
-        fprintf(out, ",\n      \"note\": ");
+        fprintf(out, "\n    }%s\n", id + 1 < FMT_N_FIELDS ? "," : "");
+    }
 
-        print_detail(out, note);
+    fprintf(out, "  ]\n}\n");
+}
+
+void fmt_dump_layout(FILE *out, const char *program, const fmt_manifest *manifest)
+{
+    fmt_request requests[FMT_N_FIELDS];
+    size_t      n_requests = fmt_requests_of(manifest, requests);
+
+    fprintf(out, "{\n  \"program\": \"%s\",\n  \"cmuts_version\": \"%s\",\n",
+            program, CMUTS_VERSION);
+
+    print_inputs(out, requests, n_requests);
+
+    fprintf(out, ",\n  \"datasets\": [\n");
+
+    for (size_t i = 0; i < manifest->n_fields; i++) {
+        const fmt_written *entry = &manifest->fields[i];
+
+        fprintf(out,
+                "    {\n"
+                "      \"name\": \"%s\",\n"
+                "      \"required\": %s,\n"
+                "      \"condition\": ",
+                FMT_FIELDS[entry->id].name, entry->required ? "true" : "false");
+
+        print_detail(out, entry->condition);
+
+        fprintf(out, ",\n      \"depends\": ");
+
+        print_depends(out, entry->depends);
+
+        fprintf(out, ",\n      \"how\": ");
+
+        print_detail(out, entry->how);
 
         fprintf(out, "\n    }%s\n", i + 1 < manifest->n_fields ? "," : "");
     }

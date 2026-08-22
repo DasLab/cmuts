@@ -9,7 +9,7 @@ Computing reactivity rates from alignment files via the pair-HMM.
 - One or more coordinate-sorted alignment files of single-end or merged reads. SAM, BAM, and CRAM formats are all supported
 - The FASTA library
 
-Alignments must be single-end. Paired-end data is not supported; please merge upstream before passing data to `cmuts hmm`.
+Alignments must be single-end to avoid double-counting; a read carrying the paired flag causes the program to exit early. Please merge reads upstream before passing data to `cmuts hmm`.
 
 ## Model Parameters
 
@@ -39,90 +39,27 @@ Both the DNA and the RNA forms of the FASTA sequence are accepted during the che
 
 Reads which do not pass the configured filters are rejected, meaning they are not processed by the HMM and do not contribute to the final reactivity. A secondary alignment, a read with MAPQ 255, a read missing a sequence, or a read with no CIGAR is automatically rejected.
 
-Unmapped reads are rejected by nature of having no reference to compute mutation rates against.
+A read to which the HMM cannot assign a nonzero alignment probability is also rejected; this can only occur if you set one or more transition probabilities to zero.
 
-A read carrying the paired flag ends the run. Two mates read one molecule, so counting them as separate reads would count their overlap twice. Merge the mates before aligning, which [`cmuts align`](cmuts-align.md) does for paired-end input.
+Unmapped reads are rejected by nature of having no reference to compute mutation rates against.
 
 ## Output
 
-<!-- BEGIN GENERATED cmuts-hmm FIELDS -->
-{.field}
-### `reactivity`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
-
-The reactivity at each base.
-
-{.field}
-### `error`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
-
-Standard error of the reactivity values.
-
-{.field}
-### `coverage`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `0`
-
-The number of reads in which this base was present.
-
-{.field}
-### `sequence`
-
-**Shape** `(n, l)` · **Type** `int8` · **Fill** `-1`
-
-The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.
-
-{.field}
-### `reads/lengths`
-
-**Shape** `(n, 2l)` · **Type** `uint64` · **Fill** `0`
-
-The number of reads passing all filters, binned by length.
-
-{.field}
-### `reads/counted`
-
-**Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
-
-The number of reads passing all filters.
-
-{.field}
-### `reads/rejected`
-
-**Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
-
-The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM.
-
-{.field}
-### `reads/unmapped`
-
-**Shape** `()` · **Type** `uint64` · **Fill** `0`
-
-The number of reads not aligned to any reference.
-
-{.field}
-### `pairwise/correlation`
-
-**Shape** `(n, l, l)` · **Type** `float32` · **Fill** `NaN` · **Written with** `--pairwise correlation`
-
-The Pearson correlation of mutations between this pair of bases.
-
-{.field}
-### `pairwise/conditional`
-
-**Shape** `(n, l, l)` · **Type** `float32` · **Fill** `NaN` · **Written with** `--pairwise conditional`
-
-The probability that the base on the first axis was mutated in a read, given that the base on the second axis was.
-
-{.field}
-### `pairwise/coverage`
-
-**Shape** `(n, l, l)` · **Type** `float32` · **Fill** `0` · **Written with** `--pairwise`
-
-The number of reads in which this pair of bases was present.
-<!-- END GENERATED cmuts-hmm FIELDS -->
+<!-- BEGIN GENERATED cmuts-hmm DATASETS -->
+| Dataset | Source |
+| --- | --- |
+| [`reactivity`](format.md#reactivity) | Estimated by the HMM. |
+| [`error`](format.md#error) | The standard error of the rate at the position's depth. |
+| [`coverage`](format.md#coverage) | Estimated by the HMM. |
+| [`sequence`](format.md#sequence) | Tokenized from the FASTA. |
+| [`reads/lengths`](format.md#readslengths) | The read length reported in the alignment. |
+| [`reads/counted`](format.md#readscounted) | The number of reads the HMM successfully processed. |
+| [`reads/rejected`](format.md#readsrejected) | The number of reads rejected by a filter or by the HMM. |
+| [`reads/unmapped`](format.md#readsunmapped) | The number of unmapped reads in the alignment. |
+| [`pairwise/correlation`](format.md#pairwisecorrelation) | Estimated by the HMM. |
+| [`pairwise/conditional`](format.md#pairwiseconditional) | Estimated by the HMM. |
+| [`pairwise/coverage`](format.md#pairwisecoverage) | Estimated by the HMM. |
+<!-- END GENERATED cmuts-hmm DATASETS -->
 
 ## CLI Options
 

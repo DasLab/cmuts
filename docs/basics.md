@@ -15,17 +15,17 @@ The `cmuts` pipeline comprises five subcommands of the `cmuts` binary:
 {.field}
 [`cmuts sub`](cmuts-sub.md)\
 **Purpose:** Background subtraction of reactivity rates\
-**Requires:** Treated and untreated reactivity rates, in `cmuts`-compatible HDF5 files
+**Requires:** Treated and untreated reactivity rates, in [`cmuts`-compatible HDF5 files](format.md)
 
 {.field}
 [`cmuts div`](cmuts-div.md)\
 **Purpose:** Normalization of reactivity rates against a denatured control\
-**Requires:** Reactivity rates and denatured control rates, in `cmuts`-compatible HDF5 files
+**Requires:** Reactivity rates and denatured control rates, in [`cmuts`-compatible HDF5 files](format.md)
 
 {.field}
 [`cmuts norm`](cmuts-norm.md)\
 **Purpose:** Normalization of reactivity values across experiments\
-**Requires:** One or more sets of reactivity rates, in `cmuts`-compatible HDF5 files
+**Requires:** One or more sets of reactivity rates, in [`cmuts`-compatible HDF5 files](format.md)
 
 This page goes over basic, end-to-end usage of these programs on standard data. For a full list of the arguments each command takes, please read their respective pages.
 
@@ -61,23 +61,7 @@ The final step is normalizing the reactivity.
 cmuts norm -o normalized-reactivity.h5 reactivity.h5
 ```
 
-All HDF5 files in `cmuts` have the same format, where `n` is the number of references and `l` the length of the longest of them.
-
-<!-- BEGIN GENERATED cmuts-norm LAYOUT -->
-| Dataset | Shape | Type | Fill |
-| --- | --- | --- | --- |
-| `reactivity` | `(n, l)` | `float32` | `NaN` |
-| `error` | `(n, l)` | `float32` | `NaN` |
-| `norm` | `()` | `float32` | `NaN` |
-| `coverage` | `(n, l)` | `float32` | `0` |
-| `sequence` | `(n, l)` | `int8` | `-1` |
-| `reads/lengths` | `(n, 2l)` | `uint64` | `0` |
-| `reads/counted` | `(n,)` | `uint64` | `0` |
-| `reads/rejected` | `(n,)` | `uint64` | `0` |
-| `reads/unmapped` | `()` | `uint64` | `0` |
-<!-- END GENERATED cmuts-norm LAYOUT -->
-
-See the [output](output.md) page for more detail on what each dataset contains.
+The HDF5 files produced by `cmuts hmm`, `cmuts sub`, and `cmuts norm` follow a consistent [format](format.md), and each individual program's page lists what subset of the format it writes and how.
 
 ## Pre-Aligned Data
 
@@ -104,6 +88,8 @@ and then divide the background-subtracted rates by it.
 ```sh
 cmuts div -o normalized.h5 combined.h5 denatured.h5
 ```
+
+The output of `cmuts div` again follows the HDF5 [format](format.md).
 
 ## No Control
 

@@ -16,20 +16,21 @@
 
 #include "shape.h"
 
-/* The fields an output holds. */
+/* The fields an output holds, in the order the documentation lists them: the ones every
+ * reader of an output wants first. */
 typedef enum {
-    FMT_COVERAGE,
     FMT_REACTIVITY,
     FMT_ERROR,
-    FMT_LENGTHS,
+    FMT_NORM,
+    FMT_COVERAGE,
+    FMT_SEQUENCE,
     FMT_READS,
+    FMT_LENGTHS,
     FMT_REJECTED,
     FMT_UNMAPPED,
     FMT_PAIRWISE_CORRELATION,
     FMT_PAIRWISE_CONDITIONAL,
     FMT_PAIRWISE_COVERAGE,
-    FMT_NORM,
-    FMT_SEQUENCE,
     FMT_N_FIELDS,
 } fmt_field_id;
 
@@ -79,9 +80,8 @@ size_t fmt_values(fmt_field_id id, size_t len, size_t cap);
 /* One field of one program's output. */
 typedef struct {
     fmt_field_id id;
-    /* What this program changes about the field, in one sentence. NULL where the field's
-     * own detail says it all. */
-    const char  *note;
+    /* How this program produces the field, in one sentence. */
+    const char  *how;
     const char  *condition;  /* what a run needs for it, where it is not written always */
     /* The fields the run reads to write this one, ending in FMT_N_FIELDS. NULL for a
      * field written without reading any. */
@@ -149,7 +149,16 @@ int fmt_dims(fmt_field_id id, int32_t n_refs, size_t cap, size_t *dims);
 /* Gives the rank of one field's dataset. */
 int fmt_rank(fmt_field_id id);
 
-/* Writes the table above as JSON, for generating the documentation of the format from the
- * program that writes it. */
+/* Writes the field table and the attributes as JSON, for generating the documentation
+ * of the format. */
+void fmt_dump_format(FILE *out);
+
+/* Writes the datasets a program reads and writes as JSON, for generating its page of
+ * the documentation. */
 void fmt_dump_layout(FILE *out, const char *program,
                      const fmt_manifest *manifest);
+
+/* Writes the datasets read of an input as JSON, for the programs that read a file
+ * without writing one. */
+void fmt_dump_reads(FILE *out, const char *program, const fmt_request *requests,
+                    size_t n);

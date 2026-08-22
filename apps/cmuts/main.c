@@ -11,6 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "format.h"
 #include "subcommands.h"
 #include "version.h"
 
@@ -80,6 +81,13 @@ int main(int argc, char **argv)
 
     if (strcmp(name, "-V") == 0 || strcmp(name, "--version") == 0) {
         printf("%s %s\n", PROGRAM, CMUTS_VERSION);
+        return 0;
+    }
+
+    /* Hidden, like the subcommands' dump flags: the format belongs to the suite rather
+     * than to one program, so the dispatcher describes it. */
+    if (strcmp(name, "--dump-layout") == 0) {
+        fmt_dump_format(stdout);
         return 0;
     }
 

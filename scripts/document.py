@@ -15,8 +15,12 @@ import sys
 from pathlib import Path
 
 # The value a dataset holds where the run wrote nothing, spelled as the pages
-# spell it. What it means differs by field, and the output page covers it.
+# spell it. What it means differs by field, and the format page covers it.
 ABSENT = {"nan": "NaN", "zero": "zero"}
+
+# The page that names every dataset under a heading of its own, which the
+# per-program tables link into.
+FORMAT_PAGE = "format.md"
 
 # The class each field's heading carries, which the stylesheet draws a rule
 # beside. MyST attaches it to the section the heading opens, so it needs the
@@ -50,7 +54,7 @@ def described(program: list, flag: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# The datasets an output holds
+# The datasets the format holds
 # ---------------------------------------------------------------------------
 
 
@@ -62,20 +66,6 @@ def shape(field: dict) -> str:
         return "()"
 
     return f"({', '.join(extents)}{',' if len(extents) == 1 else ''})"
-
-
-def layout(program: list) -> str:
-    """The datasets an output holds, one to a row.
-
-    The last column is the dataset's HDF5 fill value, which h5py reports as
-    dataset.fillvalue.
-    """
-    return table(
-        ["Dataset", "Shape", "Type", "Fill"],
-        [[f"`{field['name']}`", f"`{shape(field)}`", f"`{field['type']}`",
-          f"`{ABSENT.get(field['absent'], field['absent'])}`"]
-         for field in described(program, "--dump-layout")["fields"]],
-    )
 
 
 def attributes(program: list) -> str:
@@ -106,18 +96,51 @@ def fields(program: list) -> str:
 
     for field in described(program, "--dump-layout")["fields"]:
         absent = ABSENT.get(field["absent"], field["absent"])
-        needs = f" · **Written with** `{field['condition']}`" if field["condition"] else ""
         written += [FIELD_CLASS, f"### `{field['name']}`", "",
                     f"**Shape** `{shape(field)}` · **Type** `{field['type']}` · "
-                    f"**Fill** `{absent}`{needs}", ""]
+                    f"**Fill** `{absent}`", ""]
 
         if field["detail"]:
             written += [field["detail"], ""]
 
-        if field["note"]:
-            written += [f"*{field['note']}*", ""]
-
     return "\n".join(written).rstrip()
+
+
+# ---------------------------------------------------------------------------
+# The datasets a program reads and writes
+# ---------------------------------------------------------------------------
+
+
+def anchored(name: str) -> str:
+    """A link to the dataset's heading on the format page. The anchor is the
+    heading's slug, which drops a group's slash."""
+    return f"[`{name}`]({FORMAT_PAGE}#{name.replace('/', '')})"
+
+
+def read_status(name: str, read: dict) -> str:
+    """Whether an input must hold the dataset for this program to accept it."""
+    return "required" if read[name] else "if present"
+
+
+def datasets(program: list) -> str:
+    """The datasets a program writes, one to a row: the name linked to the
+    format page, and how the program produces it.
+
+    A program that writes no cmuts file lists what it reads of one instead.
+    """
+    spoken = described(program, "--dump-layout")
+    written = spoken.get("datasets", [])
+
+    if written:
+        return table(["Dataset", "Source"],
+                     [[anchored(entry["name"]), entry["how"]]
+                      for entry in written])
+
+    read = {d["name"]: d["required"] for d in spoken["inputs"]}
+    rows = [[anchored(name), read_status(name, read)] for name in read]
+
+    return "\n".join([table(["Dataset", "Input"], rows), "",
+                      "All other datasets in an input are ignored."])
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +222,7 @@ def options(program: list) -> str:
 # Writing them into the pages
 # ---------------------------------------------------------------------------
 
-WRITERS = {"LAYOUT": layout, "ATTRIBUTES": attributes, "FIELDS": fields,
+WRITERS = {"ATTRIBUTES": attributes, "FIELDS": fields, "DATASETS": datasets,
            "OPTIONS": options}
 
 # A block names the program that answers it and the table wanted from it, so a

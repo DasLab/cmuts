@@ -20,6 +20,10 @@ extensions = [
 # that block, or to the section where the block is a heading.
 myst_enable_extensions = ["colon_fence", "attrs_block"]
 
+# Gives every heading down to this depth a GitHub-style anchor, which the
+# generated dataset tables link into on the format page.
+myst_heading_anchors = 3
+
 html_theme = "furo"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]

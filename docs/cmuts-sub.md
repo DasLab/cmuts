@@ -9,7 +9,7 @@ Background subtraction of reactivity rates.
 - Treated reactivity rates
 - Untreated reactivity rates
 
-Both must be in `cmuts`-compatible HDF5 files.
+Both must be in [`cmuts`-compatible HDF5 files](format.md).
 
 ## Usage
 
@@ -17,89 +17,28 @@ Both must be in `cmuts`-compatible HDF5 files.
 cmuts sub -o reactivity.h5 treated.h5 untreated.h5
 ```
 
-## Error and Coverage
+The untreated reactivity is subtracted from the treated reactivity. The result is NaN if either input is NaN there.
 
-The error of the background-subtracted rates is computed using the standard quadrature formula. The coverage and the four read-related datasets simply take the sum of the treated and untreated values.
-
-To normalize the result against a denatured control, pass it to [`cmuts div`](cmuts-div.md).
-
-```{warning}
-High coverage in the output dataset does not imply high-quality data, since it is insensitive to imbalances in the treated and untreated experiments. Either ensure each experiment separately has high coverage or use the signal-to-noise ratio as a more robust quality metric.
-```
+If any dataset does not match the expected shape or the sequences do not match, the program exits early.
 
 ## Output
 
-<!-- BEGIN GENERATED cmuts-sub FIELDS -->
-{.field}
-### `reactivity`
+<!-- BEGIN GENERATED cmuts-sub DATASETS -->
+| Dataset | Source |
+| --- | --- |
+| [`reactivity`](format.md#reactivity) | Treated less untreated. |
+| [`error`](format.md#error) | Propagated from the inputs. |
+| [`coverage`](format.md#coverage) | Summed over the inputs. |
+| [`sequence`](format.md#sequence) | Copied from the inputs. |
+| [`reads/lengths`](format.md#readslengths) | Summed over the inputs. |
+| [`reads/counted`](format.md#readscounted) | Summed over the inputs. |
+| [`reads/rejected`](format.md#readsrejected) | Summed over the inputs. |
+| [`reads/unmapped`](format.md#readsunmapped) | Summed over the inputs. |
+<!-- END GENERATED cmuts-sub DATASETS -->
 
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
-
-The reactivity at each base.
-
-*Treated less untreated.*
-
-{.field}
-### `error`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
-
-Standard error of the reactivity values.
-
-*Propagated from the inputs.*
-
-{.field}
-### `coverage`
-
-**Shape** `(n, l)` · **Type** `float32` · **Fill** `0`
-
-The number of reads in which this base was present.
-
-*Summed over the inputs.*
-
-{.field}
-### `sequence`
-
-**Shape** `(n, l)` · **Type** `int8` · **Fill** `-1`
-
-The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.
-
-{.field}
-### `reads/lengths`
-
-**Shape** `(n, 2l)` · **Type** `uint64` · **Fill** `0`
-
-The number of reads passing all filters, binned by length.
-
-*Summed over the inputs.*
-
-{.field}
-### `reads/counted`
-
-**Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
-
-The number of reads passing all filters.
-
-*Summed over the inputs.*
-
-{.field}
-### `reads/rejected`
-
-**Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
-
-The number of reads rejected by at least one filter, or which couldn't be modelled by the HMM.
-
-*Summed over the inputs.*
-
-{.field}
-### `reads/unmapped`
-
-**Shape** `()` · **Type** `uint64` · **Fill** `0`
-
-The number of reads not aligned to any reference.
-
-*Summed over the inputs.*
-<!-- END GENERATED cmuts-sub FIELDS -->
+```{warning}
+High coverage in the output does not imply high-quality data, since it is insensitive to imbalances in the treated and untreated experiments. Either ensure each experiment separately has high coverage or use the signal-to-noise ratio as a more robust quality metric.
+```
 
 ## CLI Options
 

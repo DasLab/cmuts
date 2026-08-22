@@ -11,18 +11,20 @@ static const char SUMMED[] = "Summed over the inputs.";
 
 static const fmt_written WRITTEN[] = {
     { .id = FMT_REACTIVITY,
-      .note = "Treated less untreated.",
+      .how = "Treated less untreated.",
       .depends = FMT_DEPENDS(FMT_REACTIVITY),
       .required = true },
     { .id = FMT_ERROR,
-      .note = "Propagated from the inputs.",
+      .how = "Propagated from the inputs.",
       .depends = FMT_DEPENDS(FMT_ERROR) },
-    { .id = FMT_COVERAGE,  .note = SUMMED, .depends = FMT_DEPENDS(FMT_COVERAGE) },
-    { .id = FMT_SEQUENCE,  .depends = FMT_DEPENDS(FMT_SEQUENCE) },
-    { .id = FMT_LENGTHS,   .note = SUMMED, .depends = FMT_DEPENDS(FMT_LENGTHS) },
-    { .id = FMT_READS,     .note = SUMMED, .depends = FMT_DEPENDS(FMT_READS) },
-    { .id = FMT_REJECTED,  .note = SUMMED, .depends = FMT_DEPENDS(FMT_REJECTED) },
-    { .id = FMT_UNMAPPED,  .note = SUMMED, .depends = FMT_DEPENDS(FMT_UNMAPPED) },
+    { .id = FMT_COVERAGE,  .how = SUMMED, .depends = FMT_DEPENDS(FMT_COVERAGE) },
+    { .id = FMT_SEQUENCE,
+      .how = "Copied from the inputs.",
+      .depends = FMT_DEPENDS(FMT_SEQUENCE) },
+    { .id = FMT_LENGTHS,   .how = SUMMED, .depends = FMT_DEPENDS(FMT_LENGTHS) },
+    { .id = FMT_READS,     .how = SUMMED, .depends = FMT_DEPENDS(FMT_READS) },
+    { .id = FMT_REJECTED,  .how = SUMMED, .depends = FMT_DEPENDS(FMT_REJECTED) },
+    { .id = FMT_UNMAPPED,  .how = SUMMED, .depends = FMT_DEPENDS(FMT_UNMAPPED) },
 };
 
 const fmt_manifest CMUTS_SUB_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTEN };
