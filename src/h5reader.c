@@ -210,8 +210,16 @@ static int open_fields(h5reader *r)
     return 0;
 }
 
+/* H5Ovisit3 and H5O_info2_t arrived in HDF5 1.12, and 1.10 has the original visit and
+ * info type. Only the object's type is read, which both carry. */
+#if H5_VERSION_GE(1, 12, 0)
+typedef H5O_info2_t object_info;
+#else
+typedef H5O_info_t object_info;
+#endif
+
 /* Appends one dataset path to the list of ignored datasets, comma separated. */
-static herr_t note_ignored(hid_t obj, const char *name, const H5O_info2_t *info,
+static herr_t note_ignored(hid_t obj, const char *name, const object_info *info,
                            void *op_data)
 {
     h5reader   *r      = op_data;
@@ -249,8 +257,12 @@ static herr_t note_ignored(hid_t obj, const char *name, const H5O_info2_t *info,
  * the list short, and the fields themselves have been checked already. */
 static void find_ignored(h5reader *r)
 {
+#if H5_VERSION_GE(1, 12, 0)
     H5Ovisit3(r->file, H5_INDEX_NAME, H5_ITER_NATIVE, note_ignored, r,
               H5O_INFO_BASIC);
+#else
+    H5Ovisit(r->file, H5_INDEX_NAME, H5_ITER_NATIVE, note_ignored, r);
+#endif
 }
 
 /* Allocates a reader holding no handles yet, every one marked absent.
