@@ -519,11 +519,12 @@ static phmm_status forward(const context *ctx)
 /* Each reference position collects three totals: coverage, span, and
  * mutations. A pairing covers and spans the position it pairs, and adds as
  * mutation the part of its posterior that a template modification explains.
- * A deletion spans every position it passes over, adds no coverage, and counts as
- * one mutation at the end of its run, since reverse transcription reads the
- * template from the 3' end. An insertion counts as a mutation at the position
- * it precedes and adds no coverage; it spans the same weighted amount it counts
- * as mutation, so a weight of zero removes it entirely. */
+ * A deletion adds no coverage and counts as one mutation at the end of its
+ * run, since reverse transcription reads the template from the 3' end. A
+ * deletion and an insertion each span the same weighted amount they count as
+ * mutation, so a weight of zero removes either entirely: the read records
+ * nothing at a deleted position, so a deletion is evidence of a modification
+ * or nothing, never evidence against one. */
 
 /* The three window fields, each advanced to where the row's first cell enters
  * the window, so a cell addresses its positions by its own index with no
@@ -614,7 +615,7 @@ static void accumulate_cell(accumulation *acc, hts_pos_t k,
     double    matched = forward_at(&acc->front, k, STATE_MATCH);
     double    skipped = forward_at(&acc->front, k, STATE_DELETION);
     double    paired  = matched * back[STATE_MATCH];
-    double    passed  = skipped * back[STATE_DELETION];
+    double    deleted = acc->weight.deletion * skipped * pairing;
     double    carried = within(opening, acc->above_width)
                       ? acc->weight.insertion
                       * forward_at(&acc->above, opening, STATE_MATCH)
@@ -626,10 +627,10 @@ static void accumulate_cell(accumulation *acc, hts_pos_t k,
     acc->at.mutations[k + 1] += acc->mutations + carried;
 
     acc->coverage  = paired;
-    acc->spanned   = paired + passed;
+    acc->spanned   = paired + deleted;
     acc->mutations = acc->weight.substitution * paired
                    * acc->terms[k].modification
-                   + acc->weight.deletion * skipped * pairing;
+                   + deleted;
 }
 
 /* Writes the pending contribution after the leftmost cell, which completes

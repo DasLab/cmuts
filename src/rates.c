@@ -26,8 +26,8 @@ static bool masked_at(const rate_config *cfg, size_t i, size_t len)
 }
 
 /* Returns the mutations at a position over the evidence for them, held to one. Every
- * weight is a share of an event and an insertion spans what it contributes, so the
- * ratio cannot exceed one except by rounding. */
+ * weight is a share of an event and a deletion or insertion spans what it contributes,
+ * so the ratio cannot exceed one except by rounding. */
 static double rate_of(double mutations, double evidence)
 {
     double rate = evidence > 0.0 ? mutations / evidence : 0.0;

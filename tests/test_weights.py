@@ -3,9 +3,9 @@
 A weight scales what its kind of difference contributes to the mutation total.
 Each test asserts what holds of the rates under a setting of the weights.
 
-The insertion weight also enters the denominator, an inserted base occupying no
-reference position, so a rate is proportional to the weights only where the
-insertion weight is zero.
+The deletion and insertion weights also enter the denominator, the read
+recording no base at the position they count towards, so a rate is
+proportional to the weights only where both are zero.
 """
 
 import numpy as np
@@ -55,15 +55,15 @@ def test_weighing_every_difference_at_zero_leaves_the_rates_at_zero(data, falsif
 @pytest.mark.parametrize("scale", SCALES)
 def test_scaling_the_weights_scales_every_rate_by_the_same_factor(data, falsifiable,
                                                                   tmp_path, scale):
-    """Insertions are weighed at zero throughout, being the kind that reaches
-    the denominator as well."""
-    weighed = dict(insertion_weight=0, **EVERY_POSITION)
+    """Deletions and insertions are weighed at zero throughout, being the
+    kinds that reach the denominator as well."""
+    weighed = dict(deletion_weight=0, insertion_weight=0, **EVERY_POSITION)
 
     full = tmp_path / "full.h5"
     scaled = tmp_path / "scaled.h5"
 
-    run_cmuts(data, full, substitution_weight=1, deletion_weight=1, **weighed)
-    run_cmuts(data, scaled, substitution_weight=scale, deletion_weight=scale, **weighed)
+    run_cmuts(data, full, substitution_weight=1, **weighed)
+    run_cmuts(data, scaled, substitution_weight=scale, **weighed)
 
     before, after = field_of(full, REACTIVITY), field_of(scaled, REACTIVITY)
     known = ~np.isnan(before)

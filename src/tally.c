@@ -2,7 +2,7 @@
  *
  * Runs the marginal over one read and adds the window it returns to the reference's
  * accumulator, clipping to the reference's bounds. The three counted quantities are
- * described in phmm.c, which computes them, and accum.c, which stores them.
+ * described in phmm.c, which computes them.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */

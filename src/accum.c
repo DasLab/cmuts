@@ -8,14 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Coverage and span differ over what a read did not read: a deleted position is spanned
- * but not covered, since no base was read there.
- *
- * The span is the evidence the mutations are taken against. A pairing and a deletion
- * contribute to it whole. An insertion contributes only as far as --insertion-weight
- * makes it a modification, entering the span weighted exactly as it enters the
- * mutations: weighted into one and not the other, it would count as evidence against a
- * modification, and not the absence of evidence. */
 const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS] = {
     [ACCUM_COVERAGE]  = { shape_per_base },
     [ACCUM_SPANNED]   = { shape_per_base },
