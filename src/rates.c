@@ -53,10 +53,24 @@ static double reactivity_at(const rate_config *cfg, double mutations, double evi
     return rate_of(mutations, evidence);
 }
 
-/* Returns the standard error of one position's rate, taking the evidence as the count
- * the rate is a proportion of, or NaN where none is reported. */
-static double error_at(const rate_config *cfg, double mutations, double evidence,
-                       size_t i, size_t len)
+/* Returns what the reads left undecided at a position: the posterior variance of its
+ * count, from the two accumulated moments. Each read's event is Bernoulli with its
+ * posterior chance m, contributing m(1 - m); certain calls contribute nothing, so hard
+ * counts give zero. Rounding on weighted events can push the difference below zero,
+ * which is held there. */
+static double ambiguity_of(double mutations, double squared)
+{
+    double ambiguity = mutations - squared;
+
+    return ambiguity > 0.0 ? ambiguity : 0.0;
+}
+
+/* Returns the standard error of one position's rate, or NaN where none is reported.
+ * Its variance is the molecular sampling of the rate over the evidence, plus the
+ * ambiguity of the calls behind it; with every call certain the second term vanishes
+ * and the plain binomial error remains. */
+static double error_at(const rate_config *cfg, double mutations, double squared,
+                       double evidence, size_t i, size_t len)
 {
     double rate;
 
@@ -66,7 +80,8 @@ static double error_at(const rate_config *cfg, double mutations, double evidence
 
     rate = rate_of(mutations, evidence);
 
-    return sqrt(rate * (1.0 - rate) / evidence);
+    return sqrt(rate * (1.0 - rate) / evidence
+              + ambiguity_of(mutations, squared) / (evidence * evidence));
 }
 
 void rate_reactivity(const rate_config *cfg, const accum *acc, size_t len,
@@ -85,8 +100,9 @@ void rate_error(const rate_config *cfg, const accum *acc, size_t len,
 {
     const double *evidence  = accum_const_data(acc, ACCUM_SPANNED);
     const double *mutations = accum_const_data(acc, ACCUM_MUTATIONS);
+    const double *squared   = accum_const_data(acc, ACCUM_MUTATIONS_SQUARED);
 
     for (size_t i = 0; i < len; i++) {
-        out[i] = error_at(cfg, mutations[i], evidence[i], i, len);
+        out[i] = error_at(cfg, mutations[i], squared[i], evidence[i], i, len);
     }
 }

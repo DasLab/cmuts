@@ -42,13 +42,20 @@ static void add_length(const context *ctx)
     }
 }
 
-/* Adds the window's stretch on the reference to the three per-base fields, clipping once
- * rather than testing each position. */
+/* Adds the window's stretch on the reference to the four per-base fields, clipping once
+ * rather than testing each position.
+ *
+ * The window holds one read, so its mutations value is the posterior chance this read
+ * carries an event at the position. The squared value accumulates alongside it: the two
+ * moments together give the posterior variance of the count, which the error reads.
+ * The squared field equals what the diagonal of the pairwise both-modified cells holds,
+ * kept here so the error never depends on the optional pairwise mode. */
 static void add_window(const context *ctx, const phmm_window *window)
 {
     double *coverage  = accum_data(ctx->target, ACCUM_COVERAGE);
     double *spanned   = accum_data(ctx->target, ACCUM_SPANNED);
     double *mutations = accum_data(ctx->target, ACCUM_MUTATIONS);
+    double *squared   = accum_data(ctx->target, ACCUM_MUTATIONS_SQUARED);
     size_t  begin;
     size_t  end;
 
@@ -56,10 +63,12 @@ static void add_window(const context *ctx, const phmm_window *window)
 
     for (size_t i = begin; i < end; i++) {
         size_t pos = (size_t)(window->origin + (hts_pos_t)i);
+        double m   = window->mutations[i];
 
         coverage[pos]  += window->coverage[i];
         spanned[pos]   += window->spanned[i];
-        mutations[pos] += window->mutations[i];
+        mutations[pos] += m;
+        squared[pos]   += m * m;
     }
 }
 

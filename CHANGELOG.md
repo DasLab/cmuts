@@ -43,6 +43,7 @@ cmuts v2 is a rewrite of cmuts that makes it more accurate, portable, and, in sp
 - `cmuts sub`, `cmuts div`, and `cmuts norm` read and write whole HDF5 files, where v1's `--experiment` named datasets inside one counts file.
 - Each output file holds one flat layout, with `program` and `version` attributes recording what wrote it, in place of the per-file and per-experiment groups and the `meta` group.
 - `--min-depth` masks positions below a coverage threshold, absorbing v1's `--blank-cutoff`.
+- The `error` dataset adds the posterior variance of the pair HMM's calls to the sampling term, so ambiguous events widen it while certain ones leave it binomial. v1 computed the binomial error on raw coverage.
 - `cmuts hmm` streams its input and writes no `.cmix` or `.cmfa` index files beside it.
 
 ### Removed
