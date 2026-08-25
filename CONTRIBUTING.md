@@ -15,6 +15,16 @@ Additionally, rendering the documentation requires the `docs` group:
 uv pip install --python .venv/bin/python --group docs
 ```
 
+## Building
+
+```sh
+make
+```
+
+Each variant builds into its own directory under `build/`. `CC` overrides the compiler and `OPT` the optimization flags.
+
+Headers and libraries come from `pkg-config` where htslib and HDF5 provide a `.pc` file, and from plain `-l` and `CPATH` otherwise.
+
 ## Tests
 
 ```sh
