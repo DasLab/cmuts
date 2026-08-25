@@ -10,7 +10,7 @@
 
 const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS] = {
     [ACCUM_COVERAGE]          = { shape_per_base },
-    [ACCUM_SPANNED]           = { shape_per_base },
+    [ACCUM_EVIDENCE]          = { shape_per_base },
     [ACCUM_MUTATIONS]         = { shape_per_base },
     [ACCUM_MUTATIONS_SQUARED] = { shape_per_base },
     [ACCUM_LENGTHS]           = { shape_per_length },

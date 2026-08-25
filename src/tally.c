@@ -53,7 +53,7 @@ static void add_length(const context *ctx)
 static void add_window(const context *ctx, const phmm_window *window)
 {
     double *coverage  = accum_data(ctx->target, ACCUM_COVERAGE);
-    double *spanned   = accum_data(ctx->target, ACCUM_SPANNED);
+    double *evidence  = accum_data(ctx->target, ACCUM_EVIDENCE);
     double *mutations = accum_data(ctx->target, ACCUM_MUTATIONS);
     double *squared   = accum_data(ctx->target, ACCUM_MUTATIONS_SQUARED);
     size_t  begin;
@@ -66,7 +66,7 @@ static void add_window(const context *ctx, const phmm_window *window)
         double m   = window->mutations[i];
 
         coverage[pos]  += window->coverage[i];
-        spanned[pos]   += window->spanned[i];
+        evidence[pos]  += window->evidence[i];
         mutations[pos] += m;
         squared[pos]   += m * m;
     }

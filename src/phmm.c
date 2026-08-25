@@ -63,7 +63,7 @@ struct phmm_scratch {
     /* Two rows suffice: only the current row and the one below it are read. */
     band_cell *backward;
     double    *coverage;   /* the window returned to the caller */
-    double    *spanned;
+    double    *evidence;
     double    *mutations;
     size_t     rows;         /* rows places and scale are sized for */
     size_t     matrix_rows;  /* rows the forward matrix is sized for */
@@ -516,15 +516,15 @@ static phmm_status forward(const context *ctx)
 /* Accumulating a row into the window                                        */
 /* ------------------------------------------------------------------------ */
 
-/* Each reference position collects three totals: coverage, span, and
- * mutations. A pairing covers and spans the position it pairs, and adds as
- * mutation the part of its posterior that a template modification explains.
- * A deletion adds no coverage and counts as one mutation at the end of its
- * run, since reverse transcription reads the template from the 3' end. A
- * deletion and an insertion each span the same weighted amount they count as
- * mutation, so a weight of zero removes either entirely: the read records
- * nothing at a deleted position, so a deletion is evidence of a modification
- * or nothing, never evidence against one. */
+/* Each reference position collects three totals: coverage, evidence, and
+ * mutations. A pairing covers the position it pairs and is evidence at it,
+ * and adds as mutation the part of its posterior that a template modification
+ * explains. A deletion adds no coverage and counts as one mutation at the end
+ * of its run, since reverse transcription reads the template from the 3' end.
+ * A deletion and an insertion each add as evidence the same weighted amount
+ * they count as mutation, so a weight of zero removes either entirely: the
+ * read records nothing at a deleted position, so a deletion is evidence of a
+ * modification or nothing, never evidence against one. */
 
 /* The three window fields, each advanced to where the row's first cell enters
  * the window, so a cell addresses its positions by its own index with no
@@ -534,7 +534,7 @@ static phmm_status forward(const context *ctx)
  * contributions. */
 typedef struct {
     double *coverage;
-    double *spanned;
+    double *evidence;
     double *mutations;
 } landing;
 
@@ -546,7 +546,7 @@ static landing landing_of(const context *ctx, size_t i)
 
     return (landing){
         .coverage  = scratch->coverage + at,
-        .spanned   = scratch->spanned + at,
+        .evidence  = scratch->evidence + at,
         .mutations = scratch->mutations + at,
     };
 }
@@ -587,7 +587,7 @@ typedef struct {
     hts_pos_t         above_width;
     /* The pending contribution to the position the next cell completes. */
     double            coverage;
-    double            spanned;
+    double            evidence;
     double            mutations;
 } accumulation;
 
@@ -623,11 +623,11 @@ static void accumulate_cell(accumulation *acc, hts_pos_t k,
                       : 0.0;
 
     acc->at.coverage[k + 1]  += acc->coverage;
-    acc->at.spanned[k + 1]   += acc->spanned + carried;
+    acc->at.evidence[k + 1]  += acc->evidence + carried;
     acc->at.mutations[k + 1] += acc->mutations + carried;
 
     acc->coverage  = paired;
-    acc->spanned   = paired + deleted;
+    acc->evidence  = paired + deleted;
     acc->mutations = acc->weight.substitution * paired
                    * acc->terms[k].modification
                    + deleted;
@@ -638,7 +638,7 @@ static void accumulate_cell(accumulation *acc, hts_pos_t k,
 static void accumulate_end(const accumulation *acc)
 {
     acc->at.coverage[0]  += acc->coverage;
-    acc->at.spanned[0]   += acc->spanned;
+    acc->at.evidence[0]  += acc->evidence;
     acc->at.mutations[0] += acc->mutations;
 }
 
@@ -868,7 +868,7 @@ void phmm_scratch_destroy(phmm_scratch *scratch)
     free(scratch->scale);
     free(scratch->backward);
     free(scratch->coverage);
-    free(scratch->spanned);
+    free(scratch->evidence);
     free(scratch->mutations);
     free(scratch);
 }
@@ -948,7 +948,7 @@ static int grow_band(phmm_scratch *scratch, size_t rows, size_t widest)
 static int grow_window(phmm_scratch *scratch, size_t window)
 {
     double *coverage;
-    double *spanned;
+    double *evidence;
     double *mutations;
 
     if (window <= scratch->window) {
@@ -956,20 +956,20 @@ static int grow_window(phmm_scratch *scratch, size_t window)
     }
 
     coverage  = realloc(scratch->coverage, window * sizeof *coverage);
-    spanned   = realloc(scratch->spanned, window * sizeof *spanned);
+    evidence  = realloc(scratch->evidence, window * sizeof *evidence);
     mutations = realloc(scratch->mutations, window * sizeof *mutations);
 
     if (coverage) {
         scratch->coverage = coverage;
     }
-    if (spanned) {
-        scratch->spanned = spanned;
+    if (evidence) {
+        scratch->evidence = evidence;
     }
     if (mutations) {
         scratch->mutations = mutations;
     }
 
-    if (!coverage || !spanned || !mutations) {
+    if (!coverage || !evidence || !mutations) {
         return -1;
     }
 
@@ -1032,7 +1032,7 @@ static void clear_window(const context *ctx)
     size_t        len     = ctx->window.len;
 
     memset(scratch->coverage, 0, len * sizeof *scratch->coverage);
-    memset(scratch->spanned, 0, len * sizeof *scratch->spanned);
+    memset(scratch->evidence, 0, len * sizeof *scratch->evidence);
     memset(scratch->mutations, 0, len * sizeof *scratch->mutations);
 }
 
@@ -1113,7 +1113,7 @@ phmm_status phmm_run(const phmm *model, const phred *quality,
     out->origin    = ctx.window.origin;
     out->len       = ctx.window.len;
     out->coverage  = scratch->coverage;
-    out->spanned   = scratch->spanned;
+    out->evidence  = scratch->evidence;
     out->mutations = scratch->mutations;
 
     return PHMM_OK;

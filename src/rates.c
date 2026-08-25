@@ -87,7 +87,7 @@ static double error_at(const rate_config *cfg, double mutations, double squared,
 void rate_reactivity(const rate_config *cfg, const accum *acc, size_t len,
                      double *restrict out)
 {
-    const double *evidence  = accum_const_data(acc, ACCUM_SPANNED);
+    const double *evidence  = accum_const_data(acc, ACCUM_EVIDENCE);
     const double *mutations = accum_const_data(acc, ACCUM_MUTATIONS);
 
     for (size_t i = 0; i < len; i++) {
@@ -98,7 +98,7 @@ void rate_reactivity(const rate_config *cfg, const accum *acc, size_t len,
 void rate_error(const rate_config *cfg, const accum *acc, size_t len,
                 double *restrict out)
 {
-    const double *evidence  = accum_const_data(acc, ACCUM_SPANNED);
+    const double *evidence  = accum_const_data(acc, ACCUM_EVIDENCE);
     const double *mutations = accum_const_data(acc, ACCUM_MUTATIONS);
     const double *squared   = accum_const_data(acc, ACCUM_MUTATIONS_SQUARED);
 

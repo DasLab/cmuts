@@ -86,19 +86,19 @@ void pairs_count(pairs *p, size_t len, const phmm_window *window)
 
     for (size_t a = from; a < to; a++) {
         size_t i  = (size_t)(window->origin + (hts_pos_t)a);
-        double si = window->spanned[a];
+        double ei = window->evidence[a];
         double mi = window->mutations[a];
         double ci = window->coverage[a];
 
         for (size_t b = a; b < to; b++) {
             size_t  j  = (size_t)(window->origin + (hts_pos_t)b);
-            double  sj = window->spanned[b];
+            double  ej = window->evidence[b];
             double  mj = window->mutations[b];
             double *at = cell(p, len, i, j);
 
-            at[PAIR_SPAN]    += si * sj;
-            at[PAIR_LEFT]    += mi * sj;
-            at[PAIR_RIGHT]   += si * mj;
+            at[PAIR_SPAN]    += ei * ej;
+            at[PAIR_LEFT]    += mi * ej;
+            at[PAIR_RIGHT]   += ei * mj;
             at[PAIR_BOTH]    += mi * mj;
             at[PAIR_COVERED] += ci * window->coverage[b];
         }

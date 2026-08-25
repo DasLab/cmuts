@@ -66,7 +66,7 @@ typedef struct {
     hts_pos_t     origin;      /* reference position of value 0 */
     size_t        len;
     const double *coverage;    /* base read there, weighted by its quality */
-    const double *spanned;     /* evidence the mutations are taken against */
+    const double *evidence;    /* what the mutations are taken against */
     const double *mutations;   /* events attributed to that position */
 } phmm_window;
 
