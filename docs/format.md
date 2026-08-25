@@ -10,18 +10,46 @@ The type indicated only applies when the corresponding dataset is written, as nu
 
 <!-- BEGIN GENERATED cmuts FIELDS -->
 {.field}
-### `reactivity`
+### `mismatches/rate`
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
 
-The reactivity at each base.
+The rate of mismatches at each base, over the coverage.
 
 {.field}
-### `error`
+### `mismatches/error`
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
 
-Standard error of the reactivity values.
+Binomial standard error of the mismatch rate.
+
+{.field}
+### `insertions/rate`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+The rate of insertions opened after each base, over the coverage.
+
+{.field}
+### `insertions/error`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+Binomial standard error of the insertion rate.
+
+{.field}
+### `deletions/rate`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+The rate of deletion runs ending at each base, over the coverage plus the deletions.
+
+{.field}
+### `deletions/error`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+Binomial standard error of the deletion rate.
 
 {.field}
 ### `norm`
@@ -49,21 +77,21 @@ The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other
 
 **Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
 
-The number of reads contributing to the reactivity.
+The number of reads contributing to the rates.
 
 {.field}
 ### `reads/lengths`
 
 **Shape** `(n, 2l)` · **Type** `uint64` · **Fill** `0`
 
-The number of reads contributing to the reactivity, binned by length.
+The number of reads contributing to the rates, binned by length.
 
 {.field}
 ### `reads/rejected`
 
 **Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
 
-The number of reads aligned to the reference but not contributing to the reactivity.
+The number of reads aligned to the reference but not contributing to the rates.
 
 {.field}
 ### `reads/unmapped`

@@ -13,7 +13,6 @@
 #include "format.h"
 #include "pairs.h"
 #include "params.h"
-#include "phmm.h"
 #include "phred.h"
 
 static const cli_choice VERIFY_CHOICES[] = {
@@ -158,7 +157,7 @@ static const cli_option OPTIONS[] = {
         .type    = OPT_DOUBLE,
         .offset  = offsetof(cli_args, pipeline.rate_config.min_depth),
         .metavar = "D",
-        .help    = "evidence a position needs before its rate is written",
+        .help    = "depth a position needs before its rates are written",
         .minimum = 0,
         .maximum = CLI_UNBOUNDED,
     },
@@ -168,7 +167,7 @@ static const cli_option OPTIONS[] = {
         .type    = OPT_SIZE,
         .offset  = offsetof(cli_args, pipeline.rate_config.nan_5p),
         .metavar = "N",
-        .help    = "write NaN reactivity and error for this many bases at the 5' end",
+        .help    = "write NaN rates and errors for this many bases at the 5' end",
         .minimum = 0,
         .maximum = CLI_UNBOUNDED,
     },
@@ -178,7 +177,7 @@ static const cli_option OPTIONS[] = {
         .type    = OPT_SIZE,
         .offset  = offsetof(cli_args, pipeline.rate_config.nan_3p),
         .metavar = "N",
-        .help    = "write NaN reactivity and error for this many bases at the 3' end",
+        .help    = "write NaN rates and errors for this many bases at the 3' end",
         .minimum = 0,
         .maximum = CLI_UNBOUNDED,
     },
@@ -191,37 +190,6 @@ static const cli_option OPTIONS[] = {
         .metavar     = "FILE",
         .help        = "read the pair HMM's rates from this file",
         .unset_label = "built in",
-    },
-
-    {
-        .group   = "Counting",
-        .name    = "substitution-weight",
-        .type    = OPT_DOUBLE,
-        .offset  = offsetof(cli_args, pipeline.tally_config.weights.weight[PHMM_SUBSTITUTION]),
-        .metavar = "W",
-        .help    = "what a substitution counts towards the mutation total",
-        .minimum = 0,
-        .maximum = 1,
-    },
-    {
-        .group   = "Counting",
-        .name    = "deletion-weight",
-        .type    = OPT_DOUBLE,
-        .offset  = offsetof(cli_args, pipeline.tally_config.weights.weight[PHMM_DELETION]),
-        .metavar = "W",
-        .help    = "what a deletion counts towards the mutation total",
-        .minimum = 0,
-        .maximum = 1,
-    },
-    {
-        .group   = "Counting",
-        .name    = "insertion-weight",
-        .type    = OPT_DOUBLE,
-        .offset  = offsetof(cli_args, pipeline.tally_config.weights.weight[PHMM_INSERTION]),
-        .metavar = "W",
-        .help    = "what an insertion counts towards the mutation total",
-        .minimum = 0,
-        .maximum = 1,
     },
 
     {

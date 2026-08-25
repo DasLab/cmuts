@@ -36,8 +36,8 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 <!-- BEGIN GENERATED cmuts-norm DATASETS -->
 | Dataset | Source |
 | --- | --- |
-| [`reactivity`](format.md#reactivity) | Divided by the norm. |
-| [`error`](format.md#error) | Divided by the norm. |
+| [`mismatches/rate`](format.md#mismatchesrate) | Divided by the norm. |
+| [`mismatches/error`](format.md#mismatcheserror) | Divided by the norm. |
 | [`norm`](format.md#norm) | Estimated per the specified scheme. |
 | [`coverage`](format.md#coverage) | Copied from the input. |
 | [`sequence`](format.md#sequence) | Copied from the input. |

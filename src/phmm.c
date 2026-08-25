@@ -63,12 +63,13 @@ struct phmm_scratch {
     /* Two rows suffice: only the current row and the one below it are read. */
     band_cell *backward;
     double    *coverage;   /* the window returned to the caller */
-    double    *evidence;
-    double    *mutations;
+    double    *mismatches;
+    double    *insertions;
+    double    *deletions;
     size_t     rows;         /* rows places and scale are sized for */
     size_t     matrix_rows;  /* rows the forward matrix is sized for */
     size_t     widest;       /* cells a row of it holds */
-    size_t     window;       /* positions the last three are sized for */
+    size_t     window;       /* positions the last four are sized for */
 };
 
 /* A stretch of the reference: where it begins and how far it runs. */
@@ -101,22 +102,9 @@ typedef struct {
 /* The model                                                                 */
 /* ------------------------------------------------------------------------ */
 
-phmm_weights phmm_default_weights(void)
-{
-    return (phmm_weights){
-        .weight = {
-            [PHMM_SUBSTITUTION] = 1.0,
-            [PHMM_DELETION]     = 1.0,
-            [PHMM_INSERTION]    = 0.0,
-        },
-    };
-}
-
-void phmm_build(phmm *model, const phmm_params *params,
-                const phmm_weights *weights)
+void phmm_build(phmm *model, const phmm_params *params)
 {
     model->params                 = *params;
-    model->weights                = *weights;
     model->match_to_insertion     = params->open_insertion;
     model->match_to_deletion      = params->open_deletion;
     model->match_to_match         = 1.0 - params->open_insertion
@@ -516,17 +504,14 @@ static phmm_status forward(const context *ctx)
 /* Accumulating a row into the window                                        */
 /* ------------------------------------------------------------------------ */
 
-/* Each reference position collects three totals: coverage, evidence, and
- * mutations. A pairing covers the position it pairs and is evidence at it,
- * and adds as mutation the part of its posterior that a template modification
- * explains. A deletion adds no coverage and counts as one mutation at the end
- * of its run, since reverse transcription reads the template from the 3' end.
- * A deletion and an insertion each add as evidence the same weighted amount
- * they count as mutation, so a weight of zero removes either entirely: the
- * read records nothing at a deleted position, so a deletion is evidence of a
- * modification or nothing, never evidence against one. */
+/* Each reference position collects four totals: coverage and one per event
+ * kind. A pairing covers the position it pairs, and adds as mismatch the part
+ * of its posterior that a template modification explains. A deletion adds no
+ * coverage and counts once at the end of its run, since reverse transcription
+ * reads the template from the 3' end. An insertion counts at the position its
+ * run opens after. */
 
-/* The three window fields, each advanced to where the row's first cell enters
+/* The four window fields, each advanced to where the row's first cell enters
  * the window, so a cell addresses its positions by its own index with no
  * bounds check. window_of guarantees that every position a row can address
  * lies inside the window. The band is not clamped, so a row near either end
@@ -534,8 +519,9 @@ static phmm_status forward(const context *ctx)
  * contributions. */
 typedef struct {
     double *coverage;
-    double *evidence;
-    double *mutations;
+    double *mismatches;
+    double *insertions;
+    double *deletions;
 } landing;
 
 static landing landing_of(const context *ctx, size_t i)
@@ -545,31 +531,10 @@ static landing landing_of(const context *ctx, size_t i)
                                    - ctx->window.origin);
 
     return (landing){
-        .coverage  = scratch->coverage + at,
-        .evidence  = scratch->evidence + at,
-        .mutations = scratch->mutations + at,
-    };
-}
-
-/* The weight of one event of each mutation kind, with every factor of the
- * event's posterior that is constant along the row folded in. Valid only for
- * a row with a row above it. */
-typedef struct {
-    double substitution;
-    double deletion;
-    double insertion;
-} weighing;
-
-static weighing weighing_of(const context *ctx, size_t i)
-{
-    const phmm   *model  = ctx->model;
-    const double *weight = model->weights.weight;
-
-    return (weighing){
-        .substitution = weight[PHMM_SUBSTITUTION],
-        .deletion     = weight[PHMM_DELETION] * model->deletion_to_match,
-        .insertion    = weight[PHMM_INSERTION] * model->match_to_insertion
-                      * UNINFORMATIVE * ctx->scratch->scale[i],
+        .coverage   = scratch->coverage + at,
+        .mismatches = scratch->mismatches + at,
+        .insertions = scratch->insertions + at,
+        .deletions  = scratch->deletions + at,
     };
 }
 
@@ -581,33 +546,42 @@ typedef struct {
     scaled_row        front;
     scaled_row        above;
     const cell_terms *terms;
-    weighing          weight;
     landing           at;
     hts_pos_t         up;           /* to the same position, one row up */
     hts_pos_t         above_width;
+    /* The posterior factors constant along the row: the transition a deletion
+     * run closes on, and the opening of an insertion with its emission and the
+     * row's scale folded in. */
+    double            close_deletion;
+    double            open_insertion;
     /* The pending contribution to the position the next cell completes. */
     double            coverage;
-    double            evidence;
-    double            mutations;
+    double            mismatches;
+    double            deletions;
 } accumulation;
 
 static accumulation accumulation_of(const context *ctx, size_t i)
 {
+    const phmm *model = ctx->model;
+
     return (accumulation){
-        .front       = scaled_row_of(ctx, i),
-        .above       = scaled_row_of(ctx, i - 1),
-        .terms       = terms_of(ctx, i),
-        .weight      = weighing_of(ctx, i),
-        .at          = landing_of(ctx, i),
-        .up          = shift_between(ctx, i - 1, i),
-        .above_width = width_at(ctx, i - 1),
+        .front          = scaled_row_of(ctx, i),
+        .above          = scaled_row_of(ctx, i - 1),
+        .terms          = terms_of(ctx, i),
+        .at             = landing_of(ctx, i),
+        .up             = shift_between(ctx, i - 1, i),
+        .above_width    = width_at(ctx, i - 1),
+        .close_deletion = model->deletion_to_match,
+        .open_insertion = model->match_to_insertion * UNINFORMATIVE
+                        * ctx->scratch->scale[i],
     };
 }
 
 /* Accumulates cell k of the row: writes the position the cell completes, and
  * holds the cell's own contribution for the position to its left. back is the
  * cell's backward states. pairing is the backward pairing of the row below,
- * which a deletion run closes against. */
+ * which a deletion run closes against. An insertion has nothing pending: its
+ * whole posterior lands at the position its run opens after. */
 static void accumulate_cell(accumulation *acc, hts_pos_t k,
                             const double *back, double pairing)
 {
@@ -615,31 +589,30 @@ static void accumulate_cell(accumulation *acc, hts_pos_t k,
     double    matched = forward_at(&acc->front, k, STATE_MATCH);
     double    skipped = forward_at(&acc->front, k, STATE_DELETION);
     double    paired  = matched * back[STATE_MATCH];
-    double    deleted = acc->weight.deletion * skipped * pairing;
+    double    deleted = acc->close_deletion * skipped * pairing;
     double    carried = within(opening, acc->above_width)
-                      ? acc->weight.insertion
+                      ? acc->open_insertion
                       * forward_at(&acc->above, opening, STATE_MATCH)
                       * back[STATE_INSERTION]
                       : 0.0;
 
-    acc->at.coverage[k + 1]  += acc->coverage;
-    acc->at.evidence[k + 1]  += acc->evidence + carried;
-    acc->at.mutations[k + 1] += acc->mutations + carried;
+    acc->at.coverage[k + 1]   += acc->coverage;
+    acc->at.mismatches[k + 1] += acc->mismatches;
+    acc->at.deletions[k + 1]  += acc->deletions;
+    acc->at.insertions[k + 1] += carried;
 
-    acc->coverage  = paired;
-    acc->evidence  = paired + deleted;
-    acc->mutations = acc->weight.substitution * paired
-                   * acc->terms[k].modification
-                   + deleted;
+    acc->coverage   = paired;
+    acc->mismatches = paired * acc->terms[k].modification;
+    acc->deletions  = deleted;
 }
 
 /* Writes the pending contribution after the leftmost cell, which completes
  * the row's last open position. */
 static void accumulate_end(const accumulation *acc)
 {
-    acc->at.coverage[0]  += acc->coverage;
-    acc->at.evidence[0]  += acc->evidence;
-    acc->at.mutations[0] += acc->mutations;
+    acc->at.coverage[0]   += acc->coverage;
+    acc->at.mismatches[0] += acc->mismatches;
+    acc->at.deletions[0]  += acc->deletions;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -868,8 +841,9 @@ void phmm_scratch_destroy(phmm_scratch *scratch)
     free(scratch->scale);
     free(scratch->backward);
     free(scratch->coverage);
-    free(scratch->evidence);
-    free(scratch->mutations);
+    free(scratch->mismatches);
+    free(scratch->insertions);
+    free(scratch->deletions);
     free(scratch);
 }
 
@@ -948,28 +922,33 @@ static int grow_band(phmm_scratch *scratch, size_t rows, size_t widest)
 static int grow_window(phmm_scratch *scratch, size_t window)
 {
     double *coverage;
-    double *evidence;
-    double *mutations;
+    double *mismatches;
+    double *insertions;
+    double *deletions;
 
     if (window <= scratch->window) {
         return 0;
     }
 
-    coverage  = realloc(scratch->coverage, window * sizeof *coverage);
-    evidence  = realloc(scratch->evidence, window * sizeof *evidence);
-    mutations = realloc(scratch->mutations, window * sizeof *mutations);
+    coverage   = realloc(scratch->coverage, window * sizeof *coverage);
+    mismatches = realloc(scratch->mismatches, window * sizeof *mismatches);
+    insertions = realloc(scratch->insertions, window * sizeof *insertions);
+    deletions  = realloc(scratch->deletions, window * sizeof *deletions);
 
     if (coverage) {
         scratch->coverage = coverage;
     }
-    if (evidence) {
-        scratch->evidence = evidence;
+    if (mismatches) {
+        scratch->mismatches = mismatches;
     }
-    if (mutations) {
-        scratch->mutations = mutations;
+    if (insertions) {
+        scratch->insertions = insertions;
+    }
+    if (deletions) {
+        scratch->deletions = deletions;
     }
 
-    if (!coverage || !evidence || !mutations) {
+    if (!coverage || !mismatches || !insertions || !deletions) {
         return -1;
     }
 
@@ -1032,8 +1011,9 @@ static void clear_window(const context *ctx)
     size_t        len     = ctx->window.len;
 
     memset(scratch->coverage, 0, len * sizeof *scratch->coverage);
-    memset(scratch->evidence, 0, len * sizeof *scratch->evidence);
-    memset(scratch->mutations, 0, len * sizeof *scratch->mutations);
+    memset(scratch->mismatches, 0, len * sizeof *scratch->mismatches);
+    memset(scratch->insertions, 0, len * sizeof *scratch->insertions);
+    memset(scratch->deletions, 0, len * sizeof *scratch->deletions);
 }
 
 static bool prepare(context *ctx)
@@ -1110,11 +1090,12 @@ phmm_status phmm_run(const phmm *model, const phred *quality,
         return status;
     }
 
-    out->origin    = ctx.window.origin;
-    out->len       = ctx.window.len;
-    out->coverage  = scratch->coverage;
-    out->evidence  = scratch->evidence;
-    out->mutations = scratch->mutations;
+    out->origin     = ctx.window.origin;
+    out->len        = ctx.window.len;
+    out->coverage   = scratch->coverage;
+    out->mismatches = scratch->mismatches;
+    out->insertions = scratch->insertions;
+    out->deletions  = scratch->deletions;
 
     return PHMM_OK;
 }

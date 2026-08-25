@@ -14,9 +14,9 @@
  * These are not the fields written out; format.h keeps a table of its own. */
 typedef enum {
     ACCUM_COVERAGE,
-    ACCUM_EVIDENCE,
-    ACCUM_MUTATIONS,
-    ACCUM_MUTATIONS_SQUARED,
+    ACCUM_MISMATCHES,
+    ACCUM_INSERTIONS,
+    ACCUM_DELETIONS,
     ACCUM_LENGTHS,
     ACCUM_READS,
     ACCUM_FILTERED,

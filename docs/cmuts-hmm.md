@@ -48,8 +48,12 @@ Unmapped reads are rejected by nature of having no reference to compute mutation
 <!-- BEGIN GENERATED cmuts-hmm DATASETS -->
 | Dataset | Source |
 | --- | --- |
-| [`reactivity`](format.md#reactivity) | Estimated by the HMM. |
-| [`error`](format.md#error) | The standard error of the rate at the position's depth. |
+| [`mismatches/rate`](format.md#mismatchesrate) | Estimated by the HMM. |
+| [`mismatches/error`](format.md#mismatcheserror) | The binomial standard error of the rate at the position's depth. |
+| [`insertions/rate`](format.md#insertionsrate) | Estimated by the HMM. |
+| [`insertions/error`](format.md#insertionserror) | The binomial standard error of the rate at the position's depth. |
+| [`deletions/rate`](format.md#deletionsrate) | Estimated by the HMM. |
+| [`deletions/error`](format.md#deletionserror) | The binomial standard error of the rate at the position's depth. |
 | [`coverage`](format.md#coverage) | Estimated by the HMM. |
 | [`sequence`](format.md#sequence) | Tokenized from the FASTA. |
 | [`reads/lengths`](format.md#readslengths) | The read length reported in the alignment. |
@@ -95,13 +99,10 @@ Unmapped reads are rejected by nature of having no reference to compute mutation
 | `--band N` | reference positions the marginal may look either side of the CIGAR (default 2) |
 | `--min-phred Q` | assign bases below this the maximum sequencing error (0 to 255; default 0) |
 | `--pairwise STATS` | write these statistics of how often two positions are modified together (correlation, conditional, none; default none) |
-| `--min-depth D` | evidence a position needs before its rate is written (default 1) |
-| `--nan-5p N` | write NaN reactivity and error for this many bases at the 5' end (default 0) |
-| `--nan-3p N` | write NaN reactivity and error for this many bases at the 3' end (default 0) |
+| `--min-depth D` | depth a position needs before its rates are written (default 1) |
+| `--nan-5p N` | write NaN rates and errors for this many bases at the 5' end (default 0) |
+| `--nan-3p N` | write NaN rates and errors for this many bases at the 3' end (default 0) |
 | `--params FILE` | read the pair HMM's rates from this file (default: built in) |
-| `--substitution-weight W` | what a substitution counts towards the mutation total (0 to 1; default 1) |
-| `--deletion-weight W` | what a deletion counts towards the mutation total (0 to 1; default 1) |
-| `--insertion-weight W` | what an insertion counts towards the mutation total (0 to 1; default 0) |
 
 ### Performance
 

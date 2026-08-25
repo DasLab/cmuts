@@ -19,8 +19,12 @@
 /* The fields an output holds, in the order the documentation lists them: the ones every
  * reader of an output wants first. */
 typedef enum {
-    FMT_REACTIVITY,
-    FMT_ERROR,
+    FMT_MISMATCH_RATE,
+    FMT_MISMATCH_ERROR,
+    FMT_INSERTION_RATE,
+    FMT_INSERTION_ERROR,
+    FMT_DELETION_RATE,
+    FMT_DELETION_ERROR,
     FMT_NORM,
     FMT_COVERAGE,
     FMT_SEQUENCE,

@@ -10,13 +10,13 @@
 static const char SUMMED[] = "Summed over the inputs.";
 
 static const fmt_written WRITTEN[] = {
-    { .id = FMT_REACTIVITY,
+    { .id = FMT_MISMATCH_RATE,
       .how = "Sample over control.",
-      .depends = FMT_DEPENDS(FMT_REACTIVITY),
+      .depends = FMT_DEPENDS(FMT_MISMATCH_RATE),
       .required = true },
-    { .id = FMT_ERROR,
+    { .id = FMT_MISMATCH_ERROR,
       .how = "Propagated from the inputs.",
-      .depends = FMT_DEPENDS(FMT_REACTIVITY, FMT_ERROR) },
+      .depends = FMT_DEPENDS(FMT_MISMATCH_RATE, FMT_MISMATCH_ERROR) },
     { .id = FMT_COVERAGE,  .how = SUMMED, .depends = FMT_DEPENDS(FMT_COVERAGE) },
     { .id = FMT_SEQUENCE,
       .how = "Copied from the inputs.",

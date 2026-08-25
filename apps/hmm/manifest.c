@@ -9,10 +9,16 @@
  * squares are written only when they are asked for. */
 static const char HMM[] = "Estimated by the HMM.";
 
+static const char BINOMIAL[] =
+    "The binomial standard error of the rate at the position's depth.";
+
 static const fmt_written WRITTEN[] = {
-    { .id = FMT_REACTIVITY, .how = HMM },
-    { .id = FMT_ERROR,
-      .how = "The standard error of the rate at the position's depth." },
+    { .id = FMT_MISMATCH_RATE,   .how = HMM },
+    { .id = FMT_MISMATCH_ERROR,  .how = BINOMIAL },
+    { .id = FMT_INSERTION_RATE,  .how = HMM },
+    { .id = FMT_INSERTION_ERROR, .how = BINOMIAL },
+    { .id = FMT_DELETION_RATE,   .how = HMM },
+    { .id = FMT_DELETION_ERROR,  .how = BINOMIAL },
     { .id = FMT_COVERAGE,  .how = HMM },
     { .id = FMT_SEQUENCE,  .how = "Tokenized from the FASTA." },
     { .id = FMT_LENGTHS,   .how = "The read length reported in the alignment." },

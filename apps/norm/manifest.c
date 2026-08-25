@@ -11,16 +11,16 @@ static const char DIVIDED[] = "Divided by the norm.";
 static const char COPIED[]  = "Copied from the input.";
 
 static const fmt_written WRITTEN[] = {
-    { .id = FMT_REACTIVITY,
+    { .id = FMT_MISMATCH_RATE,
       .how = DIVIDED,
-      .depends = FMT_DEPENDS(FMT_REACTIVITY),
+      .depends = FMT_DEPENDS(FMT_MISMATCH_RATE),
       .required = true },
-    { .id = FMT_ERROR,
+    { .id = FMT_MISMATCH_ERROR,
       .how = DIVIDED,
-      .depends = FMT_DEPENDS(FMT_ERROR) },
+      .depends = FMT_DEPENDS(FMT_MISMATCH_ERROR) },
     { .id = FMT_NORM,
       .how = "Estimated per the specified scheme.",
-      .depends = FMT_DEPENDS(FMT_REACTIVITY, FMT_COVERAGE),
+      .depends = FMT_DEPENDS(FMT_MISMATCH_RATE, FMT_COVERAGE),
       .required = true },
     { .id = FMT_COVERAGE,  .how = COPIED, .depends = FMT_DEPENDS(FMT_COVERAGE) },
     { .id = FMT_SEQUENCE,  .how = COPIED, .depends = FMT_DEPENDS(FMT_SEQUENCE) },

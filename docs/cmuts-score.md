@@ -35,7 +35,7 @@ Positions containing neither dots nor brackets are not scored.
 | Dataset | Input |
 | --- | --- |
 | [`coverage`](format.md#coverage) | required |
-| [`reactivity`](format.md#reactivity) | required |
+| [`mismatches/rate`](format.md#mismatchesrate) | required |
 
 All other datasets in an input are ignored.
 <!-- END GENERATED cmuts-score DATASETS -->

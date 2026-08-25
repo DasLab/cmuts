@@ -1,4 +1,4 @@
-/* rates.h -- what the evidence gathered at a position comes to.
+/* rates.h -- each event kind's rate at a position, over its own denominator.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -10,20 +10,32 @@
 
 #include "accum.h"
 
-/* Which positions get a rate: those with enough evidence and outside the masked ends. */
+/* Which positions get a rate: those whose denominator is deep enough and which lie
+ * outside the masked ends. */
 typedef struct {
-    double min_depth;   /* evidence a position must carry, met by reaching it */
+    double min_depth;   /* depth a channel's denominator must reach */
     size_t nan_5p;      /* bases at the 5' end written as NaN */
     size_t nan_3p;      /* bases at the 3' end written as NaN */
 } rate_config;
 
 rate_config rate_defaults(void);
 
-/* Write into out the mutations at each of len positions over the evidence for them, and
- * the standard error of that rate. Both are NaN at the same positions: where the evidence
- * falls short, and within the masked ends. out must not alias the accumulator's arrays,
- * as restrict states. */
-void rate_reactivity(const rate_config *cfg, const accum *acc, size_t len,
-                     double *restrict out);
-void rate_error(const rate_config *cfg, const accum *acc, size_t len,
-                double *restrict out);
+/* The event kinds a rate is computed for. A mismatch or insertion can happen only where
+ * a read base pairs, so those rates are over the coverage. A deletion run's end is tried
+ * wherever a read reads the base or ends a run there, so its rate is over the coverage
+ * plus the deletions themselves. */
+typedef enum {
+    RATE_MISMATCHES,
+    RATE_INSERTIONS,
+    RATE_DELETIONS,
+    RATE_N_CHANNELS,
+} rate_channel;
+
+/* Write into out one channel's events at each of len positions over its denominator, and
+ * the binomial standard error of that rate. Both are NaN at the same positions: where
+ * the denominator falls short, and within the masked ends. out must not alias the
+ * accumulator's arrays, as restrict states. */
+void rate_of(const rate_config *cfg, const accum *acc, size_t len,
+             rate_channel channel, double *restrict out);
+void rate_error_of(const rate_config *cfg, const accum *acc, size_t len,
+                   rate_channel channel, double *restrict out);

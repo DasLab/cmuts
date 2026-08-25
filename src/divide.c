@@ -28,8 +28,8 @@ typedef enum {
 
 static const div_rule RULES[FMT_N_FIELDS] = {
     [FMT_COVERAGE]   = DIV_SUM,
-    [FMT_REACTIVITY] = DIV_RATIO,
-    [FMT_ERROR]      = DIV_RATIO_ERROR,
+    [FMT_MISMATCH_RATE] = DIV_RATIO,
+    [FMT_MISMATCH_ERROR]      = DIV_RATIO_ERROR,
     [FMT_LENGTHS]    = DIV_SUM,
     [FMT_READS]      = DIV_SUM,
     [FMT_REJECTED]   = DIV_SUM,
@@ -58,10 +58,10 @@ static void ratio_f32(const float *rates, const float *control, float *out, size
  * control does. */
 static void ratio_error_f32(const combine_rows *rows, float *out, size_t n)
 {
-    const float *rate          = combine_row(rows, DIV_RATES, FMT_REACTIVITY);
-    const float *control       = combine_row(rows, DIV_CONTROL, FMT_REACTIVITY);
-    const float *rate_error    = combine_row(rows, DIV_RATES, FMT_ERROR);
-    const float *control_error = combine_row(rows, DIV_CONTROL, FMT_ERROR);
+    const float *rate          = combine_row(rows, DIV_RATES, FMT_MISMATCH_RATE);
+    const float *control       = combine_row(rows, DIV_CONTROL, FMT_MISMATCH_RATE);
+    const float *rate_error    = combine_row(rows, DIV_RATES, FMT_MISMATCH_ERROR);
+    const float *control_error = combine_row(rows, DIV_CONTROL, FMT_MISMATCH_ERROR);
 
     for (size_t i = 0; i < n; i++) {
         float d = control[i];

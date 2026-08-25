@@ -388,7 +388,7 @@ static size_t collect(context *ctx, const cm_fasta_record *ref,
 /* Reads one reference's row into the context. */
 static int read_row(context *ctx, int32_t tid, char *error, size_t error_len)
 {
-    if (h5reader_field(ctx->reader, FMT_REACTIVITY, tid, ctx->reactivity) < 0
+    if (h5reader_field(ctx->reader, FMT_MISMATCH_RATE, tid, ctx->reactivity) < 0
         || h5reader_field(ctx->reader, FMT_COVERAGE, tid, ctx->coverage) < 0) {
         snprintf(error, error_len, "%s: %s", ctx->cfg->input_path,
                  h5reader_error(ctx->reader));
@@ -474,7 +474,7 @@ static int fail_memory(char *error, size_t error_len)
 static int allocate(context *ctx, size_t cap, char *error, size_t error_len)
 {
     ctx->cap        = cap;
-    ctx->reactivity = malloc(fmt_values(FMT_REACTIVITY, cap, cap) * sizeof *ctx->reactivity);
+    ctx->reactivity = malloc(fmt_values(FMT_MISMATCH_RATE, cap, cap) * sizeof *ctx->reactivity);
     ctx->coverage   = malloc(fmt_values(FMT_COVERAGE, cap, cap) * sizeof *ctx->coverage);
     ctx->points     = malloc(cap * sizeof *ctx->points);
 

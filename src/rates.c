@@ -1,4 +1,4 @@
-/* rates.c -- the mutations at a position against the evidence for them.
+/* rates.c -- the events of each kind at a position over that channel's denominator.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -12,11 +12,31 @@ rate_config rate_defaults(void)
     return (rate_config){ .min_depth = 1 };
 }
 
-/* Returns whether a position carries enough evidence to report on. Some is always
- * required: a depth of zero does not report on a position with none. */
-static bool meets_min_depth(double wanted, double evidence)
+/* Returns the accumulated events a channel counts. */
+static accum_field_id events_of(rate_channel channel)
 {
-    return evidence > 0.0 && evidence >= wanted;
+    switch (channel) {
+        case RATE_MISMATCHES: return ACCUM_MISMATCHES;
+        case RATE_INSERTIONS: return ACCUM_INSERTIONS;
+        case RATE_DELETIONS:  return ACCUM_DELETIONS;
+        case RATE_N_CHANNELS: break;
+    }
+
+    return ACCUM_N_FIELDS;
+}
+
+/* Returns a channel's trials at one position. Only a deletion is tried at the positions
+ * its events fall on, since a deleted base is read by no read. */
+static double depth_at(rate_channel channel, double coverage, double events)
+{
+    return channel == RATE_DELETIONS ? coverage + events : coverage;
+}
+
+/* Returns whether a position carries enough depth to report on. Some is always required:
+ * a depth of zero does not report on a position with none. */
+static bool meets_min_depth(double wanted, double depth)
+{
+    return depth > 0.0 && depth >= wanted;
 }
 
 /* Returns whether a position falls within a masked end of the reference. */
@@ -25,84 +45,71 @@ static bool masked_at(const rate_config *cfg, size_t i, size_t len)
     return i < cfg->nan_5p || len - i <= cfg->nan_3p;
 }
 
-/* Returns the mutations at a position over the evidence for them, held to one. Every
- * weight is a share of an event and a deletion or insertion spans what it contributes,
- * so the ratio cannot exceed one except by rounding. */
-static double rate_of(double mutations, double evidence)
+/* Returns the events at a position over its depth, held to one. Every event is a share
+ * of the depth it is tried against, so the ratio cannot exceed one except by rounding. */
+static double ratio_of(double events, double depth)
 {
-    double rate = evidence > 0.0 ? mutations / evidence : 0.0;
+    double rate = depth > 0.0 ? events / depth : 0.0;
 
     return rate > 1.0 ? 1.0 : rate;
 }
 
-/* Returns whether a position reports a rate: it carries enough evidence and lies
- * outside the masked ends. */
-static bool reported_at(const rate_config *cfg, double evidence, size_t i, size_t len)
+/* Returns whether a position reports a rate: it carries enough depth and lies outside
+ * the masked ends. */
+static bool reported_at(const rate_config *cfg, double depth, size_t i, size_t len)
 {
-    return meets_min_depth(cfg->min_depth, evidence) && !masked_at(cfg, i, len);
+    return meets_min_depth(cfg->min_depth, depth) && !masked_at(cfg, i, len);
 }
 
 /* Returns one position's rate, or NaN where none is reported. */
-static double reactivity_at(const rate_config *cfg, double mutations, double evidence,
-                            size_t i, size_t len)
+static double rate_at(const rate_config *cfg, double events, double depth,
+                      size_t i, size_t len)
 {
-    if (!reported_at(cfg, evidence, i, len)) {
+    if (!reported_at(cfg, depth, i, len)) {
         return (double)NAN;
     }
 
-    return rate_of(mutations, evidence);
+    return ratio_of(events, depth);
 }
 
-/* Returns what the reads left undecided at a position: the posterior variance of its
- * count, from the two accumulated moments. Each read's event is Bernoulli with its
- * posterior chance m, contributing m(1 - m); certain calls contribute nothing, so hard
- * counts give zero. Rounding on weighted events can push the difference below zero,
- * which is held there. */
-static double ambiguity_of(double mutations, double squared)
-{
-    double ambiguity = mutations - squared;
-
-    return ambiguity > 0.0 ? ambiguity : 0.0;
-}
-
-/* Returns the standard error of one position's rate, or NaN where none is reported.
- * Its variance is the molecular sampling of the rate over the evidence, plus the
- * ambiguity of the calls behind it; with every call certain the second term vanishes
- * and the plain binomial error remains. */
-static double error_at(const rate_config *cfg, double mutations, double squared,
-                       double evidence, size_t i, size_t len)
+/* Returns the binomial standard error of one position's rate, or NaN where none is
+ * reported. */
+static double error_at(const rate_config *cfg, double events, double depth,
+                       size_t i, size_t len)
 {
     double rate;
 
-    if (!reported_at(cfg, evidence, i, len)) {
+    if (!reported_at(cfg, depth, i, len)) {
         return (double)NAN;
     }
 
-    rate = rate_of(mutations, evidence);
+    rate = ratio_of(events, depth);
 
-    return sqrt(rate * (1.0 - rate) / evidence
-              + ambiguity_of(mutations, squared) / (evidence * evidence));
+    return sqrt(rate * (1.0 - rate) / depth);
 }
 
-void rate_reactivity(const rate_config *cfg, const accum *acc, size_t len,
-                     double *restrict out)
+void rate_of(const rate_config *cfg, const accum *acc, size_t len,
+             rate_channel channel, double *restrict out)
 {
-    const double *evidence  = accum_const_data(acc, ACCUM_EVIDENCE);
-    const double *mutations = accum_const_data(acc, ACCUM_MUTATIONS);
+    const double *events   = accum_const_data(acc, events_of(channel));
+    const double *coverage = accum_const_data(acc, ACCUM_COVERAGE);
 
     for (size_t i = 0; i < len; i++) {
-        out[i] = reactivity_at(cfg, mutations[i], evidence[i], i, len);
+        double depth = depth_at(channel, coverage[i], events[i]);
+
+        out[i] = rate_at(cfg, events[i], depth, i, len);
     }
 }
 
-void rate_error(const rate_config *cfg, const accum *acc, size_t len,
-                double *restrict out)
+void rate_error_of(const rate_config *cfg, const accum *acc, size_t len,
+                   rate_channel channel, double *restrict out)
 {
-    const double *evidence  = accum_const_data(acc, ACCUM_EVIDENCE);
-    const double *mutations = accum_const_data(acc, ACCUM_MUTATIONS);
-    const double *squared   = accum_const_data(acc, ACCUM_MUTATIONS_SQUARED);
+    const double *events   = accum_const_data(acc, events_of(channel));
+    const double *coverage = accum_const_data(acc, ACCUM_COVERAGE);
 
     for (size_t i = 0; i < len; i++) {
-        out[i] = error_at(cfg, mutations[i], squared[i], evidence[i], i, len);
+        double depth = depth_at(channel, coverage[i], events[i]);
+
+        out[i] = error_at(cfg, events[i], depth, i, len);
     }
 }

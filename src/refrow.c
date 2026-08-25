@@ -106,11 +106,23 @@ static const double *values(refrow *r, fmt_field_id id, const char *seq, const a
         case FMT_NORM:
         case FMT_UNMAPPED:
         case FMT_N_FIELDS:   break;
-        case FMT_REACTIVITY:
-            rate_reactivity(&r->rates, acc, len, r->row);
+        case FMT_MISMATCH_RATE:
+            rate_of(&r->rates, acc, len, RATE_MISMATCHES, r->row);
             return r->row;
-        case FMT_ERROR:
-            rate_error(&r->rates, acc, len, r->row);
+        case FMT_MISMATCH_ERROR:
+            rate_error_of(&r->rates, acc, len, RATE_MISMATCHES, r->row);
+            return r->row;
+        case FMT_INSERTION_RATE:
+            rate_of(&r->rates, acc, len, RATE_INSERTIONS, r->row);
+            return r->row;
+        case FMT_INSERTION_ERROR:
+            rate_error_of(&r->rates, acc, len, RATE_INSERTIONS, r->row);
+            return r->row;
+        case FMT_DELETION_RATE:
+            rate_of(&r->rates, acc, len, RATE_DELETIONS, r->row);
+            return r->row;
+        case FMT_DELETION_ERROR:
+            rate_error_of(&r->rates, acc, len, RATE_DELETIONS, r->row);
             return r->row;
         case FMT_PAIRWISE_CORRELATION:
         case FMT_PAIRWISE_CONDITIONAL:

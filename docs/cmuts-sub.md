@@ -26,8 +26,8 @@ If any dataset does not match the expected shape or the sequences do not match, 
 <!-- BEGIN GENERATED cmuts-sub DATASETS -->
 | Dataset | Source |
 | --- | --- |
-| [`reactivity`](format.md#reactivity) | Treated less untreated. |
-| [`error`](format.md#error) | Propagated from the inputs. |
+| [`mismatches/rate`](format.md#mismatchesrate) | Treated less untreated. |
+| [`mismatches/error`](format.md#mismatcheserror) | Propagated from the inputs. |
 | [`coverage`](format.md#coverage) | Summed over the inputs. |
 | [`sequence`](format.md#sequence) | Copied from the inputs. |
 | [`reads/lengths`](format.md#readslengths) | Summed over the inputs. |

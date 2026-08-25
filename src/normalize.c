@@ -269,7 +269,7 @@ static void clip_f32(float *row, size_t n, double above)
  * left as it stands. */
 static bool is_scaled(fmt_field_id id)
 {
-    return id == FMT_REACTIVITY || id == FMT_ERROR;
+    return id == FMT_MISMATCH_RATE || id == FMT_MISMATCH_ERROR;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -313,7 +313,7 @@ static int gather_input(const normalize_config *cfg, rate_pool *p, h5reader *in,
                         const char *path, char *error, size_t error_len)
 {
     size_t  cap    = h5reader_capacity(in);
-    size_t  values = fmt_values(FMT_REACTIVITY, cap, cap);
+    size_t  values = fmt_values(FMT_MISMATCH_RATE, cap, cap);
     float  *rate   = calloc(values, sizeof *rate);
     float  *cover  = calloc(values, sizeof *cover);
     int     status = -1;
@@ -324,7 +324,7 @@ static int gather_input(const normalize_config *cfg, rate_pool *p, h5reader *in,
     }
 
     for (int32_t tid = 0; tid < h5reader_refs(in); tid++) {
-        if (h5reader_field(in, FMT_REACTIVITY, tid, rate) < 0 ||
+        if (h5reader_field(in, FMT_MISMATCH_RATE, tid, rate) < 0 ||
             h5reader_field(in, FMT_COVERAGE, tid, cover) < 0) {
             h5reader_fail(in, path, error, error_len);
             goto done;
@@ -415,7 +415,7 @@ static void transfer_row(const transfer *t, fmt_field_id id, size_t n)
 
     scale_f32(t->row, n, divisor(t->factor));
 
-    if (id == FMT_REACTIVITY) {
+    if (id == FMT_MISMATCH_RATE) {
         clip_f32(t->row, n, t->cfg->clip_above);
     }
 }

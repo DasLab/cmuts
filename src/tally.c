@@ -1,7 +1,7 @@
 /* tally.c -- one read's contribution to a reference.
  *
  * Runs the marginal over one read and adds the window it returns to the reference's
- * accumulator, clipping to the reference's bounds. The three counted quantities are
+ * accumulator, clipping to the reference's bounds. The four counted quantities are
  * described in phmm.c, which computes them.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
@@ -43,19 +43,14 @@ static void add_length(const context *ctx)
 }
 
 /* Adds the window's stretch on the reference to the four per-base fields, clipping once
- * rather than testing each position.
- *
- * The window holds one read, so its mutations value is the posterior chance this read
- * carries an event at the position. The squared value accumulates alongside it: the two
- * moments together give the posterior variance of the count, which the error reads.
- * The squared field equals what the diagonal of the pairwise both-modified cells holds,
- * kept here so the error never depends on the optional pairwise mode. */
+ * rather than testing each position. The window holds one read, so each event value is
+ * the posterior chance this read carries an event of that kind at the position. */
 static void add_window(const context *ctx, const phmm_window *window)
 {
-    double *coverage  = accum_data(ctx->target, ACCUM_COVERAGE);
-    double *evidence  = accum_data(ctx->target, ACCUM_EVIDENCE);
-    double *mutations = accum_data(ctx->target, ACCUM_MUTATIONS);
-    double *squared   = accum_data(ctx->target, ACCUM_MUTATIONS_SQUARED);
+    double *coverage   = accum_data(ctx->target, ACCUM_COVERAGE);
+    double *mismatches = accum_data(ctx->target, ACCUM_MISMATCHES);
+    double *insertions = accum_data(ctx->target, ACCUM_INSERTIONS);
+    double *deletions  = accum_data(ctx->target, ACCUM_DELETIONS);
     size_t  begin;
     size_t  end;
 
@@ -63,12 +58,11 @@ static void add_window(const context *ctx, const phmm_window *window)
 
     for (size_t i = begin; i < end; i++) {
         size_t pos = (size_t)(window->origin + (hts_pos_t)i);
-        double m   = window->mutations[i];
 
-        coverage[pos]  += window->coverage[i];
-        evidence[pos]  += window->evidence[i];
-        mutations[pos] += m;
-        squared[pos]   += m * m;
+        coverage[pos]   += window->coverage[i];
+        mismatches[pos] += window->mismatches[i];
+        insertions[pos] += window->insertions[i];
+        deletions[pos]  += window->deletions[i];
     }
 }
 
@@ -134,7 +128,6 @@ tally_config tally_defaults(void)
     return (tally_config){
         .band      = PHMM_DEFAULT_BAND,
         .min_phred = 0,
-        .weights   = phmm_default_weights(),
         .params    = phmm_defaults(),
     };
 }
@@ -142,7 +135,7 @@ tally_config tally_defaults(void)
 void tally_tables_build(tally_tables *tables, const tally_config *config)
 {
     phred_build(&tables->quality, config->min_phred);
-    phmm_build(&tables->model, &config->params, &config->weights);
+    phmm_build(&tables->model, &config->params);
     tables->band = config->band;
 }
 

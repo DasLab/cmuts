@@ -14,31 +14,11 @@
  * one or two base deletion, and wider scored no better on the two libraries tested. */
 #define PHMM_DEFAULT_BAND 2
 
-/* The kinds of event the mutation channel counts. */
-typedef enum {
-    PHMM_SUBSTITUTION,
-    PHMM_DELETION,
-    PHMM_INSERTION,
-    PHMM_N_EVENTS,
-} phmm_event;
-
-/* How much an event of each kind counts towards the mutation total, given that the event
- * happened. Read by the accumulation only, so the alignment does not depend on them. The
- * insertion weight also scales the span an insertion adds, so a weight of zero removes
- * insertions from both totals. */
-typedef struct {
-    double weight[PHMM_N_EVENTS];
-} phmm_weights;
-
-/* Substitutions and deletions at 1, insertions at 0. */
-phmm_weights phmm_default_weights(void);
-
 /* The parameters, with every transition they imply computed once. Insertion to deletion
  * and deletion to insertion are absent: an inserted base followed by a deleted one is a
  * substitution. A model is read-only once built, so every thread may share one. */
 typedef struct {
     phmm_params  params;
-    phmm_weights weights;
     double       match_to_match;
     double       match_to_insertion;
     double       match_to_deletion;
@@ -48,8 +28,7 @@ typedef struct {
     double       deletion_to_match;
 } phmm;
 
-void phmm_build(phmm *model, const phmm_params *params,
-                const phmm_weights *weights);
+void phmm_build(phmm *model, const phmm_params *params);
 
 /* Buffers one thread reuses across reads, grown to fit the longest read seen. */
 typedef struct phmm_scratch phmm_scratch;
@@ -63,11 +42,12 @@ void          phmm_scratch_destroy(phmm_scratch *scratch);
  * target, never assigned. The window may extend past either end of the reference; those
  * positions are never written, and phmm_window_bounds gives the range inside it. */
 typedef struct {
-    hts_pos_t     origin;      /* reference position of value 0 */
+    hts_pos_t     origin;       /* reference position of value 0 */
     size_t        len;
-    const double *coverage;    /* base read there, weighted by its quality */
-    const double *evidence;    /* what the mutations are taken against */
-    const double *mutations;   /* events attributed to that position */
+    const double *coverage;     /* base read there */
+    const double *mismatches;   /* template differences under the read bases */
+    const double *insertions;   /* insertions opened after that position */
+    const double *deletions;    /* deletion runs ending at that position */
 } phmm_window;
 
 /* Gives the window indices that fall inside a reference of len bases: from the first to

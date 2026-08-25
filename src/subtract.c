@@ -29,8 +29,8 @@ typedef enum {
 
 static const sub_rule RULES[FMT_N_FIELDS] = {
     [FMT_COVERAGE]   = SUB_SUM,
-    [FMT_REACTIVITY] = SUB_DIFFERENCE,
-    [FMT_ERROR]      = SUB_QUADRATURE,
+    [FMT_MISMATCH_RATE] = SUB_DIFFERENCE,
+    [FMT_MISMATCH_ERROR]      = SUB_QUADRATURE,
     [FMT_LENGTHS]    = SUB_SUM,
     [FMT_READS]      = SUB_SUM,
     [FMT_REJECTED]   = SUB_SUM,

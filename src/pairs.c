@@ -77,6 +77,19 @@ void pairs_add(pairs *dst, const pairs *src, size_t len)
 /* Counting                                                                  */
 /* ------------------------------------------------------------------------ */
 
+/* Returns the events of every kind a window holds at one position. */
+static double events_at(const phmm_window *window, size_t a)
+{
+    return window->mismatches[a] + window->insertions[a] + window->deletions[a];
+}
+
+/* Returns what a window's events at one position are counted against: the coverage,
+ * plus the events that pair no base there. */
+static double span_at(const phmm_window *window, size_t a)
+{
+    return window->coverage[a] + window->insertions[a] + window->deletions[a];
+}
+
 void pairs_count(pairs *p, size_t len, const phmm_window *window)
 {
     size_t from;
@@ -86,14 +99,14 @@ void pairs_count(pairs *p, size_t len, const phmm_window *window)
 
     for (size_t a = from; a < to; a++) {
         size_t i  = (size_t)(window->origin + (hts_pos_t)a);
-        double ei = window->evidence[a];
-        double mi = window->mutations[a];
+        double ei = span_at(window, a);
+        double mi = events_at(window, a);
         double ci = window->coverage[a];
 
         for (size_t b = a; b < to; b++) {
             size_t  j  = (size_t)(window->origin + (hts_pos_t)b);
-            double  ej = window->evidence[b];
-            double  mj = window->mutations[b];
+            double  ej = span_at(window, b);
+            double  mj = events_at(window, b);
             double *at = cell(p, len, i, j);
 
             at[PAIR_SPAN]    += ei * ej;
