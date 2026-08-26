@@ -1,20 +1,4 @@
-/* phmm.c -- a banded pair HMM over one read and the reference it was placed on.
- *
- * Three states: M pairs a read base with a reference base, I consumes a read
- * base with no reference base, D consumes a reference base with no read base.
- * Both indices are prefix lengths, so cell (i, j) is the first i placed read
- * bases against the first j reference bases, with the state giving the last
- * operation. A cell in M or I compares reference base j - 1 with read base
- * i - 1.
- *
- * Each read base carries a band of reference positions: what the CIGAR path
- * crosses on that row, plus a half-width on each side. Every probability is
- * conditional on the alignment staying inside the band. The band marginalizes
- * local ambiguity but does not correct a misplaced read. A band of 0
- * marginalizes over the CIGAR path only.
- *
- * Both passes divide each row by the forward row's total. A posterior is the
- * product of the two passes, with no separate normalizer and no logarithms.
+/* phmm.c -- a banded pair HMM.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -49,8 +33,7 @@ typedef struct {
  * does not hold. */
 #define OTHER_BASES ((double)(NUC_BASES - 1))
 
-/* Forward times backward sums to one on the first row. A finite departure past
- * this tolerance indicates an index error, not rounding, and the run stops. */
+/* Forward times backward sums to one on the first row within this tolerance. */
 #define NORMALIZATION_TOLERANCE 1e-6
 
 /* Rows are stored at the widest row's stride, so a row is located by
@@ -105,14 +88,14 @@ typedef struct {
 void phmm_build(phmm *model, const phmm_params *params)
 {
     model->params                 = *params;
-    model->match_to_insertion     = params->open_insertion;
-    model->match_to_deletion      = params->open_deletion;
     model->match_to_match         = 1.0 - params->open_insertion
                                         - params->open_deletion;
+    model->match_to_insertion     = 1.0 - params->extend_insertion;
+    model->match_to_deletion      = 1.0 - params->extend_deletion;
     model->insertion_to_insertion = params->extend_insertion;
-    model->insertion_to_match     = 1.0 - params->extend_insertion;
+    model->insertion_to_match     = params->open_insertion;
     model->deletion_to_deletion   = params->extend_deletion;
-    model->deletion_to_match      = 1.0 - params->extend_deletion;
+    model->deletion_to_match      = params->open_deletion;
 }
 
 /* Returns the chance a read base agrees with the base it was templated from.
@@ -416,24 +399,30 @@ static double deleted_from(const phmm *model, double left_match,
          + model->deletion_to_deletion * left_deletion;
 }
 
-/* Returns whether row i can hold a deletion. The first and last rows cannot:
- * the alignment neither starts nor ends in one. */
+/* Returns whether row i can hold a deletion. */
 static bool deletions_live(const context *ctx, size_t i)
 {
     return i > 0 && i + 1 < ctx->rows;
+}
+
+/* Returns whether row i can hold an insertion. */
+static bool insertions_live(const context *ctx, size_t i)
+{
+    return i > 1 && i + 1 < ctx->rows;
 }
 
 /* Fills row i of the forward pass and returns its unscaled total. Valid only
  * for a row with a row above it. */
 static double forward_row(const context *ctx, size_t i)
 {
-    const phmm *model = ctx->model;
-    descent     step  = descent_into(ctx, i);
-    band_cell  *row   = row_of(ctx, i);
-    cell_terms *terms = terms_of(ctx, i);
-    row_terms   each  = row_terms_of(ctx, i);
-    hts_pos_t   width = width_at(ctx, i);
-    bool        live  = deletions_live(ctx, i);
+    const phmm *model      = ctx->model;
+    descent     step       = descent_into(ctx, i);
+    band_cell  *row        = row_of(ctx, i);
+    cell_terms *terms      = terms_of(ctx, i);
+    row_terms   each       = row_terms_of(ctx, i);
+    hts_pos_t   width      = width_at(ctx, i);
+    bool        deletions  = deletions_live(ctx, i);
+    bool        insertions = insertions_live(ctx, i);
     /* The cell to the left, held in locals so each step of the deletion chain
      * does not wait on the preceding store. */
     double      left_match    = 0.0;
@@ -449,8 +438,8 @@ static double forward_row(const context *ctx, size_t i)
         terms[k] = terms_at(ctx, &each, position_of(ctx, i, k));
 
         paired   = paired_from(&step, k, terms[k].emission);
-        inserted = inserted_from(&step, k);
-        deleted  = live && k > 0
+        inserted = insertions ? inserted_from(&step, k) : 0.0;
+        deleted  = deletions && k > 0
                  ? deleted_from(model, left_match, left_deletion)
                  : 0.0;
 
@@ -504,13 +493,6 @@ static phmm_status forward(const context *ctx)
 /* Accumulating a row into the window                                        */
 /* ------------------------------------------------------------------------ */
 
-/* Each reference position collects four totals: coverage and one per event
- * kind. A pairing covers the position it pairs, and adds as mismatch the part
- * of its posterior that a template modification explains. A deletion adds no
- * coverage and counts once at the end of its run, since reverse transcription
- * reads the template from the 3' end. An insertion counts at the position its
- * run opens after. */
-
 /* The four window fields, each advanced to where the row's first cell enters
  * the window, so a cell addresses its positions by its own index with no
  * bounds check. window_of guarantees that every position a row can address
@@ -539,21 +521,17 @@ static landing landing_of(const context *ctx, size_t i)
 }
 
 /* The state of one row's accumulation into the window. Cells are accumulated
- * right to left, the order the backward pass forms them in. A position is
- * complete only when the cell to its left is reached, since that cell can
- * carry an insertion into it. Valid only for a row with a row above it. */
+ * right to left, the order the backward pass forms them in. The pairing of a
+ * position and the deletion of it are held by the cell to its right, so a
+ * position is complete only once the cell to its left is reached. */
 typedef struct {
     scaled_row        front;
-    scaled_row        above;
     const cell_terms *terms;
     landing           at;
-    hts_pos_t         up;           /* to the same position, one row up */
-    hts_pos_t         above_width;
-    /* The posterior factors constant along the row: the transition a deletion
-     * run closes on, and the opening of an insertion with its emission and the
-     * row's scale folded in. */
-    double            close_deletion;
-    double            open_insertion;
+    /* The two transitions a run begins on, which the matrix takes on the run's
+     * high edge. Both are constant along the row. */
+    double            begin_deletion;
+    double            begin_insertion;
     /* The pending contribution to the position the next cell completes. */
     double            coverage;
     double            mismatches;
@@ -565,42 +543,32 @@ static accumulation accumulation_of(const context *ctx, size_t i)
     const phmm *model = ctx->model;
 
     return (accumulation){
-        .front          = scaled_row_of(ctx, i),
-        .above          = scaled_row_of(ctx, i - 1),
-        .terms          = terms_of(ctx, i),
-        .at             = landing_of(ctx, i),
-        .up             = shift_between(ctx, i - 1, i),
-        .above_width    = width_at(ctx, i - 1),
-        .close_deletion = model->deletion_to_match,
-        .open_insertion = model->match_to_insertion * UNINFORMATIVE
-                        * ctx->scratch->scale[i],
+        .front           = scaled_row_of(ctx, i),
+        .terms           = terms_of(ctx, i),
+        .at              = landing_of(ctx, i),
+        .begin_deletion  = model->deletion_to_match,
+        .begin_insertion = model->insertion_to_match,
     };
 }
 
-/* Accumulates cell k of the row: writes the position the cell completes, and
- * holds the cell's own contribution for the position to its left. back is the
- * cell's backward states. pairing is the backward pairing of the row below,
- * which a deletion run closes against. An insertion has nothing pending: its
- * whole posterior lands at the position its run opens after. */
+/* Accumulates cell k of the row into the window. */
 static void accumulate_cell(accumulation *acc, hts_pos_t k,
                             const double *back, double pairing)
 {
-    hts_pos_t opening = k + acc->up;   /* this position, one row up */
-    double    matched = forward_at(&acc->front, k, STATE_MATCH);
-    double    skipped = forward_at(&acc->front, k, STATE_DELETION);
-    double    paired  = matched * back[STATE_MATCH];
-    double    deleted = acc->close_deletion * skipped * pairing;
-    double    carried = within(opening, acc->above_width)
-                      ? acc->open_insertion
-                      * forward_at(&acc->above, opening, STATE_MATCH)
-                      * back[STATE_INSERTION]
-                      : 0.0;
+    double matched  = forward_at(&acc->front, k, STATE_MATCH);
+    double skipped  = forward_at(&acc->front, k, STATE_DELETION);
+    double carried  = forward_at(&acc->front, k, STATE_INSERTION);
+    double paired   = matched * back[STATE_MATCH];
+    double deleted  = acc->begin_deletion * skipped * pairing;
+    double inserted = acc->begin_insertion * carried * pairing;
 
+    /* Accumulated from the previous call, except the insertion. */
     acc->at.coverage[k + 1]   += acc->coverage;
     acc->at.mismatches[k + 1] += acc->mismatches;
     acc->at.deletions[k + 1]  += acc->deletions;
-    acc->at.insertions[k + 1] += carried;
+    acc->at.insertions[k + 1] += inserted;
 
+    /* Read by the next call. */
     acc->coverage   = paired;
     acc->mismatches = paired * acc->terms[k].modification;
     acc->deletions  = deleted;
@@ -674,23 +642,25 @@ static double inserted_below(const ascent *below, hts_pos_t k)
 }
 
 /* Forms a cell's three states from the transitions out of it. */
-static void backward_cell(const phmm *model, double pairing, double inserted,
-                          double deleted, double *cell)
+static void backward_cell(const phmm *model, bool insertions, double pairing,
+                          double inserted, double deleted, double *cell)
 {
     cell[STATE_MATCH] = model->match_to_match     * pairing
                       + model->match_to_insertion * inserted
                       + model->match_to_deletion  * deleted;
 
-    cell[STATE_INSERTION] = model->insertion_to_match     * pairing
-                          + model->insertion_to_insertion * inserted;
+    cell[STATE_INSERTION] = insertions
+                          ? model->insertion_to_match     * pairing
+                          + model->insertion_to_insertion * inserted
+                          : 0.0;
 
     cell[STATE_DELETION] = model->deletion_to_match    * pairing
                          + model->deletion_to_deletion * deleted;
 }
 
-/* Fills the last row of the backward pass and accumulates it. The alignment
- * ends on this row, so a match or insertion finishes with chance one and a
- * deletion cannot occur. */
+/* Fills the last row of the backward pass and accumulates it. The alignment ends on
+ * this row, and it ends on a pairing, so a match finishes with chance one and neither
+ * run can be open. */
 static void backward_last_row(const context *ctx)
 {
     size_t       i   = ctx->rows - 1;
@@ -698,7 +668,7 @@ static void backward_last_row(const context *ctx)
     accumulation acc = accumulation_of(ctx, i);
     double       cell[N_STATES] = {
         [STATE_MATCH]     = 1.0,
-        [STATE_INSERTION] = 1.0,
+        [STATE_INSERTION] = 0.0,
         [STATE_DELETION]  = 0.0,
     };
 
@@ -717,11 +687,12 @@ static void backward_last_row(const context *ctx)
  * with a row above and a row below. */
 static void backward_row(const context *ctx, size_t i)
 {
-    const phmm  *model = ctx->model;
-    band_cell   *row   = backward_row_of(ctx, i);
-    ascent       below = ascent_into(ctx, i);
-    accumulation acc   = accumulation_of(ctx, i);
-    hts_pos_t    width = width_at(ctx, i);
+    const phmm  *model      = ctx->model;
+    band_cell   *row        = backward_row_of(ctx, i);
+    ascent       below      = ascent_into(ctx, i);
+    accumulation acc        = accumulation_of(ctx, i);
+    hts_pos_t    width      = width_at(ctx, i);
+    bool         insertions = insertions_live(ctx, i);
     /* The cell to the right, held in a local so each step of the deletion
      * chain does not wait on the preceding store. */
     double       right_deletion = 0.0;
@@ -732,7 +703,7 @@ static void backward_row(const context *ctx, size_t i)
         double deleted  = k + 1 < width ? right_deletion : 0.0;
         double cell[N_STATES];
 
-        backward_cell(model, pairing, inserted, deleted, cell);
+        backward_cell(model, insertions, pairing, inserted, deleted, cell);
 
         row[k][STATE_MATCH]     = cell[STATE_MATCH];
         row[k][STATE_INSERTION] = cell[STATE_INSERTION];
@@ -763,11 +734,9 @@ static void backward_first_row(const context *ctx)
         row[k][STATE_MATCH] = model->match_to_match     * pairing
                             + model->match_to_insertion * inserted;
 
-        row[k][STATE_INSERTION] = model->insertion_to_match     * pairing
-                                + model->insertion_to_insertion * inserted;
-
-        /* No deletion occurs before the first placed base. */
-        row[k][STATE_DELETION] = 0.0;
+        /* Neither run reaches the row before the first placed base. */
+        row[k][STATE_INSERTION] = 0.0;
+        row[k][STATE_DELETION]  = 0.0;
     }
 }
 

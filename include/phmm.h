@@ -1,4 +1,4 @@
-/* phmm.h -- marginalizing a read over the alignments a band admits.
+/* phmm.h -- a banded pair HMM.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -10,13 +10,11 @@
 #include "params.h"
 #include "phred.h"
 
-/* How far either side of the CIGAR path the model may look. 2 admits every placement of a
- * one or two base deletion, and wider scored no better on the two libraries tested. */
+/* How far either side of the CIGAR path the model may look. */
 #define PHMM_DEFAULT_BAND 2
 
-/* The parameters, with every transition they imply computed once. Insertion to deletion
- * and deletion to insertion are absent: an inserted base followed by a deleted one is a
- * substitution. A model is read-only once built, so every thread may share one. */
+/* Transition rates. Insertion to deletion and deletion to insertion are absent:
+ * an inserted base followed by a deleted one is a substitution. */
 typedef struct {
     phmm_params  params;
     double       match_to_match;
@@ -36,18 +34,14 @@ typedef struct phmm_scratch phmm_scratch;
 phmm_scratch *phmm_scratch_create(void);
 void          phmm_scratch_destroy(phmm_scratch *scratch);
 
-/* What one read contributes to each reference position it could have reached.
- *
- * Values are fractional, spread over each placement the band allowed, and are added to a
- * target, never assigned. The window may extend past either end of the reference; those
- * positions are never written, and phmm_window_bounds gives the range inside it. */
+/* Computed values for one read, in a window around the reference. */
 typedef struct {
     hts_pos_t     origin;       /* reference position of value 0 */
     size_t        len;
     const double *coverage;     /* base read there */
     const double *mismatches;   /* template differences under the read bases */
-    const double *insertions;   /* insertions opened after that position */
-    const double *deletions;    /* deletion runs ending at that position */
+    const double *insertions;   /* insertions opened after this base */
+    const double *deletions;    /* deletions opened at this base */
 } phmm_window;
 
 /* Gives the window indices that fall inside a reference of len bases: from the first to
