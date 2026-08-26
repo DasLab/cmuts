@@ -74,6 +74,10 @@ static void sequence(refrow *r, const char *seq, size_t len)
     for (size_t i = 0; i < len; i++) {
         nuc base = nuc_from_char(seq[i]);
 
+        /* refrow_create refuses a refrow without a row, so the row is never
+         * null; the analyzer conflates it with the null a sourceless field
+         * returns from values.
+         * NOLINTNEXTLINE(clang-analyzer-core.NullDereference) */
         r->row[i] = nuc_is_base(base) ? (double)nuc_index(base) : -1.0;
     }
 }
