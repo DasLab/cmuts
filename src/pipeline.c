@@ -713,6 +713,7 @@ pipeline_config pipeline_defaults(void)
 static void pipeline_teardown(pipeline *p)
 {
     progress_finish(p->bar);
+    tally_tables_free(&p->tally_tables);
     refrow_destroy(p->rows);
     h5writer_close(p->out);
     ctxpool_destroy(p->contexts);
@@ -873,7 +874,10 @@ int pipeline_run(const pipeline_config *cfg, const char *program,
         goto done;
     }
 
-    tally_tables_build(&p.tally_tables, &cfg->tally_config);
+    if (tally_tables_build(&p.tally_tables, &cfg->tally_config, p.ref_cap) < 0) {
+        snprintf(error, error_len, "out of memory");
+        goto done;
+    }
 
     /* Started last, so that no setup step fails after the bar is drawn. */
     p.bar = progress_start(cm_bam_stream_span(p.bam));

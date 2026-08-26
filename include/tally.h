@@ -22,16 +22,22 @@ typedef struct {
 
 tally_config tally_defaults(void);
 
-/* What the tally works from besides the read itself: the quality table and the model.
- * Built once from the config and never written afterwards, so every worker may share
- * one. */
+/* What the tally works from besides the read itself: the quality table, the model,
+ * and the per-base profile. Built once from the config and never written afterwards,
+ * so every worker may share one. The profile is seeded uniform from the params, at
+ * one value per base of the longest reference so it serves every reference. */
 typedef struct {
-    phred quality;
-    phmm  model;
-    int   band;   /* the half-width every row of the marginal is given */
+    phred        quality;
+    phmm         model;
+    phmm_profile profile;  /* the per-base rates the marginal reads */
+    double      *rates;    /* owned storage behind the profile's arrays */
+    int          band;     /* the half-width every row of the marginal is given */
 } tally_tables;
 
-void tally_tables_build(tally_tables *tables, const tally_config *config);
+/* Returns 0, or -1 when the profile cannot be allocated. cap is the longest
+ * reference, in bases. */
+int  tally_tables_build(tally_tables *tables, const tally_config *config, size_t cap);
+void tally_tables_free(tally_tables *tables);
 
 /* Working buffers one worker reuses across every read it processes. Private to that
  * worker; the marginal writes over the whole of it for each read. */

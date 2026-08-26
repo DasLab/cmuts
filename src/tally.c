@@ -107,8 +107,9 @@ static phmm_status marginalize(const context *ctx, tally_scratch *scratch)
         return PHMM_NO_MEMORY;
     }
 
-    status = phmm_run(&ctx->tables->model, &ctx->tables->quality,
-                      ctx->read, ctx->ref, half, scratch->phmm, &window);
+    status = phmm_run(&ctx->tables->model, &ctx->tables->profile,
+                      &ctx->tables->quality, ctx->read, ctx->ref, half,
+                      scratch->phmm, &window);
 
     if (status == PHMM_OK) {
         add_window(ctx, &window);
@@ -134,11 +135,43 @@ tally_config tally_defaults(void)
     };
 }
 
-void tally_tables_build(tally_tables *tables, const tally_config *config)
+/* Fills one profile array with a single rate. */
+static void fill_uniform(double *values, size_t cap, double rate)
 {
+    for (size_t i = 0; i < cap; i++) {
+        values[i] = rate;
+    }
+}
+
+int tally_tables_build(tally_tables *tables, const tally_config *config, size_t cap)
+{
+    const phmm_params *params = &config->params;
+    double            *rates  = malloc(3 * cap * sizeof *rates);
+
+    if (!rates) {
+        return -1;
+    }
+
     phred_build(&tables->quality, config->min_phred);
-    phmm_build(&tables->model, &config->params);
-    tables->band = config->band;
+    phmm_build(&tables->model, params);
+    tables->band  = config->band;
+    tables->rates = rates;
+
+    tables->profile.modification   = rates;
+    tables->profile.open_insertion = rates + cap;
+    tables->profile.open_deletion  = rates + 2 * cap;
+
+    fill_uniform(rates, cap, params->modification);
+    fill_uniform(rates + cap, cap, params->open_insertion);
+    fill_uniform(rates + 2 * cap, cap, params->open_deletion);
+
+    return 0;
+}
+
+void tally_tables_free(tally_tables *tables)
+{
+    free(tables->rates);
+    tables->rates = NULL;
 }
 
 tally_scratch *tally_scratch_create(void)

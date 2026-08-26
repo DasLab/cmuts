@@ -13,20 +13,31 @@
 /* How far either side of the CIGAR path the model may look. */
 #define PHMM_DEFAULT_BAND 2
 
-/* Transition rates. Insertion to deletion and deletion to insertion are absent:
- * an inserted base followed by a deleted one is a substitution. */
+/* The transition weights that hold across every reference: the extending of each run
+ * and the closing that leaves what the extension does not take. The modification and
+ * opening rates vary per base and arrive through the profile instead. Insertion to
+ * deletion and deletion to insertion are absent: an inserted base followed by a
+ * deleted one is a substitution. */
 typedef struct {
-    phmm_params  params;
-    double       match_to_match;
-    double       match_to_insertion;
-    double       match_to_deletion;
-    double       insertion_to_insertion;
-    double       insertion_to_match;
-    double       deletion_to_deletion;
-    double       deletion_to_match;
+    double match_to_insertion;
+    double match_to_deletion;
+    double insertion_to_insertion;
+    double deletion_to_deletion;
 } phmm;
 
 void phmm_build(phmm *model, const phmm_params *params);
+
+/* Per-base rates, one value per reference base, indexed as the counted events are.
+ * modification[b] is the chance base b was modified before it was read.
+ * open_insertion[b] opens the insertion counted at base b, and open_deletion[b] the
+ * deletion run whose 3'-most deleted base is b; the two are the arms of the decision
+ * made at the pairing 3' of each run. A cell outside the reference reads the nearest
+ * value, which reaches only terms a zero emission clears. */
+typedef struct {
+    const double *modification;
+    const double *open_insertion;
+    const double *open_deletion;
+} phmm_profile;
 
 /* Buffers one thread reuses across reads, grown to fit the longest read seen. */
 typedef struct phmm_scratch phmm_scratch;
@@ -66,8 +77,11 @@ typedef enum {
  * look, a row being one base of the placed span plus one before them all. half must hold
  * at least read->l_qseq + 1 entries, of which only those the span reaches are read.
  *
+ * Each profile array must hold one value per base of ref.
+ *
  * The read must store a sequence and place at least one base, which the filter
  * enforces. */
-phmm_status phmm_run(const phmm *model, const phred *quality,
-                     const cm_bam_record *read, const cm_fasta_record *ref,
-                     const int *half, phmm_scratch *scratch, phmm_window *out);
+phmm_status phmm_run(const phmm *model, const phmm_profile *profile,
+                     const phred *quality, const cm_bam_record *read,
+                     const cm_fasta_record *ref, const int *half,
+                     phmm_scratch *scratch, phmm_window *out);

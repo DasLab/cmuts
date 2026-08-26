@@ -69,6 +69,7 @@ typedef struct {
  * context. */
 typedef struct {
     const phmm            *model;
+    const phmm_profile    *profile;
     const phred           *quality;
     const cm_bam_record   *read;
     const cm_fasta_record *ref;
@@ -88,15 +89,47 @@ typedef struct {
 
 void phmm_build(phmm *model, const phmm_params *params)
 {
-    model->params                 = *params;
-    model->match_to_match         = 1.0 - params->open_insertion
-                                        - params->open_deletion;
     model->match_to_insertion     = 1.0 - params->extend_insertion;
     model->match_to_deletion      = 1.0 - params->extend_deletion;
     model->insertion_to_insertion = params->extend_insertion;
-    model->insertion_to_match     = params->open_insertion;
     model->deletion_to_deletion   = params->extend_deletion;
-    model->deletion_to_match      = params->open_deletion;
+}
+
+/* Returns a profile value at a 0-based base, clamped to the reference. A clamped read
+ * serves a cell outside the reference, whose terms a zero emission clears, so the
+ * value itself never matters. */
+static double profile_at(const double *values, size_t len, hts_pos_t b)
+{
+    if (b < 0) {
+        b = 0;
+    }
+    if ((size_t)b >= len) {
+        b = (hts_pos_t)len - 1;
+    }
+
+    return values[b];
+}
+
+/* The three arms of the decision at the pairing of base b, which the matrix takes on
+ * the edges into that pairing: continue to the next pairing, open the insertion
+ * counted at b, or open the deletion counted at base b - 1. */
+typedef struct {
+    double match_to_match;
+    double insertion_to_match;
+    double deletion_to_match;
+} decision;
+
+static decision decision_at(const context *ctx, hts_pos_t b)
+{
+    size_t len            = ctx->ref->len;
+    double open_insertion = profile_at(ctx->profile->open_insertion, len, b);
+    double open_deletion  = profile_at(ctx->profile->open_deletion, len, b - 1);
+
+    return (decision){
+        .match_to_match     = 1.0 - open_insertion - open_deletion,
+        .insertion_to_match = open_insertion,
+        .deletion_to_match  = open_deletion,
+    };
 }
 
 /* Returns the chance a read base agrees with the base it was templated from.
@@ -120,10 +153,8 @@ static double disagreement_chance(double modification, double error)
  * agreeing base may have been modified and misread back into agreement. A
  * disagreeing base may be an unmodified base misread, so a poorly read
  * disagreement counts for less than a clean one. */
-static double phmm_modification(const phmm *model, bool agree, double error)
+static double phmm_modification(double modification, bool agree, double error)
 {
-    double modification = model->params.modification;
-
     return agree
          ? modification * error / OTHER_BASES
              / agreement_chance(modification, error)
@@ -145,41 +176,36 @@ static double error_at(const context *ctx, int32_t query)
 }
 
 /* Returns the emission of an agreeing or disagreeing pairing, and the part of
- * it that a real template difference explains. */
-static cell_terms terms_from(const context *ctx, bool agree, double error)
+ * it that a real template difference explains, under the given modification rate. */
+static cell_terms terms_from(double m, bool agree, double error)
 {
-    double m = ctx->model->params.modification;
-
     return (cell_terms){
         .emission     = agree ? agreement_chance(m, error)
                               : disagreement_chance(m, error),
-        .modification = phmm_modification(ctx->model, agree, error),
+        .modification = phmm_modification(m, agree, error),
     };
 }
 
-/* The three comparisons the cells of one row can hold, precomputed on entry
- * to the row: the reference base agrees with the row's base, differs from it,
- * or is missing. Where the read holds no base the three are equal. */
+/* The parts of one row's comparisons that do not vary along the row: the row's base,
+ * whether it names one, and its chance of being misread. The modification rate varies
+ * per reference base, so the comparisons themselves are formed per cell. */
 typedef struct {
-    cell_terms agree;
-    cell_terms differ;
     cell_terms neither;
+    double     error;
     nuc        ours;
+    bool       named;
 } row_terms;
 
 static row_terms row_terms_of(const context *ctx, size_t i)
 {
-    int32_t    query   = ctx->span.begin + (int32_t)i - 1;
-    double     error   = error_at(ctx, query);
-    nuc        ours    = nuc_from_read(ctx->read->seq, query);
-    cell_terms neither = { .emission = UNINFORMATIVE, .modification = 0.0 };
-    bool       named   = nuc_is_base(ours);
+    int32_t query = ctx->span.begin + (int32_t)i - 1;
+    nuc     ours  = nuc_from_read(ctx->read->seq, query);
 
     return (row_terms){
-        .agree   = named ? terms_from(ctx, true, error) : neither,
-        .differ  = named ? terms_from(ctx, false, error) : neither,
-        .neither = neither,
+        .neither = { .emission = UNINFORMATIVE, .modification = 0.0 },
+        .error   = error_at(ctx, query),
         .ours    = ours,
+        .named   = nuc_is_base(ours),
     };
 }
 
@@ -198,11 +224,12 @@ static cell_terms terms_at(const context *ctx, const row_terms *row,
 
     theirs = nuc_from_char(ctx->ref->seq[j - 1]);
 
-    if (!nuc_is_base(theirs)) {
+    if (!nuc_is_base(theirs) || !row->named) {
         return row->neither;
     }
 
-    return theirs == row->ours ? row->agree : row->differ;
+    return terms_from(ctx->profile->modification[j - 1], theirs == row->ours,
+                      row->error);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -330,17 +357,15 @@ static double forward_first_row(const context *ctx)
     return total;
 }
 
-/* The row above one forward row and the transition weights out of it, with
- * the row above's scale factor and the insertion emission folded into the
- * weights. The folded scale factor is why this is the one place a forward row
- * is read without forward_at. */
+/* The row above one forward row and the transition weights out of it that hold along
+ * the row, with the row above's scale factor and the insertion emission folded in. The
+ * decision weights vary per cell and are taken at each cell instead. The folded scale
+ * factor is why this is the one place a forward row is read without forward_at. */
 typedef struct {
     const band_cell *above;
     hts_pos_t        width;
     hts_pos_t        shift;
-    double           match_to_match;
-    double           insertion_to_match;
-    double           deletion_to_match;
+    double           scale;
     double           match_to_insertion;
     double           insertion_to_insertion;
 } descent;
@@ -354,9 +379,7 @@ static descent descent_into(const context *ctx, size_t i)
         .above                  = read_row_of(ctx, i - 1),
         .width                  = width_at(ctx, i - 1),
         .shift                  = shift_between(ctx, i - 1, i),
-        .match_to_match         = model->match_to_match * scale,
-        .insertion_to_match     = model->insertion_to_match * scale,
-        .deletion_to_match      = model->deletion_to_match * scale,
+        .scale                  = scale,
         .match_to_insertion     = model->match_to_insertion * scale
                                 * UNINFORMATIVE,
         .insertion_to_insertion = model->insertion_to_insertion * scale
@@ -364,8 +387,10 @@ static descent descent_into(const context *ctx, size_t i)
     };
 }
 
-/* Returns cell k's match state, stepped from the row above. */
-static double paired_from(const descent *step, hts_pos_t k, double emission)
+/* Returns cell k's match state, stepped from the row above through the decision at
+ * the cell's own base. */
+static double paired_from(const descent *step, const decision *into, hts_pos_t k,
+                          double emission)
 {
     hts_pos_t diagonal = k - 1 + step->shift;  /* a position back, one row up */
 
@@ -373,9 +398,12 @@ static double paired_from(const descent *step, hts_pos_t k, double emission)
         return 0.0;
     }
 
-    return (step->match_to_match     * step->above[diagonal][STATE_MATCH]
-          + step->insertion_to_match * step->above[diagonal][STATE_INSERTION]
-          + step->deletion_to_match  * step->above[diagonal][STATE_DELETION])
+    return (into->match_to_match * step->scale
+              * step->above[diagonal][STATE_MATCH]
+          + into->insertion_to_match * step->scale
+              * step->above[diagonal][STATE_INSERTION]
+          + into->deletion_to_match * step->scale
+              * step->above[diagonal][STATE_DELETION])
          * emission;
 }
 
@@ -434,11 +462,13 @@ static double forward_row(const context *ctx, size_t i)
     double      total_deleted  = 0.0;
 
     for (hts_pos_t k = 0; k < width; k++) {
-        double paired, inserted, deleted;
+        hts_pos_t j = position_of(ctx, i, k);
+        decision  into = decision_at(ctx, j - 1);  /* the base the cell pairs */
+        double    paired, inserted, deleted;
 
-        terms[k] = terms_at(ctx, &each, position_of(ctx, i, k));
+        terms[k] = terms_at(ctx, &each, j);
 
-        paired   = paired_from(&step, k, terms[k].emission);
+        paired   = paired_from(&step, &into, k, terms[k].emission);
         inserted = insertions ? inserted_from(&step, k) : 0.0;
         deleted  = deletions && k > 0
                  ? deleted_from(model, left_match, left_deletion)
@@ -534,10 +564,6 @@ typedef struct {
     /* Where the row's pairings are also the read's 5'-most, which no decision
      * follows; every other row leaves this NULL. */
     double           *ends;
-    /* The two transitions a run begins on, which the matrix takes on the run's
-     * high edge. Both are constant along the row. */
-    double            begin_deletion;
-    double            begin_insertion;
     /* The pending contribution to the position the next cell completes. */
     double            coverage;
     double            mismatches;
@@ -546,30 +572,28 @@ typedef struct {
 
 static accumulation accumulation_of(const context *ctx, size_t i)
 {
-    const phmm *model = ctx->model;
-    landing     at    = landing_of(ctx, i);
+    landing at = landing_of(ctx, i);
 
     return (accumulation){
-        .front           = scaled_row_of(ctx, i),
-        .terms           = terms_of(ctx, i),
-        .at              = at,
+        .front = scaled_row_of(ctx, i),
+        .terms = terms_of(ctx, i),
+        .at    = at,
         /* Row 1 pairs the read's 5'-most placed base. */
-        .ends            = i == 1 ? at.ends : NULL,
-        .begin_deletion  = model->deletion_to_match,
-        .begin_insertion = model->insertion_to_match,
+        .ends  = i == 1 ? at.ends : NULL,
     };
 }
 
-/* Accumulates cell k of the row into the window. */
-static void accumulate_cell(accumulation *acc, hts_pos_t k,
+/* Accumulates cell k of the row into the window. The two runs a cell can open begin
+ * on the decision at the pairing below, whose weights the caller passes in. */
+static void accumulate_cell(accumulation *acc, hts_pos_t k, const decision *below,
                             const double *back, double pairing)
 {
     double matched  = forward_at(&acc->front, k, STATE_MATCH);
     double skipped  = forward_at(&acc->front, k, STATE_DELETION);
     double carried  = forward_at(&acc->front, k, STATE_INSERTION);
     double paired   = matched * back[STATE_MATCH];
-    double deleted  = acc->begin_deletion * skipped * pairing;
-    double inserted = acc->begin_insertion * carried * pairing;
+    double deleted  = below->deletion_to_match * skipped * pairing;
+    double inserted = below->insertion_to_match * carried * pairing;
 
     /* Accumulated from the previous call, except the insertion. */
     acc->at.coverage[k + 1]   += acc->coverage;
@@ -655,20 +679,22 @@ static double inserted_below(const ascent *below, hts_pos_t k)
          * below->cell[straight][STATE_INSERTION] * below->scale;
 }
 
-/* Forms a cell's three states from the transitions out of it. */
-static void backward_cell(const phmm *model, bool insertions, double pairing,
-                          double inserted, double deleted, double *cell)
+/* Forms a cell's three states from the transitions out of it. The steps into the
+ * pairing below carry the decision at that pairing's base. */
+static void backward_cell(const phmm *model, const decision *below, bool insertions,
+                          double pairing, double inserted, double deleted,
+                          double *cell)
 {
-    cell[STATE_MATCH] = model->match_to_match     * pairing
+    cell[STATE_MATCH] = below->match_to_match     * pairing
                       + model->match_to_insertion * inserted
                       + model->match_to_deletion  * deleted;
 
     cell[STATE_INSERTION] = insertions
-                          ? model->insertion_to_match     * pairing
+                          ? below->insertion_to_match     * pairing
                           + model->insertion_to_insertion * inserted
                           : 0.0;
 
-    cell[STATE_DELETION] = model->deletion_to_match    * pairing
+    cell[STATE_DELETION] = below->deletion_to_match    * pairing
                          + model->deletion_to_deletion * deleted;
 }
 
@@ -687,11 +713,13 @@ static void backward_last_row(const context *ctx)
     };
 
     for (hts_pos_t k = width_at(ctx, i); k-- > 0; ) {
+        decision below = decision_at(ctx, position_of(ctx, i, k));
+
         row[k][STATE_MATCH]     = cell[STATE_MATCH];
         row[k][STATE_INSERTION] = cell[STATE_INSERTION];
         row[k][STATE_DELETION]  = cell[STATE_DELETION];
 
-        accumulate_cell(&acc, k, cell, 0.0);
+        accumulate_cell(&acc, k, &below, cell, 0.0);
     }
 
     accumulate_end(&acc);
@@ -712,18 +740,19 @@ static void backward_row(const context *ctx, size_t i)
     double       right_deletion = 0.0;
 
     for (hts_pos_t k = width; k-- > 0; ) {
-        double pairing  = pairing_below(&below, k);
-        double inserted = inserted_below(&below, k);
-        double deleted  = k + 1 < width ? right_deletion : 0.0;
-        double cell[N_STATES];
+        decision into     = decision_at(ctx, position_of(ctx, i, k));
+        double   pairing  = pairing_below(&below, k);
+        double   inserted = inserted_below(&below, k);
+        double   deleted  = k + 1 < width ? right_deletion : 0.0;
+        double   cell[N_STATES];
 
-        backward_cell(model, insertions, pairing, inserted, deleted, cell);
+        backward_cell(model, &into, insertions, pairing, inserted, deleted, cell);
 
         row[k][STATE_MATCH]     = cell[STATE_MATCH];
         row[k][STATE_INSERTION] = cell[STATE_INSERTION];
         row[k][STATE_DELETION]  = cell[STATE_DELETION];
 
-        accumulate_cell(&acc, k, cell, pairing);
+        accumulate_cell(&acc, k, &into, cell, pairing);
 
         right_deletion = cell[STATE_DELETION];
     }
@@ -742,10 +771,11 @@ static void backward_first_row(const context *ctx)
     hts_pos_t   width = width_at(ctx, 0);
 
     for (hts_pos_t k = 0; k < width; k++) {
-        double pairing  = pairing_below(&below, k);
-        double inserted = inserted_below(&below, k);
+        decision into     = decision_at(ctx, position_of(ctx, 0, k));
+        double   pairing  = pairing_below(&below, k);
+        double   inserted = inserted_below(&below, k);
 
-        row[k][STATE_MATCH] = model->match_to_match     * pairing
+        row[k][STATE_MATCH] = into.match_to_match       * pairing
                             + model->match_to_insertion * inserted;
 
         /* Neither run reaches the row before the first placed base. */
@@ -1050,12 +1080,14 @@ void phmm_window_bounds(const phmm_window *window, size_t len,
     }
 }
 
-phmm_status phmm_run(const phmm *model, const phred *quality,
-                     const cm_bam_record *read, const cm_fasta_record *ref,
-                     const int *half, phmm_scratch *scratch, phmm_window *out)
+phmm_status phmm_run(const phmm *model, const phmm_profile *profile,
+                     const phred *quality, const cm_bam_record *read,
+                     const cm_fasta_record *ref, const int *half,
+                     phmm_scratch *scratch, phmm_window *out)
 {
     context ctx = {
         .model   = model,
+        .profile = profile,
         .quality = quality,
         .read    = read,
         .ref     = ref,
