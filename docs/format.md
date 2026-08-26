@@ -28,7 +28,7 @@ Binomial standard error of the mismatch rate.
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
 
-The rate of insertions opened after each base, over the coverage.
+The rate of insertions opened after each base, over the reads pairing the base and continuing 5'.
 
 {.field}
 ### `insertions/error`
@@ -42,7 +42,7 @@ Binomial standard error of the insertion rate.
 
 **Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
 
-The rate of deletion runs ending at each base, over the coverage plus the deletions.
+The rate of deletion runs ending at each base, over the reads pairing the base 3' of it and continuing 5'.
 
 {.field}
 ### `deletions/error`

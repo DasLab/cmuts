@@ -1,8 +1,8 @@
 /* tally.c -- one read's contribution to a reference.
  *
  * Runs the marginal over one read and adds the window it returns to the reference's
- * accumulator, clipping to the reference's bounds. The four counted quantities are
- * described in phmm.c, which computes them.
+ * accumulator, clipping to the reference's bounds. The counted quantities are
+ * described in phmm.h.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -42,7 +42,7 @@ static void add_length(const context *ctx)
     }
 }
 
-/* Adds the window's stretch on the reference to the four per-base fields, clipping once
+/* Adds the window's stretch on the reference to the per-base fields, clipping once
  * rather than testing each position. The window holds one read, so each event value is
  * the posterior chance this read carries an event of that kind at the position. */
 static void add_window(const context *ctx, const phmm_window *window)
@@ -51,6 +51,7 @@ static void add_window(const context *ctx, const phmm_window *window)
     double *mismatches = accum_data(ctx->target, ACCUM_MISMATCHES);
     double *insertions = accum_data(ctx->target, ACCUM_INSERTIONS);
     double *deletions  = accum_data(ctx->target, ACCUM_DELETIONS);
+    double *ends       = accum_data(ctx->target, ACCUM_ENDS);
     size_t  begin;
     size_t  end;
 
@@ -63,6 +64,7 @@ static void add_window(const context *ctx, const phmm_window *window)
         mismatches[pos] += window->mismatches[i];
         insertions[pos] += window->insertions[i];
         deletions[pos]  += window->deletions[i];
+        ends[pos]       += window->ends[i];
     }
 }
 

@@ -20,10 +20,11 @@ typedef struct {
 
 rate_config rate_defaults(void);
 
-/* The event kinds a rate is computed for. A mismatch or insertion can happen only where
- * a read base pairs, so those rates are over the coverage. A deletion run's end is tried
- * wherever a read reads the base or ends a run there, so its rate is over the coverage
- * plus the deletions themselves. */
+/* The event kinds a rate is computed for. A mismatch is tried wherever a read base
+ * pairs, so its rate is over the coverage. Each opening is one arm of the decision a
+ * pairing makes toward the next base, and the pairing a read's placed span ends on
+ * makes no decision, so an opening rate is over the coverage less those ends: at the
+ * base itself for an insertion, and one base 3' of it for a deletion. */
 typedef enum {
     RATE_MISMATCHES,
     RATE_INSERTIONS,

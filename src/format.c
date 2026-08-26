@@ -36,7 +36,7 @@ const fmt_field FMT_FIELDS[FMT_N_FIELDS] = {
     },
     [FMT_INSERTION_RATE] = {
         .name    = "insertions/rate",
-        .detail  = "The rate of insertions opened after each base, over the coverage.",
+        .detail  = "The rate of insertions opened after each base, over the reads pairing the base and continuing 5'.",
         .row     = shape_per_base,
         .per_ref = true,
         .stored  = FMT_F32,
@@ -52,7 +52,7 @@ const fmt_field FMT_FIELDS[FMT_N_FIELDS] = {
     },
     [FMT_DELETION_RATE] = {
         .name    = "deletions/rate",
-        .detail  = "The rate of deletion runs ending at each base, over the coverage plus the deletions.",
+        .detail  = "The rate of deletion runs ending at each base, over the reads pairing the base 3' of it and continuing 5'.",
         .row     = shape_per_base,
         .per_ref = true,
         .stored  = FMT_F32,

@@ -42,6 +42,7 @@ typedef struct {
     const double *mismatches;   /* template differences under the read bases */
     const double *insertions;   /* insertions opened after this base */
     const double *deletions;    /* deletions opened at this base */
+    const double *ends;         /* the read's 5'-most pairing lands here */
 } phmm_window;
 
 /* Gives the window indices that fall inside a reference of len bases: from the first to
