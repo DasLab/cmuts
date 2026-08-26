@@ -12,18 +12,12 @@ rate_config rate_defaults(void)
     return (rate_config){ .min_depth = 1 };
 }
 
-/* Returns the accumulated events a channel counts. */
-static accum_field_id events_of(rate_channel channel)
-{
-    switch (channel) {
-        case RATE_MISMATCHES: return ACCUM_MISMATCHES;
-        case RATE_INSERTIONS: return ACCUM_INSERTIONS;
-        case RATE_DELETIONS:  return ACCUM_DELETIONS;
-        case RATE_N_CHANNELS: break;
-    }
-
-    return ACCUM_N_FIELDS;
-}
+/* The accumulated events each channel counts. */
+static const accum_field_id EVENTS_OF[RATE_N_CHANNELS] = {
+    [RATE_MISMATCHES] = ACCUM_MISMATCHES,
+    [RATE_INSERTIONS] = ACCUM_INSERTIONS,
+    [RATE_DELETIONS]  = ACCUM_DELETIONS,
+};
 
 /* Returns a channel's trials at one position. Only a deletion is tried at the positions
  * its events fall on, since a deleted base is read by no read. */
@@ -91,7 +85,7 @@ static double error_at(const rate_config *cfg, double events, double depth,
 void rate_of(const rate_config *cfg, const accum *acc, size_t len,
              rate_channel channel, double *restrict out)
 {
-    const double *events   = accum_const_data(acc, events_of(channel));
+    const double *events   = accum_const_data(acc, EVENTS_OF[channel]);
     const double *coverage = accum_const_data(acc, ACCUM_COVERAGE);
 
     for (size_t i = 0; i < len; i++) {
@@ -104,7 +98,7 @@ void rate_of(const rate_config *cfg, const accum *acc, size_t len,
 void rate_error_of(const rate_config *cfg, const accum *acc, size_t len,
                    rate_channel channel, double *restrict out)
 {
-    const double *events   = accum_const_data(acc, events_of(channel));
+    const double *events   = accum_const_data(acc, EVENTS_OF[channel]);
     const double *coverage = accum_const_data(acc, ACCUM_COVERAGE);
 
     for (size_t i = 0; i < len; i++) {
