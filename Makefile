@@ -111,7 +111,7 @@ APPS        := $(NAME) $(SUBCOMMANDS)
 # Programs that are scripts rather than sources. One directory each, holding a
 # .in that the version is substituted into, so that no copy of the version is
 # kept anywhere but the header.
-SCRIPTS  := cmuts-align
+SCRIPTS  := cmuts-align cmuts-plot
 VERSION  := $(shell sed -n 's/.*CMUTS_VERSION "\(.*\)".*/\1/p' include/version.h)
 
 LIB      := $(BUILD)/lib$(NAME).a

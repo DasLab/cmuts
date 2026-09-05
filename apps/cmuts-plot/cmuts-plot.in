@@ -1,0 +1,1869 @@
+#!/usr/bin/env python3
+"""cmuts-plot -- serve an interactive HTML report over cmuts outputs.
+
+Each input file is one condition. The page shows one report with a chip per
+condition on every figure, and computes the reactivity profile from the three
+event channels, aggregated the same way cmuts norm pools them. The files need
+not hold the same library: comparisons are by reference index and position, so
+a one-off construct can sit beside a large library, or a mutant beside its
+wild type.
+
+The server holds the files and builds every figure on demand; the browser only
+fetches and draws. Saving the page captures the rendered figures, so the
+snapshot views fine offline.
+
+The file reads top-down in layers: reading the files, the array transforms,
+the figure builders, the figure registry, the statistics, the page shell, and
+the server. A new figure is one builder, one Plot entry, and its place in a
+section list.
+
+Author: Hamish M. Blair <hmblair@stanford.edu>
+"""
+
+import argparse
+import json
+import sys
+from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+
+VERSION = "@VERSION@"
+
+try:
+    import h5py
+    import numpy as np
+    import plotly.colors as pc
+    import plotly.graph_objects as go
+    from plotly.offline import get_plotlyjs
+except ImportError as error:
+    print(f"cmuts-plot: {error.name}: not installed; "
+          "cmuts plot needs the h5py, numpy, and plotly packages", file=sys.stderr)
+    sys.exit(1)
+
+
+# ===========================================================================
+# The file format, as include/format.h names it
+# ===========================================================================
+
+COVERAGE = "coverage"
+SEQUENCE = "sequence"
+READS = "reads/counted"
+LENGTHS = "reads/lengths"
+REJECTED = "reads/rejected"
+UNMAPPED = "reads/unmapped"
+PAIRWISE_CORRELATION = "pairwise/correlation"
+PAIRWISE_CONDITIONAL = "pairwise/conditional"
+PAIRWISE_COVERAGE = "pairwise/coverage"
+
+# The event channels, each a group holding a rate and its error. The labels
+# are what the page's checkboxes say.
+CHANNELS = ("mismatches", "insertions", "deletions")
+CHANNEL_LABELS = {
+    "mismatches": "Substitutions",
+    "insertions": "Insertions",
+    "deletions": "Deletions",
+}
+
+# The bases the sequence dataset is tokenized as; a negative token is padding.
+BASES = "ACGU"
+
+# The data-ref value meaning "aggregate over all references".
+AGGREGATE_REF = "agg"
+
+
+def rate_name(channel):
+    return f"{channel}/rate"
+
+
+def error_name(channel):
+    return f"{channel}/error"
+
+
+# ===========================================================================
+# Reading the files
+# ===========================================================================
+
+
+@dataclass(frozen=True)
+class Condition:
+    """One input file: a label for the chips and the path holding the data."""
+
+    label: str
+    path: str
+
+
+def dataset(handle, name):
+    """One dataset as an array, or None where the file lacks it."""
+    if name not in handle:
+        return None
+
+    return np.asarray(handle[name])
+
+
+def file_shape(handle):
+    """The reference count and row width, from the coverage dataset every
+    output holds."""
+    n_refs, cap = handle[COVERAGE].shape
+    return int(n_refs), int(cap)
+
+
+def check_conditions(conditions):
+    """Refuses an input that is not a cmuts output: one that does not open or
+    that lacks the coverage dataset every output holds."""
+    for condition in conditions:
+        try:
+            with h5py.File(condition.path, "r") as handle:
+                file_shape(handle)
+        except (OSError, KeyError) as error:
+            return f"{condition.path}: {error}"
+
+    return None
+
+
+def condition_refs(conditions):
+    """Each condition's reference count, in order."""
+    counts = []
+
+    for condition in conditions:
+        with h5py.File(condition.path, "r") as handle:
+            counts.append(file_shape(handle)[0])
+
+    return counts
+
+
+def decode_sequence(handle, ref):
+    """One reference's bases, trimmed of padding, or None where the file
+    carries no sequence."""
+    tokens = dataset(handle, SEQUENCE)
+
+    if tokens is None:
+        return None
+
+    row = tokens[ref]
+    held = row[row >= 0]
+
+    return "".join(BASES[token] for token in held)
+
+
+# ===========================================================================
+# Transforms: numpy in, numpy out
+# ===========================================================================
+
+
+def aggregate_rate(rates):
+    """The rate of an event of any kind: one less the product of the no-event
+    rates of the channels given. NaN in any channel carries through."""
+    none = np.float32(1.0)
+
+    for rate in rates:
+        none = none * (np.float32(1.0) - rate)
+
+    return np.float32(1.0) - none
+
+
+def aggregate_error(rates, errors):
+    """The error of the aggregate: each channel's error scaled by the product
+    of the other channels' no-event rates, added in quadrature."""
+    total = np.zeros_like(errors[0], dtype=np.float32)
+
+    for i, error in enumerate(errors):
+        others = [rate for j, rate in enumerate(rates) if j != i]
+        scaled = aggregate_error_term(others, error)
+        total = total + scaled * scaled
+
+    return np.sqrt(total)
+
+
+def aggregate_error_term(other_rates, error):
+    """One channel's contribution: its error times the others' no-event
+    product."""
+    weight = np.float32(1.0)
+
+    for rate in other_rates:
+        weight = weight * (np.float32(1.0) - rate)
+
+    return weight * error
+
+
+def reactivity_of(handle, channels, ref=None):
+    """The aggregate rate and error over the selected channels, for one
+    reference or for every reference at once. None where the file lacks a
+    selected rate; a missing error counts as zero."""
+    rows = slice(None) if ref is None else ref
+    rates, errors = [], []
+
+    for channel in channels:
+        if rate_name(channel) not in handle:
+            return None, None
+
+        rates.append(np.asarray(handle[rate_name(channel)][rows], dtype=np.float32))
+
+        if error_name(channel) in handle:
+            errors.append(np.asarray(handle[error_name(channel)][rows], dtype=np.float32))
+        else:
+            errors.append(np.zeros_like(rates[-1]))
+
+    if not rates:
+        return None, None
+
+    return aggregate_rate(rates), aggregate_error(rates, errors)
+
+
+def mean_of(values):
+    """The mean as a float, or NaN where there is nothing to average."""
+    values = np.asarray(values, dtype=float)
+
+    if values.size == 0:
+        return float("nan")
+
+    return float(values.mean())
+
+
+def snr_of(reactivity, error):
+    """Per-base SNR: reactivity over error, zero where the error is zero and
+    NaN where the reactivity is."""
+    r = np.asarray(reactivity, dtype=float)
+    e = np.asarray(error, dtype=float)
+    out = np.zeros_like(r)
+
+    np.divide(r, e, where=(e > 0), out=out)
+    out[~np.isfinite(r)] = np.nan
+
+    return out
+
+
+def coverage_fraction(coverage, mean_reads):
+    """Per-position coverage as a fraction of the mean read depth."""
+    coverage = np.asarray(coverage)
+
+    if mean_reads <= 0:
+        return np.zeros_like(coverage)
+
+    return coverage / mean_reads
+
+
+def read_log_depth(reads):
+    """log10 read depth per reference; a zero-read reference maps to -1."""
+    reads = np.asarray(reads, dtype=float)
+
+    with np.errstate(divide="ignore"):
+        return np.where(reads == 0, -1, np.log10(reads))
+
+
+def read_histogram(reads, bins=100):
+    """Histogram of log10 read depth: centers, counts, and the counts rescaled
+    to [0, 1] for per-bar coloring."""
+    counts, edges = np.histogram(read_log_depth(reads), bins=bins)
+    centers = (edges[:-1] + edges[1:]) / 2
+    low, high = float(counts.min()), float(counts.max())
+
+    if high == low:
+        return centers, counts, np.zeros_like(counts, dtype=float)
+
+    return centers, counts, (counts - low) / (high - low)
+
+
+def reads_per_block(reads, nblocks=100):
+    """Mean reads per reference over nblocks equal blocks in file order, so a
+    spatial trend across the library stays visible."""
+    reads = np.asarray(reads, dtype=float)
+    nblocks = max(min(nblocks, reads.shape[0]), 1)
+    block = max(reads.shape[0] // nblocks, 1)
+    reads = reads[: nblocks * block]
+
+    return reads.reshape(nblocks, block).mean(1)
+
+
+def length_distribution(lengths):
+    """The read-length counts trimmed to the longest length seen. Bin i holds
+    length i + 1; a 2-D input is summed over references first."""
+    counts = np.asarray(lengths, dtype=float)
+
+    if counts.ndim == 2:
+        counts = counts.sum(0)
+
+    held = np.nonzero(counts)[0]
+    end = 1
+
+    if held.size:
+        end = int(held[-1]) + 1
+
+    return np.arange(1, end + 1), counts[:end]
+
+
+def symlog(values, linthresh):
+    """Symmetric log: sign(x) * log10(1 + |x| / linthresh)."""
+    values = np.asarray(values)
+
+    return np.sign(values) * np.log10(1.0 + np.abs(values) / linthresh)
+
+
+# ===========================================================================
+# Figure styling
+# ===========================================================================
+
+FONT_FAMILY = "Arial, sans-serif"
+LABEL_SIZE = 14
+TITLE_SIZE = 15
+TICK_SIZE = 13
+LEGEND_SIZE = 12
+
+MARGIN = {"l": 55, "r": 20, "t": 40, "b": 45}
+
+RDPU_FILL = pc.sample_colorscale("RdPu", [0.3])[0]
+RDPU_LINE = pc.sample_colorscale("RdPu", [0.8])[0]
+
+PROFILE_COLOR = "#c51b8a"
+OVERLAY_COLORS = ["#c51b8a", "#2c7fb8", "#31a354", "#e6550d", "#756bb1", "#636363"]
+
+# Correlation heatmaps use a symmetric-log color scale around zero.
+CORRELATION_LINTHRESH = 1e-3
+
+
+def rgba(rgb, alpha):
+    return rgb.replace("rgb(", "rgba(").replace(")", f", {alpha})")
+
+
+def hex_rgba(hex_color, alpha):
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+
+def base_layout(title, xlabel="", ylabel=""):
+    return {
+        "font": {"family": FONT_FAMILY},
+        "title": {"text": title, "font": {"size": TITLE_SIZE}},
+        "xaxis": {
+            "title": {"text": xlabel, "font": {"size": LABEL_SIZE}},
+            "tickfont": {"size": TICK_SIZE},
+        },
+        "yaxis": {
+            "title": {"text": ylabel, "font": {"size": LABEL_SIZE}},
+            "tickfont": {"size": TICK_SIZE},
+            "gridcolor": "rgba(0,0,0,0.15)",
+        },
+        "plot_bgcolor": "white",
+        "legend": {"font": {"size": LEGEND_SIZE}},
+        "margin": MARGIN,
+    }
+
+
+def line_layout(xlabel, ylabel):
+    """Layout for the reactivity line plots: a left spine with outside ticks,
+    the zero baseline as the only horizontal line, and a boxed legend."""
+    grid = "rgba(0,0,0,0.08)"
+    ink = "#444"
+
+    return {
+        "font": {"family": FONT_FAMILY},
+        "xaxis": {
+            "title": {"text": xlabel, "font": {"size": 16}, "standoff": 14},
+            "tickfont": {"size": TICK_SIZE},
+            "showline": False,
+            "zeroline": False,
+            "ticks": "",
+            "gridcolor": grid,
+        },
+        "yaxis": {
+            "title": {"text": ylabel, "font": {"size": 16}, "standoff": 14},
+            "tickfont": {"size": TICK_SIZE},
+            "ticks": "outside",
+            "ticklen": 6,
+            "tickcolor": ink,
+            "tickwidth": 1,
+            "showline": True,
+            "linecolor": ink,
+            "linewidth": 1,
+            "zeroline": True,
+            "zerolinecolor": ink,
+            "zerolinewidth": 1,
+            "gridcolor": grid,
+        },
+        "plot_bgcolor": "white",
+        "legend": {
+            "bgcolor": "rgba(255,255,255,0.9)",
+            "bordercolor": "#ccc",
+            "borderwidth": 1,
+            "font": {"size": TICK_SIZE},
+            "x": 0.99,
+            "xanchor": "right",
+            "y": 0.99,
+            "yanchor": "top",
+        },
+        "margin": {"l": 72, "r": 24, "t": 28, "b": 62},
+    }
+
+
+def colorbar(title, **extra):
+    """An outlined colorbar with outside ticks and a rotated title."""
+    bar = {
+        "title": {"text": title, "side": "right", "font": {"size": LABEL_SIZE}},
+        "outlinecolor": "black",
+        "outlinewidth": 1,
+        "ticks": "outside",
+        "ticklen": 5,
+        "tickcolor": "black",
+        "tickfont": {"size": TICK_SIZE},
+        "thickness": 15,
+    }
+    bar.update(extra)
+
+    return bar
+
+
+# ===========================================================================
+# Figure builders: arrays in, go.Figure out
+# ===========================================================================
+
+
+def line_figure(data, xlabel, ylabel, x=None, yrange=None, axis_lines=False):
+    """A single fill-to-zero line plot, the shape the coverage and length
+    plots share."""
+    data = np.asarray(data)
+
+    if x is None:
+        x = np.arange(data.shape[0])
+    fig = go.Figure(
+        go.Scatter(
+            x=x,
+            y=data,
+            fill="tozeroy",
+            fillcolor=rgba(RDPU_FILL, 0.5),
+            line={"color": RDPU_LINE, "width": 1},
+            showlegend=False,
+        )
+    )
+    fig.update_layout(**base_layout("", xlabel, ylabel))
+    spine = {}
+
+    if axis_lines:
+        spine = {"showline": True, "linecolor": "black", "linewidth": 1}
+
+    fig.update_xaxes(range=[np.asarray(x)[0], np.asarray(x)[-1]], **spine)
+
+    if yrange is not None:
+        fig.update_yaxes(range=yrange, **spine)
+    elif spine:
+        fig.update_yaxes(**spine)
+
+    return fig
+
+
+def profile_traces(reactivity, error, name, color, show_band_legend=False):
+    """A reactivity line and its standard-error band. The band is one closed
+    polygon per contiguous run of defined points, so it breaks at NaN gaps
+    instead of filling straight across them."""
+    react = np.asarray(reactivity, dtype=float)
+    n = react.shape[0]
+    x = np.arange(n)
+    traces = []
+
+    if error is not None:
+        err = np.asarray(error, dtype=float)
+        upper, lower = react + err, react - err
+        defined = np.isfinite(react)
+        band_shown = False
+        i = 0
+
+        while i < n:
+            if not defined[i]:
+                i += 1
+                continue
+
+            start = i
+            while i < n and defined[i]:
+                i += 1
+
+            traces.append(
+                go.Scatter(
+                    x=[*x[start:i], *x[start:i][::-1]],
+                    y=[*upper[start:i], *lower[start:i][::-1]],
+                    fill="toself",
+                    fillcolor=hex_rgba(color, 0.2),
+                    line={"width": 0},
+                    mode="lines",
+                    name="Std. error",
+                    showlegend=show_band_legend and not band_shown,
+                    hoverinfo="skip",
+                )
+            )
+            band_shown = True
+
+    traces.append(
+        go.Scatter(x=x, y=react, mode="lines",
+                   line={"color": color, "width": 1.5}, name=name)
+    )
+
+    return traces
+
+
+def plot_profile(reactivity, error):
+    """One reference's reactivity: a line with its standard-error band."""
+    fig = go.Figure()
+
+    for trace in profile_traces(reactivity, error, "Reactivity", PROFILE_COLOR, True):
+        fig.add_trace(trace)
+
+    fig.update_layout(**line_layout("Residue", "Reactivity"))
+    fig.update_layout(showlegend=True, legend={"traceorder": "reversed"})
+
+    return fig
+
+
+def plot_overlay(series):
+    """Several reactivity profiles overlaid. Each series holds reactivity, an
+    optional error, and its legend label."""
+    fig = go.Figure()
+
+    for i, s in enumerate(series):
+        color = OVERLAY_COLORS[i % len(OVERLAY_COLORS)]
+        for trace in profile_traces(s["reactivity"], s.get("error"), s["label"], color):
+            fig.add_trace(trace)
+
+    fig.update_layout(**line_layout("Residue", "Reactivity"))
+    fig.update_layout(showlegend=True)
+
+    return fig
+
+
+def plot_difference(a, b):
+    """The difference a - b of two profiles, with the errors propagated in
+    quadrature."""
+    ra = np.asarray(a["reactivity"], dtype=float)
+    rb = np.asarray(b["reactivity"], dtype=float)
+    n = min(ra.shape[0], rb.shape[0])
+    ea = np.asarray(a["error"], dtype=float)[:n]
+    eb = np.asarray(b["error"], dtype=float)[:n]
+
+    diff = ra[:n] - rb[:n]
+    err = np.sqrt(ea**2 + eb**2)
+
+    fig = go.Figure()
+    for trace in profile_traces(diff, err, f"{a['label']} − {b['label']}", PROFILE_COLOR):
+        fig.add_trace(trace)
+
+    fig.update_layout(**line_layout("Residue", "Reactivity Difference"))
+    fig.update_layout(showlegend=False)
+
+    return fig
+
+
+def plot_coverage(coverage, mean_reads):
+    return line_figure(coverage_fraction(coverage, mean_reads), "Residue",
+                       "Fraction of reads", yrange=[0, 1.05], axis_lines=True)
+
+
+def plot_read_hist(reads):
+    centers, counts, normalized = read_histogram(reads)
+    colors = [pc.sample_colorscale("RdPu", [float(v)])[0] for v in normalized]
+
+    fig = go.Figure(go.Bar(x=centers, y=counts, marker_color=colors, showlegend=False))
+    fig.update_layout(**base_layout("", "log10 Read Depth", "Count"))
+    fig.update_layout(bargap=0)
+
+    return fig
+
+
+def plot_reads_per_block(reads):
+    return line_figure(reads_per_block(reads), "Reference bin", "Mean reads")
+
+
+def plot_lengths(lengths):
+    x, counts = length_distribution(lengths)
+
+    return line_figure(counts, "Read length", "Reads", x=x)
+
+
+def plot_reactivity_heatmap(reactivity, num=250):
+    """Every reference's reactivity as a (reference x position) heatmap,
+    clipped to the first num references so it stays bounded. NaN positions
+    are colored grey through a sentinel just below zero."""
+    sentinel = -0.01
+    data = np.asarray(reactivity)[:num].copy()
+    data[np.isnan(data)] = sentinel
+
+    eps = 0.001
+    colorscale = [
+        [0.0, "grey"],
+        [eps, "grey"],
+        [eps + 0.001, pc.sample_colorscale("RdPu", [0.0])[0]],
+        [1.0, pc.sample_colorscale("RdPu", [1.0])[0]],
+    ]
+
+    fig = go.Figure(
+        go.Heatmap(z=data, colorscale=colorscale, zmin=sentinel, zmax=1,
+                   colorbar=colorbar("Reactivity"))
+    )
+    fig.update_layout(**base_layout("", "Residue", "Sequence Index"))
+    fig.update_layout(yaxis_autorange="reversed")
+
+    return fig
+
+
+def matrix_heatmap(z, colorscale, zmin, zmax, bar):
+    """An L x L matrix as a square, reversed-y heatmap. scaleanchor keeps the
+    cells square inside the wider card, so the full-height colorbar matches
+    the plot exactly."""
+    fig = go.Figure(
+        go.Heatmap(z=z, colorscale=colorscale, zmin=zmin, zmax=zmax, colorbar=bar)
+    )
+    fig.update_layout(**base_layout("", "Residue", "Residue"))
+    fig.update_layout(
+        yaxis_autorange="reversed",
+        yaxis_scaleanchor="x",
+        xaxis_constrain="domain",
+        yaxis_constrain="domain",
+    )
+
+    return fig
+
+
+def plot_correlation(values):
+    z = symlog(values, CORRELATION_LINTHRESH)
+    top = float(symlog(np.array([1.0]), CORRELATION_LINTHRESH)[0])
+    ticks = [-1, -0.1, -0.01, 0, 0.01, 0.1, 1]
+    bar = colorbar(
+        "Pairwise Correlation",
+        tickvals=[float(symlog(np.array([v]), CORRELATION_LINTHRESH)[0]) for v in ticks],
+        ticktext=[str(v) for v in ticks],
+    )
+
+    return matrix_heatmap(z, "PiYG", -top, top, bar)
+
+
+def plot_conditional(values):
+    return matrix_heatmap(np.asarray(values), "RdPu", 0, 1,
+                          colorbar("Conditional Probability"))
+
+
+def plot_pairwise_coverage(values):
+    low = max(float(np.nanmin(values)), 1e-4)
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        z = np.log10(np.clip(values, low, None))
+
+    return matrix_heatmap(z, "RdPu", np.log10(low), float(np.nanmax(z)),
+                          colorbar("Pairwise Coverage"))
+
+
+# ===========================================================================
+# The figure registry: what the report can show
+# ===========================================================================
+
+
+@dataclass(frozen=True)
+class Plot:
+    """One report figure. render(handle, ref, channels) gives the figure for
+    one reference (ref an index) or the aggregate (ref None), and None where
+    the file lacks the data or the plot has no such view."""
+
+    key: str
+    label: str
+    aspect: str  # "std" | "wide" | "square"
+    render: object
+
+
+def render_profile(handle, ref, channels):
+    if ref is None:
+        return None
+
+    reactivity, error = reactivity_of(handle, channels, ref)
+
+    if reactivity is None:
+        return None
+
+    return plot_profile(reactivity, error)
+
+
+def render_heatmap(handle, ref, channels):
+    if ref is not None:
+        return None
+
+    reactivity, _ = reactivity_of(handle, channels)
+
+    if reactivity is None:
+        return None
+
+    return plot_reactivity_heatmap(reactivity)
+
+
+def render_coverage(handle, ref, channels):
+    coverage = dataset(handle, COVERAGE)
+    reads = dataset(handle, READS)
+
+    if coverage is None or reads is None:
+        return None
+
+    if ref is None:
+        return plot_coverage(coverage.mean(0), float(reads.mean()))
+
+    return plot_coverage(coverage[ref], float(reads[ref]))
+
+
+def render_reads(handle, ref, channels):
+    reads = dataset(handle, READS)
+
+    if ref is not None or reads is None:
+        return None
+
+    return plot_read_hist(reads)
+
+
+def render_reads_per_block(handle, ref, channels):
+    reads = dataset(handle, READS)
+
+    if ref is not None or reads is None:
+        return None
+
+    return plot_reads_per_block(reads)
+
+
+def render_lengths(handle, ref, channels):
+    lengths = dataset(handle, LENGTHS)
+
+    if lengths is None:
+        return None
+
+    if ref is not None:
+        lengths = lengths[ref]
+
+    return plot_lengths(lengths)
+
+
+def render_pairwise(name, build):
+    """A builder for one of the pairwise matrices, which exist per reference
+    only and only when the run asked for them."""
+    def render(handle, ref, channels):
+        if ref is None or name not in handle:
+            return None
+
+        return build(np.asarray(handle[name][ref]))
+
+    return render
+
+
+PROFILE_PLOT = Plot("profile", "Reactivity profile", "wide", render_profile)
+HEATMAP_PLOT = Plot("heatmap", "Reactivity heatmap", "wide", render_heatmap)
+COVERAGE_PLOT = Plot("coverage", "Coverage", "std", render_coverage)
+READS_PLOT = Plot("reads", "Reads per reference", "std", render_reads)
+BLOCKS_PLOT = Plot("reads-per-block", "Reads per block", "std", render_reads_per_block)
+LENGTHS_PLOT = Plot("lengths", "Read lengths", "std", render_lengths)
+CORRELATION_PLOT = Plot("correlation", "Pairwise correlation", "square",
+                        render_pairwise(PAIRWISE_CORRELATION, plot_correlation))
+CONDITIONAL_PLOT = Plot("conditional", "Pairwise conditional", "square",
+                        render_pairwise(PAIRWISE_CONDITIONAL, plot_conditional))
+PAIRCOV_PLOT = Plot("pairwise-coverage", "Pairwise coverage", "square",
+                    render_pairwise(PAIRWISE_COVERAGE, plot_pairwise_coverage))
+
+REGISTRY = {p.key: p for p in (
+    PROFILE_PLOT, HEATMAP_PLOT, COVERAGE_PLOT, READS_PLOT, BLOCKS_PLOT, LENGTHS_PLOT,
+    CORRELATION_PLOT, CONDITIONAL_PLOT, PAIRCOV_PLOT,
+)}
+
+# Section membership: what a single-reference report shows, what the
+# aggregate view of a multi-reference report shows, and what its
+# per-sequence view shows. A new figure joins the lists it belongs in.
+SINGLE = (PROFILE_PLOT, COVERAGE_PLOT, LENGTHS_PLOT,
+          CORRELATION_PLOT, CONDITIONAL_PLOT, PAIRCOV_PLOT)
+AGGREGATE = (HEATMAP_PLOT, COVERAGE_PLOT, READS_PLOT, BLOCKS_PLOT, LENGTHS_PLOT)
+PER_SEQ = (PROFILE_PLOT, COVERAGE_PLOT, LENGTHS_PLOT,
+           CORRELATION_PLOT, CONDITIONAL_PLOT, PAIRCOV_PLOT)
+
+# The figure kinds composed client-side rather than tagged on a card.
+OVERLAY = "overlay"
+DIFFERENCE = "difference"
+
+
+def parse_ref(value):
+    """A reference selector to an index, or None for the aggregate view."""
+    if value is None or value == "" or value == AGGREGATE_REF:
+        return None
+
+    return int(value)
+
+
+def parse_channels(value):
+    """The checked channels, in canonical order."""
+    if value is None:
+        value = list(CHANNELS)
+
+    return [c for c in CHANNELS if c in value]
+
+
+def condition_path(conditions, label):
+    for condition in conditions:
+        if condition.label == label:
+            return condition.path
+
+    raise KeyError(f"no condition labeled {label}")
+
+
+def series_of(conditions, spec, channels):
+    """One overlay or difference series: the selected condition's aggregate
+    reactivity at one reference, with its legend label. None where the
+    reference lies past this condition's library."""
+    ref = int(spec.get("ref", 0) or 0)
+
+    with h5py.File(condition_path(conditions, spec["cond"]), "r") as handle:
+        if ref >= file_shape(handle)[0]:
+            return None
+
+        reactivity, error = reactivity_of(handle, channels, ref)
+
+    if reactivity is None:
+        return None
+
+    return {"reactivity": reactivity, "error": error, "label": spec.get("label", "")}
+
+
+def render_figure(conditions, spec):
+    """Build the requested figure, or None where the kind is unknown or the
+    data is absent. spec carries kind, channels, and the coordinates: cond and
+    ref for a card figure, series for an overlay, a and b for a difference."""
+    kind = spec["kind"]
+    channels = parse_channels(spec.get("channels"))
+
+    if kind == OVERLAY:
+        series = [series_of(conditions, s, channels) for s in spec["series"]]
+
+        return plot_overlay([s for s in series if s is not None])
+
+    if kind == DIFFERENCE:
+        a = series_of(conditions, spec["a"], channels)
+        b = series_of(conditions, spec["b"], channels)
+
+        if a is None or b is None:
+            return None
+
+        return plot_difference(a, b)
+
+    plot = REGISTRY.get(kind)
+
+    if plot is None:
+        return None
+
+    with h5py.File(condition_path(conditions, spec["cond"]), "r") as handle:
+        ref = parse_ref(spec.get("ref"))
+
+        if ref is not None and ref >= file_shape(handle)[0]:
+            return None
+
+        return plot.render(handle, ref, channels)
+
+
+# ===========================================================================
+# Summary statistics
+# ===========================================================================
+
+
+@dataclass(frozen=True)
+class Stat:
+    """One tile: a label, a value, how to format it, and the group box it
+    belongs to."""
+
+    label: str
+    value: float
+    fmt: str = "float"
+    prec: int = 2
+    group: str = ""
+
+
+def library_stats(handle, ref):
+    """The Library group: the reference count on the aggregate view, and the
+    length of the reference in view, from its sequence. A single-reference
+    condition has both on the one view."""
+    n_refs, _ = file_shape(handle)
+    rows = []
+
+    if ref is None:
+        rows.append(Stat("References", n_refs, "int", group="Library"))
+
+    if ref is not None or n_refs == 1:
+        bases = decode_sequence(handle, ref or 0)
+
+        if bases is not None:
+            rows.append(Stat("Reference length", len(bases), "int", group="Library"))
+
+    return rows
+
+
+def read_stats(handle, ref):
+    """The Reads group: one reference's count where one is in view, the
+    library-wide rows otherwise. The per-run totals are whole-file numbers,
+    so they appear on the aggregate view only."""
+    n_refs, _ = file_shape(handle)
+    reads = dataset(handle, READS)
+    rows = []
+
+    if reads is None:
+        return rows
+
+    reads = np.asarray(reads, dtype=float)
+
+    if ref is not None or n_refs == 1:
+        rows.append(Stat("Reads", float(reads[ref or 0]), "int", group="Reads"))
+    else:
+        rows += [
+            Stat("Total reads", float(reads.sum()), "int", group="Reads"),
+            Stat("Mean reads", float(reads.mean()), "float", group="Reads"),
+            Stat("Median reads", float(np.median(reads)), "int", group="Reads"),
+            Stat("Dropout fraction", float((reads == 0).mean()), "float", group="Reads"),
+        ]
+
+    if ref is None:
+        rejected = dataset(handle, REJECTED)
+        unmapped = dataset(handle, UNMAPPED)
+
+        if rejected is not None:
+            rows.append(Stat("Rejected reads", float(rejected.sum()), "int", group="Reads"))
+        if unmapped is not None:
+            rows.append(Stat("Unmapped reads", float(unmapped), "int", group="Reads"))
+
+    return rows
+
+
+def reactivity_stats(handle, channels, ref):
+    """The Reactivity and SNR groups, over the aggregate of the selected
+    channels."""
+    n_refs, _ = file_shape(handle)
+    reactivity, error = reactivity_of(handle, channels, ref)
+
+    if reactivity is None:
+        return []
+
+    held = np.isfinite(reactivity)
+    snr = snr_of(reactivity, error)
+    finite = snr[np.isfinite(snr)]
+
+    rows = [
+        Stat("Mean reactivity", mean_of(reactivity[held]), "float", 3, group="Reactivity"),
+        Stat("Mean error", mean_of(error[held]), "float", 3, group="Reactivity"),
+        Stat("Mean SNR", mean_of(finite), "float", group="SNR"),
+    ]
+
+    if ref is None and n_refs > 1:
+        rows.append(Stat("SNR > 1", mean_of(finite > 1), "float", group="SNR"))
+
+    return rows
+
+
+def condition_stats(handle, channels, ref):
+    return (library_stats(handle, ref) + read_stats(handle, ref)
+            + reactivity_stats(handle, channels, ref))
+
+
+# ===========================================================================
+# The page shell: pure HTML builders
+# ===========================================================================
+
+
+def escape(text):
+    """Escapes a label for HTML text and attribute positions."""
+    return (str(text).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def fmt_stat(stat):
+    """One tile's value: an em dash where it is not finite, and scientific
+    notation where the fixed precision would round it to zero."""
+    if not np.isfinite(stat.value):
+        return "—"
+    if stat.fmt == "int":
+        return f"{int(stat.value):,}"
+    if 0 < abs(stat.value) < 10 ** -stat.prec:
+        return f"{stat.value:.1e}"
+
+    return f"{stat.value:.{stat.prec}f}"
+
+
+def grouped_stats_html(stats):
+    """Tiles laid out as labeled group boxes, in order of first appearance."""
+    groups = {}
+
+    for stat in stats:
+        groups.setdefault(stat.group, []).append(stat)
+
+    boxes = ""
+    for name, members in groups.items():
+        tiles = "".join(
+            f'<div class="stat"><div class="stat-value">{fmt_stat(s)}</div>'
+            f'<div class="stat-label">{s.label}</div></div>'
+            for s in members
+        )
+        boxes += (f'<div class="stat-group"><div class="stat-group-label">{name}</div>'
+                  f'<div class="stat-group-tiles">{tiles}</div></div>')
+
+    return f'<div class="stat-groups">{boxes}</div>'
+
+
+def active(label, default):
+    return " active" if label == default else ""
+
+
+def cond_toggle_html(labels):
+    """The condition chip row; the first condition starts active."""
+    buttons = "".join(
+        f'<button type="button" class="cond-btn{active(c, labels[0])}" '
+        f'data-cond="{escape(c)}">{escape(c)}</button>'
+        for c in labels
+    )
+
+    return f'<div class="cond-toggle">{buttons}</div>'
+
+
+def condition_block_html(condition, channels, ref):
+    """One condition's grouped stats, or a note where the selected reference
+    lies past this condition's library."""
+    with h5py.File(condition.path, "r") as handle:
+        if ref is not None and ref >= file_shape(handle)[0]:
+            return f'<p class="stat-note">No reference {ref + 1}.</p>'
+
+        return grouped_stats_html(condition_stats(handle, channels, ref))
+
+
+def stats_conditions_html(conditions, channels, ref):
+    """Each condition's grouped stats behind the chip toggle, one shown at a
+    time. This is also the body the /stats endpoint returns, so the client
+    can refetch it when the checked channels or the reference change."""
+    labels = [c.label for c in conditions]
+    blocks = ""
+
+    for condition in conditions:
+        blocks += (f'<div class="cond-stats{active(condition.label, labels[0])}" '
+                   f'data-cond="{escape(condition.label)}">'
+                   f'{condition_block_html(condition, channels, ref)}</div>')
+
+    if len(labels) == 1:
+        return f'<div class="stats-conditions">{blocks}</div>'
+
+    return f'<div class="stats-conditions">{cond_toggle_html(labels)}{blocks}</div>'
+
+
+def channel_toggle_html():
+    """The three channel checkboxes, all checked to start."""
+    boxes = "".join(
+        f'<label class="channel"><input type="checkbox" data-channel="{c}" checked>'
+        f'{CHANNEL_LABELS[c]}</label>'
+        for c in CHANNELS
+    )
+
+    return (f'<div class="channel-toggle"><span class="channel-label">'
+            f'Reactivity from:</span>{boxes}</div>')
+
+
+def plot_card(plot, labels, ref, extra_class=""):
+    """A collapsible figure card: the condition chips and an empty placeholder
+    the client fetches into."""
+    cls = "plot-details wide" if plot.aspect == "wide" else "plot-details"
+    inner_cls = ("plot " + extra_class).strip()
+    div = (f'<div class="figure {plot.aspect}">'
+           f'<div class="{inner_cls}" data-kind="{plot.key}" '
+           f'data-cond="{escape(labels[0])}" data-ref="{ref}"></div></div>')
+    toggle = cond_toggle_html(labels) if len(labels) > 1 else ""
+
+    return (f'<details class="{cls}"><summary>{plot.label}</summary>'
+            f'{toggle}{div}</details>')
+
+
+def plots_grid(cards):
+    return '<div class="plots">' + "".join(cards) + "</div>"
+
+
+def section(title, body):
+    return f"<details><summary>{title}</summary>{body}</details>"
+
+
+def seqview_html():
+    return ('<div class="seqview-wrap"><div class="seqview-label">Sequence</div>'
+            '<div class="seqview" id="seqview"></div></div>')
+
+
+def reference_select_html(n_refs):
+    options = "".join(f'<option value="{i}">Reference {i + 1}</option>'
+                      for i in range(n_refs))
+
+    return f'<select class="seqselect" id="refselect">{options}</select>'
+
+
+def single_section(conditions, channels):
+    labels = [c.label for c in conditions]
+    cards = [plot_card(plot, labels, 0) for plot in SINGLE]
+
+    return (f'<div id="stats-main">{stats_conditions_html(conditions, channels, None)}</div>'
+            + seqview_html() + plots_grid(cards))
+
+
+def aggregate_section(conditions, channels):
+    labels = [c.label for c in conditions]
+    cards = [plot_card(plot, labels, AGGREGATE_REF) for plot in AGGREGATE]
+
+    return ("<h3>Aggregate data</h3>"
+            + f'<div id="stats-main">{stats_conditions_html(conditions, channels, None)}</div>'
+            + plots_grid(cards))
+
+
+def per_sequence_section(conditions, channels, n_refs):
+    labels = [c.label for c in conditions]
+    cards = [plot_card(plot, labels, 0, "perseq-plot") for plot in PER_SEQ]
+
+    return ("<h3>Per-sequence data</h3>"
+            + reference_select_html(n_refs)
+            + f'<div id="stats-perseq">{stats_conditions_html(conditions, channels, 0)}</div>'
+            + seqview_html() + plots_grid(cards))
+
+
+def comparison_sections():
+    """The multi-plot and difference shells; the client wires their rows."""
+    return [
+        section(
+            "Multi-plot",
+            '<div id="multiplot-rows"></div>'
+            '<button id="multiplot-add">+ Add profile</button>'
+            '<div class="figure wide"><div class="plot" id="multiplot"></div></div>',
+        ),
+        section(
+            "Difference plot",
+            '<div id="diff-rows"></div>'
+            '<div class="figure wide"><div class="plot" id="diffplot"></div></div>',
+        ),
+    ]
+
+
+def manifest_of(conditions, refs):
+    """The compact JSON the client reads: the condition labels, each one's
+    reference count, and the channel vocabulary."""
+    return {
+        "conditions": [c.label for c in conditions],
+        "refs": refs,
+        "channels": list(CHANNELS),
+        "kinds": {"profile": PROFILE_PLOT.key, "overlay": OVERLAY, "difference": DIFFERENCE},
+    }
+
+
+def embed_tags(manifest):
+    return ('<script type="application/json" id="cmuts-manifest">'
+            f"{json.dumps(manifest)}</script>\n")
+
+
+def document(body, embed, n_conditions):
+    plural = "s" if n_conditions != 1 else ""
+    subtitle = f"cmuts {VERSION} · {n_conditions} condition{plural}"
+
+    return (
+        "<!doctype html>\n"
+        '<html><head><meta charset="utf-8">'
+        "<title>cmuts report</title>\n"
+        f"<style>{CSS}</style>\n"
+        f"<script>{get_plotlyjs()}</script>\n"
+        "</head><body>\n"
+        '<header class="report"><h1>cmuts report</h1>'
+        f'<p class="subtitle">{subtitle}</p>'
+        '<p class="offline-note" hidden>Offline snapshot, plots are frozen.</p></header>\n'
+        + body + "\n" + embed
+        + f"<script>{REPORT_JS}</script>\n"
+        "</body></html>\n"
+    )
+
+
+def build_shell(conditions):
+    """The whole page: the channel checkboxes, the stats, the figure cards,
+    and the comparison sections, with every figure fetched by the client. The
+    single-reference layout applies only when every condition holds one
+    reference; the dropdown otherwise reaches the largest library."""
+    channels = list(CHANNELS)
+    refs = condition_refs(conditions)
+    n_refs = max(refs)
+
+    parts = [channel_toggle_html()]
+
+    if n_refs == 1:
+        parts.append(single_section(conditions, channels))
+    else:
+        parts.append(aggregate_section(conditions, channels))
+        parts.append(per_sequence_section(conditions, channels, n_refs))
+
+    if len(conditions) > 1 or n_refs > 1:
+        parts.extend(comparison_sections())
+
+    embed = embed_tags(manifest_of(conditions, refs))
+
+    return document("\n".join(parts), embed, len(conditions))
+
+
+# ===========================================================================
+# The page assets
+# ===========================================================================
+
+CSS = """
+.plotly-notifier { display: none !important; }
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff; --surface: #f6f6f9; --ink: #1a1a1e; --muted: #6b6b76;
+  --border: #e4e4ea; --accent: #c51b8a;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14141a; --surface: #1e1e26; --ink: #ececf0; --muted: #9a9aa6;
+          --border: #2c2c36; --accent: #e8479f; }
+}
+* { box-sizing: border-box; }
+body { font-family: Arial, sans-serif;
+       max-width: 1200px; margin: 0 auto; padding: 2rem 1.25rem 4rem; line-height: 1.5;
+       color: var(--ink); background: var(--bg); }
+header.report { border-bottom: 2px solid var(--accent); padding-bottom: 0.7rem; margin-bottom: 1.6rem; }
+header.report h1 { font-size: 1.7rem; margin: 0; letter-spacing: -0.01em; }
+header.report .subtitle { color: var(--muted); font-size: 0.9rem; margin: 0.3rem 0 0; }
+details { border: 1px solid var(--border); border-radius: 10px; margin: 1rem 0;
+          padding: 0.3rem 1.1rem 1rem; background: var(--bg); }
+details > summary { cursor: pointer; font-size: 1.15rem; font-weight: 650; padding: 0.6rem 0;
+                    list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: "\\25B8"; color: var(--accent); display: inline-block;
+                            width: 1.1em; transition: transform 0.15s ease; }
+details[open] > summary::before { transform: rotate(90deg); }
+details.plot-details { border: none; border-radius: 0; background: transparent;
+                       margin: 0; padding: 0; }
+details.plot-details > summary { font-size: 1.05rem; font-weight: 600; color: var(--ink);
+                                 padding: 0.5rem 0; }
+.plots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+         gap: 0.1rem 1.2rem; align-items: start; grid-auto-flow: row dense; }
+@media (max-width: 980px) { .plots { grid-template-columns: 1fr; } }
+details.plot-details.wide { grid-column: 1 / -1; }
+h3 { font-size: 1.05rem; font-weight: 650; color: var(--muted); text-transform: uppercase;
+     letter-spacing: 0.05em; margin: 1.5rem 0 0.4rem; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+              gap: 0.6rem; margin: 0.9rem 0 1.3rem; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+        padding: 0.7rem 0.9rem; }
+.stat-value { font-size: 1.45rem; font-weight: 600; line-height: 1.15; }
+.stat-label { font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem; }
+.channel-toggle { display: flex; align-items: center; gap: 1rem; margin: 0.4rem 0 1rem;
+                  padding: 0.55rem 0.9rem; background: var(--surface);
+                  border: 1px solid var(--border); border-radius: 9px; }
+.channel-label { font-size: 0.78rem; font-weight: 650; color: var(--muted);
+                 text-transform: uppercase; letter-spacing: 0.05em; }
+.channel { font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.35rem; }
+.channel input { accent-color: var(--accent); }
+.cond-toggle { display: inline-flex; margin: 0.1rem 0 0.4rem; border: 1px solid var(--border);
+               border-radius: 7px; overflow: hidden; }
+.cond-btn { margin: 0; border: none; border-radius: 0; border-left: 1px solid var(--border);
+            background: var(--bg); color: var(--muted); font-size: 0.82rem; padding: 4px 12px; }
+.cond-btn:first-child { border-left: none; }
+.cond-btn.active { background: var(--accent); color: #fff; }
+.figure { background: #ffffff; border: 1px solid #e6e6ec; border-radius: 10px;
+          padding: 6px 10px; margin: 0.2rem 0 0.8rem; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+.figure.wide { aspect-ratio: 5 / 2; }
+.figure.std { aspect-ratio: 3 / 2; }
+.figure.square { aspect-ratio: 5 / 4; max-width: 760px; margin-inline: auto; }
+.figure > *, .figure .plot { width: 100%; height: 100%; }
+.plot { width: 100%; }
+select, button { margin: 2px 6px 2px 0; padding: 5px 10px; font-size: 0.9rem; color: var(--ink);
+                 background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+button { cursor: pointer; }
+.row { margin: 5px 0; }
+.seqview-wrap { margin: 4px 0 14px; }
+.seqview-label { font-size: 0.78rem; font-weight: 600; color: var(--muted);
+                 text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.seqview { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+           line-height: 1.6; word-break: break-all; border: 1px solid #2c2c36;
+           border-radius: 6px; padding: 6px 8px; background: #14141a; }
+.seqview .base { display: inline-block; width: 1.15ch; text-align: center; font-weight: 600; }
+#diff-rows { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+#diff-rows .row { margin: 0; }
+#diff-rows select { margin: 0; }
+.diff-op { color: var(--muted); }
+.stat-groups { display: flex; flex-wrap: wrap; align-items: flex-start;
+               gap: 0.8rem; margin: 0.5rem 0 1.3rem; }
+.stat-group { border: 1px solid var(--border); border-radius: 10px;
+              padding: 0.55rem 0.85rem 0.7rem; }
+.stat-group-label { font-size: 0.72rem; font-weight: 650; color: var(--muted);
+                    text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 0.55rem; }
+.stat-group-tiles { display: flex; flex-wrap: wrap; gap: 0.35rem 1.2rem; }
+.stat-group .stat { background: none; border: none; border-radius: 0; padding: 0; min-width: 76px; }
+.stat-group .stat-value { font-size: 1.25rem; }
+.stats-conditions { margin-bottom: 1.3rem; }
+.stat-note { color: var(--muted); font-size: 0.85rem; margin: 0.6rem 0 1rem; }
+.cond-stats { display: none; }
+.cond-stats.active { display: block; }
+.offline-note { color: var(--accent); font-size: 0.85rem; margin: 0.4rem 0 0; }
+select:disabled, button:disabled, .cond-btn:disabled, .disabled {
+  opacity: 0.45; cursor: not-allowed; pointer-events: none;
+}
+"""
+
+REPORT_JS = """
+(function () {
+  // The shell fetches every figure from the server and draws it with
+  // Plotly.react. On load it probes the server; a reopened snapshot finds it
+  // gone, keeps the drawn figures, and greys out the controls.
+  var EXPORT = {wide: [1000, 400], std: [600, 400], square: [650, 520]};
+
+  function readJSON(id) {
+    var el = document.getElementById(id);
+    return el ? JSON.parse(el.textContent) : null;
+  }
+  var MANIFEST = readJSON("cmuts-manifest") || {conditions: [], refs: [], channels: []};
+  var CONDS = MANIFEST.conditions;
+  var KINDS = MANIFEST.kinds || {};
+  var REFS = MANIFEST.refs || [];
+  var ONLINE = false;
+
+  function refCountOf(cond) {
+    return REFS[CONDS.indexOf(cond)] || 1;
+  }
+
+  // --- the channel checkboxes ------------------------------------------------
+  function channels() {
+    var boxes = document.querySelectorAll(".channel-toggle input");
+    var on = [];
+    for (var i = 0; i < boxes.length; i++) {
+      if (boxes[i].checked) on.push(boxes[i].getAttribute("data-channel"));
+    }
+    return on;
+  }
+  function bindChannels() {
+    var boxes = document.querySelectorAll(".channel-toggle input");
+    for (var i = 0; i < boxes.length; i++) {
+      boxes[i].addEventListener("change", function () {
+        if (channels().length === 0) { this.checked = true; return; }
+        renderAll();
+        refreshStats();
+        colorSeqview();
+      });
+    }
+  }
+
+  // --- figure fetch + render -------------------------------------------------
+  function fetchFigure(spec) {
+    spec.channels = channels();
+    var url = "figure?spec=" + encodeURIComponent(JSON.stringify(spec));
+    return fetch(url).then(function (r) { return r.ok ? r.json() : null; })
+                     .catch(function () { return null; });
+  }
+  function specOf(div) {
+    return {kind: div.getAttribute("data-kind"),
+            cond: div.getAttribute("data-cond"),
+            ref: div.getAttribute("data-ref")};
+  }
+  function figKind(div) {
+    var fig = div.closest(".figure");
+    if (fig && fig.classList.contains("wide")) return "wide";
+    if (fig && fig.classList.contains("square")) return "square";
+    return "std";
+  }
+  function slugify(s) {
+    return String(s).replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "plot";
+  }
+  function figName(spec) {
+    var parts = [spec.kind];
+    if (spec.cond) parts.push(spec.cond);
+    return parts.join("-");
+  }
+  function figConfig(kind, name) {
+    var e = EXPORT[kind] || EXPORT.std;
+    return {displaylogo: false, responsive: true,
+            toImageButtonOptions: {format: "png", scale: 2, width: e[0], height: e[1],
+                                   filename: slugify(name)}};
+  }
+  function drawInto(div, fig, kind, name) {
+    Plotly.react(div, fig.data, fig.layout, figConfig(kind, name));
+  }
+  function hideCard(div) {
+    var card = div.closest("details.plot-details");
+    if (card) card.style.display = "none";
+  }
+  function showCard(div) {
+    var card = div.closest("details.plot-details");
+    if (card) card.style.display = "";
+  }
+  function renderDiv(div) {
+    if (!ONLINE) return Promise.resolve();
+    var spec = specOf(div);
+    return fetchFigure(spec).then(function (fig) {
+      if (!fig) { hideCard(div); return; }
+      showCard(div);
+      drawInto(div, fig, figKind(div), figName(spec));
+    });
+  }
+  function renderAll() {
+    var divs = document.querySelectorAll(".plot[data-kind]");
+    for (var i = 0; i < divs.length; i++) renderDiv(divs[i]);
+    redrawComparisons();
+  }
+
+  // Plotly typed-array-encodes numeric data as {dtype, bdata: base64}; decode
+  // to an indexable array so the sequence strip can read the profile.
+  function decodeArray(v) {
+    if (!v || typeof v.bdata !== "string") return v;
+    var bin = atob(v.bdata), n = bin.length, bytes = new Uint8Array(n);
+    for (var i = 0; i < n; i++) bytes[i] = bin.charCodeAt(i);
+    var CTOR = {f8: Float64Array, f4: Float32Array, i1: Int8Array, u1: Uint8Array,
+                i2: Int16Array, u2: Uint16Array, i4: Int32Array, u4: Uint32Array};
+    return new (CTOR[v.dtype] || Float64Array)(bytes.buffer);
+  }
+  function reactivityOf(fig) {
+    for (var i = 0; i < fig.data.length; i++) {
+      if (fig.data[i].name === "Reactivity") return decodeArray(fig.data[i].y);
+    }
+    return null;
+  }
+
+  // --- the colored sequence strip --------------------------------------------
+  function currentRef() {
+    var sel = document.getElementById("refselect");
+    return sel ? sel.value : "0";
+  }
+  function seqColor(v) {
+    if (v === null || v === undefined || isNaN(v)) return "var(--muted)";
+    var t = Math.max(0, Math.min(1, v));
+    return "rgb(" + Math.round(255 + (118 - 255) * t) + ","
+                  + Math.round(255 + (42 - 255) * t) + ","
+                  + Math.round(255 + (131 - 255) * t) + ")";
+  }
+  // The color scale spans the profile's 95th percentile, so raw rates and
+  // normalized reactivities color alike.
+  function seqScale(react) {
+    if (!react) return 1;
+    var vals = [];
+    for (var i = 0; i < react.length; i++) {
+      if (isFinite(react[i]) && react[i] > 0) vals.push(react[i]);
+    }
+    if (!vals.length) return 1;
+    vals.sort(function (a, b) { return a - b; });
+    return vals[Math.floor(0.95 * (vals.length - 1))] || 1;
+  }
+  function fetchSequence(cond, ref) {
+    var spec = JSON.stringify({cond: cond, ref: ref});
+    return fetch("sequence?spec=" + encodeURIComponent(spec))
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .catch(function () { return null; });
+  }
+  // The strip shows the selected condition's own sequence, colored by its
+  // profile, so a wild-type and a mutant condition each show their own bases.
+  function colorSeqview() {
+    var div = document.getElementById("seqview");
+    if (!div || !ONLINE) return;
+    var wrap = div.closest(".seqview-wrap");
+    var ref = currentRef();
+    var cond = activeCond();
+    Promise.all([
+      fetchSequence(cond, ref),
+      fetchFigure({kind: KINDS.profile, cond: cond, ref: ref}),
+    ]).then(function (got) {
+      var letters = got[0];
+      if (!letters) { if (wrap) wrap.hidden = true; return; }
+      if (wrap) wrap.hidden = false;
+      var react = got[1] ? reactivityOf(got[1]) : null;
+      var scale = seqScale(react);
+      var html = "";
+      for (var i = 0; i < letters.length; i++) {
+        html += '<span class="base" style="color:' + seqColor(react ? react[i] / scale : null) + '">'
+              + letters[i] + "</span>";
+      }
+      div.innerHTML = html;
+    });
+  }
+  function activeCond() {
+    var btn = document.querySelector("#stats-perseq .cond-btn.active")
+           || document.querySelector("#stats-main .cond-btn.active");
+    return btn ? btn.getAttribute("data-cond") : CONDS[0];
+  }
+
+  // --- the statistics --------------------------------------------------------
+  function activeCondOf(box) {
+    var btn = box.querySelector(".cond-btn.active");
+    return btn ? btn.getAttribute("data-cond") : null;
+  }
+  function setActiveCond(box, cond) {
+    if (!cond) return;
+    var chips = box.querySelectorAll(".cond-toggle .cond-btn, .cond-stats");
+    for (var i = 0; i < chips.length; i++) {
+      chips[i].classList.toggle("active", chips[i].getAttribute("data-cond") === cond);
+    }
+  }
+  // The fragment arrives with the first condition active, so the selection is
+  // carried over from the chips being replaced.
+  function fetchStats(box, ref) {
+    if (!box || !ONLINE) return;
+    var kept = activeCondOf(box);
+    var spec = {ref: ref, channels: channels()};
+    fetch("stats?spec=" + encodeURIComponent(JSON.stringify(spec)))
+      .then(function (r) { return r.ok ? r.text() : ""; })
+      .then(function (html) {
+        if (html) {
+          box.innerHTML = html;
+          bindStatToggles(box);
+          setActiveCond(box, kept);
+        }
+      })
+      .catch(function () {});
+  }
+  function refreshStats() {
+    fetchStats(document.getElementById("stats-main"), null);
+    fetchStats(document.getElementById("stats-perseq"), currentRef());
+  }
+  function bindStatToggles(root) {
+    var wraps = (root || document).querySelectorAll(".stats-conditions");
+    for (var g = 0; g < wraps.length; g++) {
+      (function (wrap) {
+        var btns = wrap.querySelectorAll(".cond-toggle .cond-btn");
+        var blocks = wrap.querySelectorAll(".cond-stats");
+        for (var b = 0; b < btns.length; b++) {
+          btns[b].addEventListener("click", function () {
+            var cond = this.getAttribute("data-cond");
+            for (var i = 0; i < btns.length; i++)
+              btns[i].classList.toggle("active", btns[i].getAttribute("data-cond") === cond);
+            for (var j = 0; j < blocks.length; j++)
+              blocks[j].classList.toggle("active", blocks[j].getAttribute("data-cond") === cond);
+            colorSeqview();
+          });
+        }
+      })(wraps[g]);
+    }
+  }
+
+  // --- per-card condition chips ----------------------------------------------
+  function bindConditionToggles() {
+    var toggles = document.querySelectorAll(".plot-details > .cond-toggle");
+    for (var g = 0; g < toggles.length; g++) {
+      (function (toggle) {
+        var plot = toggle.parentNode.querySelector(":scope > .figure .plot");
+        var btns = toggle.querySelectorAll(".cond-btn");
+        for (var b = 0; b < btns.length; b++) {
+          btns[b].addEventListener("click", function () {
+            for (var j = 0; j < btns.length; j++) btns[j].classList.remove("active");
+            this.classList.add("active");
+            plot.setAttribute("data-cond", this.getAttribute("data-cond"));
+            renderDiv(plot);
+          });
+        }
+      })(toggles[g]);
+    }
+  }
+
+  // --- the reference dropdown ------------------------------------------------
+  function bindReferenceSelect() {
+    var sel = document.getElementById("refselect");
+    if (!sel) return;
+    sel.addEventListener("change", function () {
+      var plots = document.querySelectorAll(".perseq-plot");
+      for (var i = 0; i < plots.length; i++) {
+        plots[i].setAttribute("data-ref", sel.value);
+        renderDiv(plots[i]);
+      }
+      fetchStats(document.getElementById("stats-perseq"), sel.value);
+      colorSeqview();
+    });
+  }
+
+  // --- the multi-plot and difference selectors -------------------------------
+  function makeRow(onChange, removable) {
+    var row = document.createElement("div");
+    row.className = "row";
+    var condSel = document.createElement("select");
+    row.appendChild(condSel);
+    var refSel = document.createElement("select");
+    row.appendChild(refSel);
+    if (CONDS.length > 1) {
+      var copts = "";
+      for (var c = 0; c < CONDS.length; c++)
+        copts += "<option>" + CONDS[c] + "</option>";
+      condSel.innerHTML = copts;
+    } else {
+      condSel.innerHTML = "<option>" + CONDS[0] + "</option>";
+      condSel.style.display = "none";
+    }
+    // The reference picker reaches only the selected condition's references,
+    // keeps its selection when the new condition still holds it, and hides
+    // for a single-reference condition.
+    function refreshRefs() {
+      var n = refCountOf(condSel.value);
+      var kept = Math.min(parseInt(refSel.value || "0", 10), n - 1);
+      if (n > 1) {
+        var opts = "";
+        for (var i = 0; i < n; i++)
+          opts += '<option value="' + i + '">Reference ' + (i + 1) + "</option>";
+        refSel.innerHTML = opts;
+        refSel.value = String(kept);
+        refSel.style.display = "";
+      } else {
+        refSel.innerHTML = '<option value="0"></option>';
+        refSel.style.display = "none";
+      }
+    }
+    refreshRefs();
+    refSel.addEventListener("change", onChange);
+    condSel.addEventListener("change", function () { refreshRefs(); onChange(); });
+    if (removable) {
+      var rm = document.createElement("button");
+      rm.textContent = "−";
+      rm.addEventListener("click", function () { row.parentNode.removeChild(row); onChange(); });
+      row.appendChild(rm);
+    }
+    row._sel = function () {
+      var ref = parseInt(refSel.value || "0", 10);
+      var parts = [];
+      if (CONDS.length > 1) parts.push(condSel.value);
+      if (refCountOf(condSel.value) > 1) parts.push("Reference " + (ref + 1));
+      return {cond: condSel.value, ref: ref, label: parts.join(" · ")};
+    };
+    return row;
+  }
+  var redrawMulti = null;
+  var redrawDiff = null;
+  function redrawComparisons() {
+    if (redrawMulti) redrawMulti();
+    if (redrawDiff) redrawDiff();
+  }
+  function bindMultiPlot() {
+    var rowsEl = document.getElementById("multiplot-rows");
+    var addBtn = document.getElementById("multiplot-add");
+    var plot = document.getElementById("multiplot");
+    if (!rowsEl || !plot) return;
+    function redraw() {
+      var series = [], rows = rowsEl.querySelectorAll(".row");
+      for (var i = 0; i < rows.length; i++) series.push(rows[i]._sel());
+      fetchFigure({kind: KINDS.overlay, series: series}).then(function (fig) {
+        if (fig) drawInto(plot, fig, "wide", "reactivity-overlay");
+      });
+    }
+    redrawMulti = redraw;
+    addBtn.addEventListener("click", function () { rowsEl.appendChild(makeRow(redraw, true)); redraw(); });
+    rowsEl.appendChild(makeRow(redraw, true));
+  }
+  function bindDiffPlot() {
+    var rowsEl = document.getElementById("diff-rows");
+    var plot = document.getElementById("diffplot");
+    if (!rowsEl || !plot) return;
+    function redraw() {
+      fetchFigure({kind: KINDS.difference, a: rowA._sel(), b: rowB._sel()}).then(function (fig) {
+        if (fig) drawInto(plot, fig, "wide", "reactivity-difference");
+      });
+    }
+    redrawDiff = redraw;
+    var rowA = makeRow(redraw, false), rowB = makeRow(redraw, false);
+    var op = document.createElement("span");
+    op.className = "diff-op"; op.textContent = "minus";
+    rowsEl.appendChild(rowA); rowsEl.appendChild(op); rowsEl.appendChild(rowB);
+  }
+
+  // --- resize (a figure drawn while its section is collapsed has zero size) ---
+  function bindCollapsibleResize() {
+    var ds = document.querySelectorAll("details");
+    for (var i = 0; i < ds.length; i++) {
+      ds[i].addEventListener("toggle", function () {
+        if (!this.open) return;
+        var plots = this.querySelectorAll(".js-plotly-plot, .plotly-graph-div");
+        for (var j = 0; j < plots.length; j++) {
+          if (plots[j].offsetWidth > 0) { try { Plotly.Plots.resize(plots[j]); } catch (e) {} }
+        }
+      });
+    }
+  }
+
+  // --- startup / offline handling --------------------------------------------
+  function goOffline() {
+    var note = document.querySelector(".offline-note");
+    if (note) note.hidden = false;
+    var controls = document.querySelectorAll("select, button, input, .cond-btn");
+    for (var i = 0; i < controls.length; i++) {
+      controls[i].disabled = true;
+      controls[i].classList.add("disabled");
+    }
+  }
+  function probe() {
+    return fetch("health").then(function (r) { return r.ok; }).catch(function () { return false; });
+  }
+  document.addEventListener("DOMContentLoaded", function () {
+    probe().then(function (online) {
+      ONLINE = online;
+      if (!online) { goOffline(); return; }
+      bindChannels();
+      bindConditionToggles();
+      bindStatToggles();
+      bindReferenceSelect();
+      bindMultiPlot();
+      bindDiffPlot();
+      bindCollapsibleResize();
+      renderAll();
+      colorSeqview();
+    });
+  });
+})();
+"""
+
+
+# ===========================================================================
+# The server
+# ===========================================================================
+
+
+# What a bad request raises: malformed specs, unknown names and references,
+# and files that cannot be read. Every endpoint answers these with a 400.
+REQUEST_FAILURES = (json.JSONDecodeError, KeyError, ValueError, IndexError, OSError)
+
+
+class ReportServer(ThreadingHTTPServer):
+    """Serves one report: the pre-built shell and figures over the files."""
+
+    daemon_threads = True
+
+    def __init__(self, address, conditions, shell):
+        super().__init__(address, Handler)
+        self.conditions = conditions
+        self.shell = shell
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):  # noqa: N802 (the stdlib API)
+        route = urlparse(self.path)
+
+        if route.path in ("/", "/index.html"):
+            self.reply(200, "text/html; charset=utf-8", self.server.shell.encode())
+        elif route.path == "/health":
+            self.reply(200, "text/plain", b"ok")
+        elif route.path == "/figure":
+            self.figure(parse_qs(route.query))
+        elif route.path == "/stats":
+            self.stats(parse_qs(route.query))
+        elif route.path == "/sequence":
+            self.sequence(parse_qs(route.query))
+        else:
+            self.reply(404, "text/plain", b"not found")
+
+    def spec_of(self, query):
+        return json.loads(query.get("spec", ["{}"])[0])
+
+    def figure(self, query):
+        try:
+            fig = render_figure(self.server.conditions, self.spec_of(query))
+        except REQUEST_FAILURES as error:
+            self.reply(400, "text/plain", str(error).encode())
+            return
+
+        if fig is None:
+            self.reply(404, "text/plain", b"no such figure")
+            return
+
+        self.reply(200, "application/json", fig.to_json().encode())
+
+    def stats(self, query):
+        try:
+            spec = self.spec_of(query)
+            ref = parse_ref(spec.get("ref"))
+            channels = parse_channels(spec.get("channels"))
+            body = stats_conditions_html(self.server.conditions, channels, ref)
+        except REQUEST_FAILURES as error:
+            self.reply(400, "text/plain", str(error).encode())
+            return
+
+        self.reply(200, "text/html; charset=utf-8", body.encode())
+
+    def sequence(self, query):
+        """One condition's bases at one reference, so the strip always shows
+        the sequence of the selected chip."""
+        try:
+            spec = self.spec_of(query)
+            path = condition_path(self.server.conditions, spec["cond"])
+
+            with h5py.File(path, "r") as handle:
+                bases = decode_sequence(handle, int(spec.get("ref", 0) or 0))
+        except REQUEST_FAILURES as error:
+            self.reply(400, "text/plain", str(error).encode())
+            return
+
+        if bases is None:
+            self.reply(404, "text/plain", b"no sequence")
+            return
+
+        self.reply(200, "text/plain", bases.encode())
+
+    def reply(self, code, content_type, body):
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        """Keeps the terminal quiet."""
+
+
+def serve(conditions, host, port):
+    """Builds the shell, binds the server, prints the URL, and waits."""
+    shell = build_shell(conditions)
+    server = ReportServer((host, port), conditions, shell)
+    url = f"http://{host}:{server.server_port}/"
+
+    print(f"\n  cmuts plot -- report serving at\n\n      {url}\n", flush=True)
+    print("  Open the link in your browser. Press Ctrl-C to stop.\n", flush=True)
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.shutdown()
+        server.server_close()
+        print("\n  cmuts plot -- stopped.\n")
+
+
+# ===========================================================================
+# The command line
+# ===========================================================================
+
+
+def stem_of(path):
+    name = path.rsplit("/", 1)[-1]
+
+    if "." not in name:
+        return name
+
+    return name.rsplit(".", 1)[0]
+
+
+def pair_labels(files, labels):
+    """One Condition per file. A --label applies to the file in the same
+    position; a file without one is labeled by its stem."""
+    if len(labels) > len(files):
+        raise SystemExit(f"cmuts-plot: {len(labels)} labels given for {len(files)} files")
+
+    padded = labels + [stem_of(f) for f in files[len(labels):]]
+
+    return [Condition(label, path) for label, path in zip(padded, files)]
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        prog="cmuts plot",
+        description="Serve an interactive HTML report over cmuts outputs.",
+    )
+    parser.add_argument("files", nargs="+", metavar="HDF5",
+                        help="outputs to show, one condition each")
+    parser.add_argument("--label", action="append", default=[], metavar="NAME",
+                        help="label for the file in the same position "
+                             "(default: the file's stem)")
+    parser.add_argument("--host", default="127.0.0.1",
+                        help="host to bind (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=0,
+                        help="port to bind (default: an OS-chosen free port)")
+    parser.add_argument("-V", "--version", action="version",
+                        version=f"cmuts plot {VERSION}")
+
+    return parser.parse_args()
+
+
+def main():
+    arguments = parse_arguments()
+    conditions = pair_labels(arguments.files, arguments.label)
+    refused = check_conditions(conditions)
+
+    if refused is not None:
+        raise SystemExit(f"cmuts-plot: {refused}")
+
+    serve(conditions, arguments.host, arguments.port)
+
+
+if __name__ == "__main__":
+    main()

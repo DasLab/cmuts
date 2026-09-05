@@ -65,6 +65,15 @@ cmuts norm -o normalized-reactivity.h5 reactivity.h5
 
 The HDF5 files produced by `cmuts hmm`, `cmuts sub`, and `cmuts norm` follow a consistent [format](format.md), and each individual program's page lists what subset of the format it writes and how.
 
+The final reactivity profiles, as well as coverage and quality statistics, can be visualized with the included [plotting helper](cmuts-plot.md).
+
+```sh
+cmuts plot \
+    normalized-reactivity.h5 --label "Normalized Reactivity" \
+    treated.h5 --label "Treated" \
+    untreated.h5 --label "Untreated"
+```
+
 ## Pre-Aligned Data
 
 Skip running `cmuts align`. Ensure your data is sorted, which can be done with `samtools sort`. Paired-end mates must have been merged before alignment; `cmuts hmm` refuses a paired read, since two mates would count their overlap twice.

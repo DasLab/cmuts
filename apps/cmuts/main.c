@@ -1,7 +1,7 @@
 /* main.c -- dispatch to a subcommand.
  *
- * align is a script installed alongside the binary, so it is run through exec
- * rather than called.
+ * align and plot are scripts installed alongside the binary, so they are run
+ * through exec rather than called.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -16,7 +16,9 @@
 #include "version.h"
 
 #define PROGRAM "cmuts"
-#define ALIGN   "align"
+
+/* The longest name a script subcommand resolves to: "cmuts-" and the name. */
+#define SCRIPT_NAME_MAX 64
 
 typedef struct {
     const char *name;
@@ -24,15 +26,17 @@ typedef struct {
     const char *summary;
 } subcommand;
 
-/* In pipeline order, which is the order the help lists them in. align has no
- * entry point here and is dispatched by name. */
+/* In pipeline order, which is the order the help lists them in. An entry with
+ * no entry point is a script installed alongside the binary, dispatched by
+ * name as cmuts-NAME. */
 static const subcommand SUBCOMMANDS[] = {
-    { ALIGN,   NULL,       "align reads to a reference and sort the resulting alignments" },
+    { "align", NULL,       "align reads to a reference and sort the resulting alignments" },
     { "hmm",   hmm_main,   "count MaP-seq mutations via the pair HMM" },
     { "sub",   sub_main,   "subtract an untreated background from an output" },
     { "div",   div_main,   "divide an output by a denatured control" },
     { "norm",  norm_main,  "normalize reactivity values across experiments" },
     { "score", score_main, "measure an output against a known structure" },
+    { "plot",  NULL,       "serve an interactive report over outputs" },
     { "gen",   gen_main,   "generate alignments and the reference they came from" },
 };
 
@@ -51,11 +55,12 @@ static void usage(FILE *out)
     fprintf(out, "\nRun '%s SUBCOMMAND --help' for that subcommand's options.\n", PROGRAM);
 }
 
-/* Replaces this process with the align script, which must be on PATH. */
-static int exec_align(char **argv)
+/* Replaces this process with the named script, which must be on PATH. */
+static int exec_script(const char *name, char **argv)
 {
-    static char script[] = "cmuts-align";
+    static char script[SCRIPT_NAME_MAX];
 
+    snprintf(script, sizeof script, "%s-%s", PROGRAM, name);
     argv[0] = script;
     execvp(script, argv);
     /* Single-threaded, since no subcommand has run.
@@ -91,14 +96,16 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    if (strcmp(name, ALIGN) == 0) {
-        return exec_align(argv + 1);
-    }
-
     for (size_t i = 0; i < N_SUBCOMMANDS; i++) {
-        if (SUBCOMMANDS[i].run && strcmp(name, SUBCOMMANDS[i].name) == 0) {
+        if (strcmp(name, SUBCOMMANDS[i].name) != 0) {
+            continue;
+        }
+
+        if (SUBCOMMANDS[i].run) {
             return SUBCOMMANDS[i].run(argc - 1, argv + 1);
         }
+
+        return exec_script(SUBCOMMANDS[i].name, argv + 1);
     }
 
     fprintf(stderr, "%s: no subcommand named '%s'; run '%s --help' for the list\n",

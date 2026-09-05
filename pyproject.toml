@@ -11,6 +11,15 @@ dev = [
     "pytest",
     "h5py",
     "numpy",
+    {include-group = "plot"},
+]
+
+# What cmuts plot needs at runtime. dev includes it so the tests can exercise
+# the report.
+plot = [
+    "h5py",
+    "numpy",
+    "plotly",
 ]
 
 # Separate from dev, which is what the tests need: Sphinx brings some thirty

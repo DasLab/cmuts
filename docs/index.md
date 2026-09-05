@@ -4,16 +4,21 @@
 
 ## Installing
 
-Each [release](https://github.com/DasLab/cmuts/releases) carries static `cmuts` binaries for Linux (x86_64, aarch64) and macOS (arm64). These are self-contained and have no dependencies. The bundled `cmuts-align` helper requires
+Each [release](https://github.com/DasLab/cmuts/releases) carries static `cmuts` binaries for Linux (x86_64, aarch64) and macOS (arm64). These are self-contained and have no dependencies. Alternatively, you can [build from source](from-source.md), which may provide marginal speedups.
+
+The bundled `cmuts-align` helper requires
 
 - [`minimap2`](https://github.com/lh3/minimap2)
 - [`samtools`](https://github.com/samtools/samtools)
 - [`fastp`](https://github.com/OpenGene/fastp) for paired-end input.
 
+The bundled `cmuts-plot` helper requires a Python 3 installation with the `h5py`, `numpy`, and `plotly` packages.
+
 ::::{tab} macOS
 
 ```sh
 brew install minimap2 samtools fastp
+python3 -m pip install h5py numpy plotly
 ```
 
 Install [Homebrew](https://brew.sh) first if you don't have it.
@@ -23,12 +28,11 @@ Install [Homebrew](https://brew.sh) first if you don't have it.
 
 ```sh
 apt install minimap2 samtools fastp
+python3 -m pip install h5py numpy plotly
 ```
 
 Or load the appropriate modules for your cluster (examples [here](clusters.md)).
 ::::
-
-Alternatively, you can [build from source](from-source.md), which may provide marginal speedups.
 
 ## Next Steps
 
@@ -53,6 +57,7 @@ cmuts-sub
 cmuts-div
 cmuts-norm
 cmuts-score
+cmuts-plot
 cmuts-gen
 ```
 

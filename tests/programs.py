@@ -21,6 +21,7 @@ CMUTS_SUB = (CMUTS, "sub")
 CMUTS_DIV = (CMUTS, "div")
 CMUTS_NORM = (CMUTS, "norm")
 CMUTS_SCORE = (CMUTS, "score")
+CMUTS_PLOT = (CMUTS, "plot")
 PROGRAMS = (CMUTS,)
 
 

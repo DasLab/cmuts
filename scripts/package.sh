@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # package.sh -- assemble a release tarball holding the cmuts binary, the
-# cmuts-align script, and every license the binary carries.
+# cmuts-align and cmuts-plot scripts, and every license the binary carries.
 #
 # usage: scripts/package.sh PREFIX [BUILD]
 #
@@ -36,7 +36,7 @@ NAME=cmuts-$VERSION-$OS-$ARCH
 
 rm -rf "$NAME"
 mkdir "$NAME"
-cp "$BUILD/cmuts" "$BUILD/cmuts-align" LICENSE "$NAME/"
+cp "$BUILD/cmuts" "$BUILD/cmuts-align" "$BUILD/cmuts-plot" LICENSE "$NAME/"
 
 for file in "$1"/licenses/*; do
     printf '======== %s ========\n\n' "$(basename "$file")"
