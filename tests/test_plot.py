@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import re
 import subprocess
+import sys
 import urllib.request
 from urllib.parse import quote
 
@@ -22,6 +24,16 @@ from programs import CMUTS_PLOT
 # How long to wait for the server to print its address, and for each request.
 STARTUP_SECONDS = 30
 REQUEST_SECONDS = 30
+
+
+def script_environment() -> dict:
+    """The environment the script runs under, with this interpreter's
+    directory first on PATH. The script's /usr/bin/env python3 then resolves
+    to the Python holding the test dependencies."""
+    environment = os.environ.copy()
+    environment["PATH"] = os.path.dirname(sys.executable) + os.pathsep + environment["PATH"]
+
+    return environment
 
 
 def _address_of(process) -> str:
@@ -46,6 +58,7 @@ def serving(*arguments):
     process = subprocess.Popen(
         [*CMUTS_PLOT, "--port", "0", *map(str, arguments)],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        env=script_environment(),
     )
 
     try:
@@ -79,7 +92,8 @@ def attempt(arguments):
     """Runs an invocation that must exit on its own, bounded so a run that
     wrongly serves fails rather than hangs."""
     return subprocess.run([*CMUTS_PLOT, *map(str, arguments)],
-                          capture_output=True, text=True, timeout=STARTUP_SECONDS)
+                          capture_output=True, text=True, timeout=STARTUP_SECONDS,
+                          env=script_environment())
 
 
 # ---------------------------------------------------------------------------
