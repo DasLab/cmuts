@@ -60,6 +60,18 @@ typedef struct {
 
 extern const fmt_field FMT_FIELDS[FMT_N_FIELDS];
 
+/* The rate of each kind of event, and the error alongside each. */
+#define FMT_N_CHANNELS 3
+
+extern const fmt_field_id FMT_CHANNEL_RATES[FMT_N_CHANNELS];
+extern const fmt_field_id FMT_CHANNEL_ERRORS[FMT_N_CHANNELS];
+
+/* Gives the rate an error belongs to, and any other field unchanged. */
+fmt_field_id fmt_rate_of(fmt_field_id id);
+
+/* Whether a field is a channel's rate or error. */
+bool fmt_is_channel(fmt_field_id id);
+
 /* What an output carries besides its fields, as attributes on the root group. */
 typedef enum {
     FMT_ATTR_PROGRAM,

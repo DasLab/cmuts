@@ -7,7 +7,6 @@
 
 #include "manifest.h"
 
-#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -68,18 +67,6 @@ static const cli_option OPTIONS[] = {
     },
 
     {
-        .group       = "Clipping",
-        .name        = "clip-above",
-        .type        = OPT_DOUBLE,
-        .offset      = offsetof(norm_args, normalize.clip_above),
-        .metavar     = "N",
-        .help        = "lower a normalized reactivity down to this value",
-        .unset_label = "none",
-        .minimum     = -CLI_UNBOUNDED,
-        .maximum     = CLI_UNBOUNDED,
-    },
-
-    {
         .group  = "Information",
         .name   = "help",
         .key    = 'h',
@@ -131,7 +118,6 @@ norm_args norm_defaults(void)
     return (norm_args){
         .normalize = {
             .min_coverage = DEFAULT_MIN_COVERAGE,
-            .clip_above   = (double)NAN,
         },
         .scheme = NORM_UBR,
     };

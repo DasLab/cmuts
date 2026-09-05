@@ -8,8 +8,12 @@ import h5py
 import numpy as np
 
 COVERAGE = "coverage"
-REACTIVITY = "reactivity"
-ERROR = "error"
+MISMATCH_RATE = "mismatches/rate"
+MISMATCH_ERROR = "mismatches/error"
+INSERTION_RATE = "insertions/rate"
+INSERTION_ERROR = "insertions/error"
+DELETION_RATE = "deletions/rate"
+DELETION_ERROR = "deletions/error"
 LENGTHS = "reads/lengths"
 COUNTED = "reads/counted"
 REJECTED = "reads/rejected"
@@ -42,8 +46,12 @@ class Field:
 # itself, and is neither.
 FIELDS = (
     Field(COVERAGE, PER_BASE, "f4", 0.0),
-    Field(REACTIVITY, PER_BASE, "f4", np.nan, rate=True),
-    Field(ERROR, PER_BASE, "f4", np.nan, rate=True),
+    Field(MISMATCH_RATE, PER_BASE, "f4", np.nan, rate=True),
+    Field(MISMATCH_ERROR, PER_BASE, "f4", np.nan, rate=True),
+    Field(INSERTION_RATE, PER_BASE, "f4", np.nan, rate=True),
+    Field(INSERTION_ERROR, PER_BASE, "f4", np.nan, rate=True),
+    Field(DELETION_RATE, PER_BASE, "f4", np.nan, rate=True),
+    Field(DELETION_ERROR, PER_BASE, "f4", np.nan, rate=True),
     Field(LENGTHS, PER_LENGTH, "u8", 0),
     Field(COUNTED, SCALAR, "u8", 0),
     Field(REJECTED, SCALAR, "u8", 0),
@@ -61,6 +69,12 @@ def _field_names(matches) -> tuple:
 # The groups a test reasons about. Each is derived from the declaration above,
 # so a new field joins them without being listed a second time.
 FLOAT_FIELDS = _field_names(lambda field: field.dtype.startswith("f"))
+
+# The rate of each kind of event, the error alongside each, and the rate each
+# error belongs to.
+RATE_FIELDS = (MISMATCH_RATE, INSERTION_RATE, DELETION_RATE)
+ERROR_FIELDS = (MISMATCH_ERROR, INSERTION_ERROR, DELETION_ERROR)
+RATE_OF = dict(zip(ERROR_FIELDS, RATE_FIELDS))
 
 # The fields holding counts, in which a zero is a measured value and not a
 # missing one.

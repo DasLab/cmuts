@@ -13,7 +13,8 @@ import numpy as np
 import pytest
 
 from alignments import build_placements
-from outputs import COVERAGE, REACTIVITY, ROW_FIELDS, fields_of
+from outputs import (COVERAGE, DELETION_RATE, ERROR_FIELDS, INSERTION_RATE,
+                     ROW_FIELDS, fields_of)
 from programs import run_cmuts
 
 DELETION = "D"
@@ -39,10 +40,16 @@ TOLERANCE = 1e-3
 # the smallest departure measured, which is a third of a mutation.
 DIVIDED = 0.1
 
-# Insertions have a weight of zero by default, which would leave every
-# insertion case comparing arrays of zeros. A single read leaves the evidence
-# below one whole observation, which would leave every rate NaN.
-WEIGHTED = dict(insertion_weight=1, min_depth=0)
+# How far apart the error datasets may stand: they converge one band position
+# later than the rates.
+ERROR_TOLERANCE = 1e-2
+
+# A single read leaves the evidence below one whole observation, which would
+# leave every rate NaN.
+EVERY_POSITION = dict(min_depth=0)
+
+# The rate dataset that records a gap of each kind.
+RATE_OF_KIND = {DELETION: DELETION_RATE, INSERTION: INSERTION_RATE}
 
 # How far a placement's coverage may stand from the count of bases the read
 # scores. The band allows paths reaching a little further than the CIGAR alone.
@@ -108,9 +115,12 @@ def read_rows(output, placements: int) -> dict:
 
 
 def row_spread(rows) -> float:
-    """Returns how far apart the rows of one field stand, over every
-    position."""
-    return float(np.nanmax(np.nanmax(rows, axis=0) - np.nanmin(rows, axis=0)))
+    """Returns how far apart the rows of one field stand, over the positions
+    at which any row holds a value."""
+    rows = np.asarray(rows)
+    held = rows[:, ~np.isnan(rows).all(axis=0)]
+
+    return float(np.nanmax(np.nanmax(held, axis=0) - np.nanmin(held, axis=0)))
 
 
 def scored_bases(case: Ambiguity, read: str) -> int:
@@ -125,7 +135,7 @@ def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
     data = build_placements(tmp_path, "ambiguous", reference, read, cigars)
 
     output = tmp_path / "banded.h5"
-    run_cmuts(data, output, band=case.gap, **WEIGHTED)
+    run_cmuts(data, output, band=case.gap, **EVERY_POSITION)
     written = read_rows(output, len(cigars))
 
     # Rows of zeros would agree with one another, so the comparison means
@@ -135,22 +145,24 @@ def test_where_the_gap_is_written_does_not_change_the_result(tmp_path, case):
                        rtol=COVERED_TOLERANCE, atol=0)
 
     for name, rows in written.items():
+        allowed = ERROR_TOLERANCE if name in ERROR_FIELDS else TOLERANCE
+
         for cigar, row in zip(cigars, rows):
-            assert np.allclose(row, rows[0], atol=TOLERANCE, rtol=0,
+            assert np.allclose(row, rows[0], atol=allowed, rtol=0,
                                equal_nan=True), f"{name}: {cigar}"
 
 
 @pytest.mark.parametrize("case", CONTROLS, ids=str)
 def test_a_band_narrower_than_the_gap_leaves_the_placements_apart(tmp_path, case):
-    """Asserts over the reactivity: an inserted base covers no reference
-    position at any placement, so the coverage can agree across placements even
-    where no read has been marginalized."""
+    """Asserts over the rate of the gap's own kind: an inserted base covers no
+    reference position at any placement, so the coverage can agree across
+    placements even where no read has been marginalized."""
     reference, read, cigars = homopolymer(case)
     data = build_placements(tmp_path, "ambiguous", reference, read, cigars)
 
     output = tmp_path / "narrow.h5"
-    run_cmuts(data, output, band=case.gap - 1, **WEIGHTED)
+    run_cmuts(data, output, band=case.gap - 1, **EVERY_POSITION)
 
     narrow = read_rows(output, len(cigars))
 
-    assert row_spread(narrow[REACTIVITY]) > DIVIDED
+    assert row_spread(narrow[RATE_OF_KIND[case.kind]]) > DIVIDED

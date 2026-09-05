@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from outputs import COVERAGE, REACTIVITY, field_of
+from outputs import COVERAGE, MISMATCH_RATE, field_of
 
 UNPAIRED = "."
 BRACKETS = "()[]{}<>"
@@ -117,9 +117,9 @@ def kept(path, tid, sequence, pairing, bases=ALL_BASES, min_coverage=0.0):
     structure leaves each open.
 
     A position is kept where the structure names it, the base is one of those
-    asked for, the reactivity is finite, and the coverage clears the floor.
+    asked for, the mismatch rate is finite, and the coverage clears the floor.
     """
-    rates = np.asarray(field_of(path, REACTIVITY))[tid]
+    rates = np.asarray(field_of(path, MISMATCH_RATE))[tid]
     coverage = np.asarray(field_of(path, COVERAGE))[tid]
 
     values, opened = [], []

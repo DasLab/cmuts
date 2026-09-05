@@ -28,14 +28,18 @@ typedef enum {
 } sub_rule;
 
 static const sub_rule RULES[FMT_N_FIELDS] = {
-    [FMT_COVERAGE]   = SUB_SUM,
-    [FMT_MISMATCH_RATE] = SUB_DIFFERENCE,
-    [FMT_MISMATCH_ERROR]      = SUB_QUADRATURE,
-    [FMT_LENGTHS]    = SUB_SUM,
-    [FMT_READS]      = SUB_SUM,
-    [FMT_REJECTED]   = SUB_SUM,
-    [FMT_UNMAPPED]   = SUB_SUM,
-    [FMT_SEQUENCE]   = SUB_SAME,
+    [FMT_COVERAGE]        = SUB_SUM,
+    [FMT_MISMATCH_RATE]   = SUB_DIFFERENCE,
+    [FMT_MISMATCH_ERROR]  = SUB_QUADRATURE,
+    [FMT_INSERTION_RATE]  = SUB_DIFFERENCE,
+    [FMT_INSERTION_ERROR] = SUB_QUADRATURE,
+    [FMT_DELETION_RATE]   = SUB_DIFFERENCE,
+    [FMT_DELETION_ERROR]  = SUB_QUADRATURE,
+    [FMT_LENGTHS]         = SUB_SUM,
+    [FMT_READS]           = SUB_SUM,
+    [FMT_REJECTED]        = SUB_SUM,
+    [FMT_UNMAPPED]        = SUB_SUM,
+    [FMT_SEQUENCE]        = SUB_SAME,
 };
 
 /* ------------------------------------------------------------------------ */

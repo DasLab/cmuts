@@ -30,11 +30,13 @@ from outputs import (
     ALL_FIELDS,
     COUNTED,
     COVERAGE,
-    ERROR,
+    ERROR_FIELDS,
     FIELDS,
+    MISMATCH_ERROR,
     FLOAT_FIELDS,
     NORM,
-    REACTIVITY,
+    MISMATCH_RATE,
+    RATE_FIELDS,
     SEQUENCE,
     UNMAPPED,
     add_field,
@@ -93,22 +95,22 @@ class Program:
 
 SUBTRACT = Program(
     name="sub", command=CMUTS_SUB, arity=2,
-    required=(REACTIVITY,), added=(), rules=SUB_RULES, rounds=(),
+    required=(COVERAGE,) + RATE_FIELDS, added=(), rules=SUB_RULES, rounds=(),
     run=lambda inputs, output, **options: run_subtract(*inputs, output, **options),
     attempt=lambda inputs, output, **options: try_subtract(*inputs, output, **options),
 )
 
 DIVIDE = Program(
     name="div", command=CMUTS_DIV, arity=2,
-    required=(REACTIVITY,), added=(), rules=DIV_RULES,
-    rounds=(ERROR,),
+    required=(COVERAGE,) + RATE_FIELDS, added=(), rules=DIV_RULES,
+    rounds=ERROR_FIELDS,
     run=lambda inputs, output, **options: run_divide(*inputs, output, **options),
     attempt=lambda inputs, output, **options: try_divide(*inputs, output, **options),
 )
 
 NORMALIZE = Program(
     name="norm", command=CMUTS_NORM, arity=1,
-    required=(COVERAGE, REACTIVITY), added=(NORM,), rules=None, rounds=(),
+    required=(COVERAGE,) + RATE_FIELDS, added=(NORM,), rules=None, rounds=(),
     run=lambda inputs, output, **options: run_normalize(inputs, [output], **options)[0],
     attempt=lambda inputs, output, **options: try_normalize(inputs, [output], **options),
 )
@@ -153,7 +155,7 @@ def test_the_layout_written_here_is_the_one_cmuts_hmm_writes(data, falsifiable,
                                                              tmp_path):
     """Checks the description in outputs.py against a real cmuts hmm run.
 
-    Compares names, types and widths, which keeps the reactivity calculation
+    Compares names, types and widths, which keeps the rate calculation
     out of the comparison.
     """
     counted = tmp_path / "counted.h5"
@@ -228,12 +230,12 @@ def test_an_input_missing_a_dataset_that_is_not_required_is_skipped(program, bui
             written += 1
 
             assert name not in layout_of(output), f"{name} missing from input {position}"
-            assert REACTIVITY in layout_of(output)
+            assert MISMATCH_RATE in layout_of(output)
 
 
 @readers
 def test_an_input_whose_datasets_disagree_is_refused(program, build, tmp_path):
-    broken = set_field_width(build(), ERROR, CAP + 3)
+    broken = set_field_width(build(), MISMATCH_ERROR, CAP + 3)
 
     failed = program.attempt(inputs_with(program, build, broken), tmp_path / "out.h5")
 
@@ -247,7 +249,7 @@ def test_a_dataset_outside_the_layout_is_not_carried(program, build, tmp_path):
     output = program.run(inputs, tmp_path / "out.h5")
 
     assert "unknown" not in layout_of(output)
-    assert REACTIVITY in layout_of(output)
+    assert MISMATCH_RATE in layout_of(output)
 
 
 @combiners
@@ -304,7 +306,7 @@ def test_an_empty_file_is_replaced_without_overwrite(program, build, tmp_path):
 
     program.run([build() for _ in range(program.arity)], output)
 
-    assert REACTIVITY in layout_of(output)
+    assert MISMATCH_RATE in layout_of(output)
 
 
 @readers
@@ -330,7 +332,7 @@ def test_a_run_that_refuses_its_inputs_leaves_the_output_intact(program, build,
     before = output.read_bytes()
 
     refused = {
-        "missing dataset": delete_field(build(), REACTIVITY),
+        "missing dataset": delete_field(build(), MISMATCH_RATE),
         "not hdf5": not_hdf5(tmp_path),
     }
 
@@ -383,9 +385,9 @@ def test_the_columns_past_a_reference_stay_nan(program, build, tmp_path):
     for row, length in enumerate(lengths):
         rows[row, length:] = np.nan
 
-    inputs = [build({REACTIVITY: rows}) for _ in range(program.arity)]
+    inputs = [build({MISMATCH_RATE: rows}) for _ in range(program.arity)]
     output = program.run(inputs, tmp_path / "out.h5")
-    result = field_of(output, REACTIVITY)
+    result = field_of(output, MISMATCH_RATE)
 
     for row, length in enumerate(lengths):
         assert not np.isnan(result[row, :length]).any(), row
@@ -442,9 +444,9 @@ def test_a_value_either_input_lacks_is_missing_from_the_output(program, build,
                                                                tmp_path, name):
     left, right = missing_in_each_input(N_REFS, CAP)
 
-    # The error of a ratio uses both reactivities, so both are set to a known
-    # value and the field under test is the only one with a value missing.
-    known = {REACTIVITY: 0.5}
+    # The error of a ratio uses its channel's rates, so every rate is set to a
+    # known value and the field under test is the only one with a value missing.
+    known = dict.fromkeys(RATE_FIELDS, 0.5)
 
     output = program.run([build(known | {name: left}), build(known | {name: right})],
                          tmp_path / "out.h5")

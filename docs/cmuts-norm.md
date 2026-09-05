@@ -38,7 +38,11 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 | --- | --- |
 | [`mismatches/rate`](format.md#mismatchesrate) | Divided by the norm. |
 | [`mismatches/error`](format.md#mismatcheserror) | Divided by the norm. |
-| [`norm`](format.md#norm) | Estimated per the specified scheme. |
+| [`insertions/rate`](format.md#insertionsrate) | Divided by the norm. |
+| [`insertions/error`](format.md#insertionserror) | Divided by the norm. |
+| [`deletions/rate`](format.md#deletionsrate) | Divided by the norm. |
+| [`deletions/error`](format.md#deletionserror) | Divided by the norm. |
+| [`norm`](format.md#norm) | Estimated per the specified scheme, over the aggregate of the three rates. |
 | [`coverage`](format.md#coverage) | Copied from the input. |
 | [`sequence`](format.md#sequence) | Copied from the input. |
 | [`reads/lengths`](format.md#readslengths) | Copied from the input. |
@@ -69,12 +73,6 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 | --- | --- |
 | `--norm SCHEME` | how the norm is taken from the rates (ubr, outlier; default ubr) |
 | `--min-coverage N` | coverage a position needs before its rate sets the norm (ubr only) (default 500) |
-
-### Clipping
-
-| Option | Description |
-| --- | --- |
-| `--clip-above N` | lower a normalized reactivity down to this value (default: none) |
 
 ### Information
 

@@ -31,6 +31,10 @@ If any dataset does not match the expected shape or the sequences do not match, 
 | --- | --- |
 | [`mismatches/rate`](format.md#mismatchesrate) | Sample over control. |
 | [`mismatches/error`](format.md#mismatcheserror) | Propagated from the inputs. |
+| [`insertions/rate`](format.md#insertionsrate) | Sample over control. |
+| [`insertions/error`](format.md#insertionserror) | Propagated from the inputs. |
+| [`deletions/rate`](format.md#deletionsrate) | Sample over control. |
+| [`deletions/error`](format.md#deletionserror) | Propagated from the inputs. |
 | [`coverage`](format.md#coverage) | Summed over the inputs. |
 | [`sequence`](format.md#sequence) | Copied from the inputs. |
 | [`reads/lengths`](format.md#readslengths) | Summed over the inputs. |

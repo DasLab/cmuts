@@ -1,8 +1,9 @@
 """Tools for computing the scale cmuts norm should divide by, and what dividing
 by it leaves.
 
-Both schemes pool the rates of every input and return one number. The pool is
-gathered in float32 and the scale computed over it in float64, as the program
+Both schemes pool the aggregate rate of every input and return one number.
+The aggregate of a position is one less the product of the three no-event
+rates, computed in float32, and the scale is computed over the pool in float64, as the program
 does, so a caller should allow a tolerance.
 """
 
@@ -12,7 +13,7 @@ import math
 
 import numpy as np
 
-from outputs import COVERAGE, ERROR, REACTIVITY, field_of
+from outputs import COVERAGE, ERROR_FIELDS, RATE_FIELDS, field_of
 
 UBR = "ubr"
 OUTLIER = "outlier"
@@ -34,10 +35,22 @@ def _pooled(name, inputs):
     return np.concatenate([np.asarray(field_of(path, name)).ravel() for path in inputs])
 
 
+def _aggregate(inputs):
+    """The rate of an event of any kind at each position: one less the product
+    of the three no-event rates, in float32 as the program computes it. NaN in
+    any channel carries through."""
+    none = np.float32(1.0)
+
+    for name in RATE_FIELDS:
+        none = none * (np.float32(1.0) - _pooled(name, inputs).astype(np.float32))
+
+    return np.float32(1.0) - none
+
+
 def pool(scheme, inputs, min_coverage=MIN_COVERAGE):
     """The values the scale is taken from. ubr keeps only the positions whose
-    coverage clears the floor; outlier keeps every rate there is."""
-    rates = _pooled(REACTIVITY, inputs)
+    coverage clears the floor; outlier keeps every aggregate there is."""
+    rates = _aggregate(inputs)
     keep = np.isfinite(rates)
 
     if scheme == UBR:
@@ -87,17 +100,10 @@ def scaled(path, name, scale) -> np.ndarray:
     return (values / scale).astype(np.float32)
 
 
-def clipped(values, above=None) -> np.ndarray:
-    """The values held under the bound, leaving NaN as it is."""
-    return values if above is None else np.minimum(values, np.float32(above))
-
-
-def expected(path, name, scale, above=None) -> np.ndarray:
-    """What one field of an output should hold. Only the rates and their error
-    carry the scale, and only the rates are clipped."""
-    if name not in (REACTIVITY, ERROR):
+def expected(path, name, scale) -> np.ndarray:
+    """What one field of an output should hold. Every rate and every error
+    carries the scale; everything else is copied."""
+    if name not in RATE_FIELDS + ERROR_FIELDS:
         return np.asarray(field_of(path, name))
 
-    values = scaled(path, name, scale)
-
-    return clipped(values, above) if name == REACTIVITY else values
+    return scaled(path, name, scale)

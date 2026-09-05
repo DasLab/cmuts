@@ -141,6 +141,40 @@ const fmt_field FMT_FIELDS[FMT_N_FIELDS] = {
     },
 };
 
+const fmt_field_id FMT_CHANNEL_RATES[FMT_N_CHANNELS] = {
+    FMT_MISMATCH_RATE,
+    FMT_INSERTION_RATE,
+    FMT_DELETION_RATE,
+};
+
+const fmt_field_id FMT_CHANNEL_ERRORS[FMT_N_CHANNELS] = {
+    FMT_MISMATCH_ERROR,
+    FMT_INSERTION_ERROR,
+    FMT_DELETION_ERROR,
+};
+
+fmt_field_id fmt_rate_of(fmt_field_id id)
+{
+    for (size_t c = 0; c < FMT_N_CHANNELS; c++) {
+        if (FMT_CHANNEL_ERRORS[c] == id) {
+            return FMT_CHANNEL_RATES[c];
+        }
+    }
+
+    return id;
+}
+
+bool fmt_is_channel(fmt_field_id id)
+{
+    for (size_t c = 0; c < FMT_N_CHANNELS; c++) {
+        if (FMT_CHANNEL_RATES[c] == id || FMT_CHANNEL_ERRORS[c] == id) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 const fmt_attribute FMT_ATTRIBUTES[FMT_N_ATTRS] = {
     [FMT_ATTR_PROGRAM] = {
         .name   = "program",

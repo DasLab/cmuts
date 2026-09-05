@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from inputs import CAP, N_REFS, not_hdf5, random_values
-from outputs import COVERAGE, REACTIVITY, read_summary
+from outputs import COVERAGE, MISMATCH_RATE, read_summary
 from programs import CMUTS_SCORE, attempt, run_cmuts, run_score, try_score
 from scoring import (
     COLUMNS,
@@ -74,7 +74,7 @@ def only(table: dict) -> dict:
 
 
 def test_the_header_names_every_column(build, score):
-    written = score(build({REACTIVITY: one_row([0, 1, 0, 1, 0, 1])}),
+    written = score(build({MISMATCH_RATE: one_row([0, 1, 0, 1, 0, 1])}),
                     {NAME: SEQUENCE}, {NAME: ".(.(.("})
 
     assert written.splitlines()[0] == ",".join(COLUMNS)
@@ -84,7 +84,7 @@ def test_the_rows_follow_the_fasta(build, score):
     names = ["a", "b", "c"]
     values = np.tile([0, 1, 0, 1, 0, 1], (N_REFS, 1)).astype(np.float32)
 
-    written = score(build({REACTIVITY: values}),
+    written = score(build({MISMATCH_RATE: values}),
                     {name: SEQUENCE for name in names},
                     {name: ".(.(.(" for name in reversed(names)})
 
@@ -94,7 +94,7 @@ def test_the_rows_follow_the_fasta(build, score):
 def test_a_reference_with_no_structure_is_left_out(build, score):
     values = np.tile([0, 1, 0, 1, 0, 1], (N_REFS, 1)).astype(np.float32)
 
-    written = score(build({REACTIVITY: values}),
+    written = score(build({MISMATCH_RATE: values}),
                     {"a": SEQUENCE, "b": SEQUENCE}, {"b": ".(.(.("})
 
     assert order_of(written) == ["b"]
@@ -107,7 +107,7 @@ def test_a_reference_with_no_structure_is_left_out(build, score):
 
 def test_a_perfect_ranking_scores_one(build, score):
     """The unpaired bases carry the three highest values."""
-    table = rows_of(score(build({REACTIVITY: one_row([9, 1, 8, 2, 7, 3])}),
+    table = rows_of(score(build({MISMATCH_RATE: one_row([9, 1, 8, 2, 7, 3])}),
                           {NAME: SEQUENCE}, {NAME: ".(.(.("}))
 
     assert only(table)["auroc"] == 1.0
@@ -115,7 +115,7 @@ def test_a_perfect_ranking_scores_one(build, score):
 
 
 def test_a_reversed_ranking_scores_zero(build, score):
-    table = rows_of(score(build({REACTIVITY: one_row([1, 9, 2, 8, 3, 7])}),
+    table = rows_of(score(build({MISMATCH_RATE: one_row([1, 9, 2, 8, 3, 7])}),
                           {NAME: SEQUENCE}, {NAME: ".(.(.("}))
 
     assert only(table)["auroc"] == 0.0
@@ -123,7 +123,7 @@ def test_a_reversed_ranking_scores_zero(build, score):
 
 def test_one_value_everywhere_scores_a_half(build, score):
     """Every pair is a tie, and a tie counts as half."""
-    table = rows_of(score(build({REACTIVITY: one_row([0.4] * CAP)}),
+    table = rows_of(score(build({MISMATCH_RATE: one_row([0.4] * CAP)}),
                           {NAME: SEQUENCE}, {NAME: ".(.(.("}))
 
     assert only(table)["auroc"] == 0.5
@@ -133,13 +133,13 @@ def test_one_value_everywhere_scores_a_half(build, score):
 def test_every_metric_matches_the_oracle(build, score, rounding):
     """Ties are scored by a rule of their own, so the values are run both as
     they come and rounded until they repeat."""
-    values = random_values(REACTIVITY, seed=51)
+    values = random_values(MISMATCH_RATE, seed=51)
 
     if rounding == "tied":
         values = np.round(values)
 
     pairing = alternating(CAP)
-    path = build({REACTIVITY: values})
+    path = build({MISMATCH_RATE: values})
     table = rows_of(score(path, {NAME: SEQUENCE}, {NAME: pairing}))
 
     wanted = expected(*kept(path, 0, SEQUENCE, pairing))
@@ -149,7 +149,7 @@ def test_every_metric_matches_the_oracle(build, score, rounding):
 
 
 def test_the_means_are_of_each_class(build, score):
-    table = rows_of(score(build({REACTIVITY: one_row([1, 3, 1, 3, 1, 3])}),
+    table = rows_of(score(build({MISMATCH_RATE: one_row([1, 3, 1, 3, 1, 3])}),
                           {NAME: SEQUENCE}, {NAME: ".(.(.("}))
 
     assert only(table)["mean_unpaired"] == 1.0
@@ -159,25 +159,25 @@ def test_the_means_are_of_each_class(build, score):
 def test_a_rise_that_keeps_the_order_leaves_the_auroc_alone(build, score):
     """auroc reads the ranking and not the values, so scaling every rate leaves
     it where it was."""
-    values = random_values(REACTIVITY, seed=52)
+    values = random_values(MISMATCH_RATE, seed=52)
     pairing = alternating(CAP)
 
-    first = rows_of(score(build({REACTIVITY: values}), {NAME: SEQUENCE},
+    first = rows_of(score(build({MISMATCH_RATE: values}), {NAME: SEQUENCE},
                           {NAME: pairing}))
-    second = rows_of(score(build({REACTIVITY: values * 3 + 1}), {NAME: SEQUENCE},
+    second = rows_of(score(build({MISMATCH_RATE: values * 3 + 1}), {NAME: SEQUENCE},
                            {NAME: pairing}))
 
     assert np.isclose(only(first)["auroc"], only(second)["auroc"], rtol=TOLERANCE)
 
 
 def test_swapping_the_classes_complements_the_auroc(build, score):
-    values = random_values(REACTIVITY, seed=53)
+    values = random_values(MISMATCH_RATE, seed=53)
     pairing = alternating(CAP)
     swapped = "".join("(" if mark == "." else "." for mark in pairing)
 
-    first = rows_of(score(build({REACTIVITY: values}), {NAME: SEQUENCE},
+    first = rows_of(score(build({MISMATCH_RATE: values}), {NAME: SEQUENCE},
                           {NAME: pairing}))
-    second = rows_of(score(build({REACTIVITY: values}), {NAME: SEQUENCE},
+    second = rows_of(score(build({MISMATCH_RATE: values}), {NAME: SEQUENCE},
                            {NAME: swapped}))
 
     assert np.isclose(only(first)["auroc"], 1 - only(second)["auroc"],
@@ -192,7 +192,7 @@ def test_swapping_the_classes_complements_the_auroc(build, score):
 @pytest.mark.parametrize("kind", ["()", "[]", "{}", "<>"])
 def test_every_bracket_counts_as_paired(build, score, kind):
     pairing = "." + kind[0] + "." + kind[1] + ".."
-    table = rows_of(score(build({REACTIVITY: one_row([1, 2, 3, 4, 5, 6])}),
+    table = rows_of(score(build({MISMATCH_RATE: one_row([1, 2, 3, 4, 5, 6])}),
                           {NAME: SEQUENCE}, {NAME: pairing}))
 
     assert only(table)["paired"] == 2
@@ -200,7 +200,7 @@ def test_every_bracket_counts_as_paired(build, score, kind):
 
 
 def test_a_mark_that_is_neither_dot_nor_bracket_is_not_scored(build, score):
-    table = rows_of(score(build({REACTIVITY: one_row([1, 2, 3, 4, 5, 6])}),
+    table = rows_of(score(build({MISMATCH_RATE: one_row([1, 2, 3, 4, 5, 6])}),
                           {NAME: SEQUENCE}, {NAME: ".((--)"}))
 
     assert only(table)["paired"] + only(table)["unpaired"] == 4
@@ -208,7 +208,7 @@ def test_a_mark_that_is_neither_dot_nor_bracket_is_not_scored(build, score):
 
 def test_a_base_outside_the_bases_is_not_scored(build, score):
     """The sequence is ACGUAC, so asking for A and C leaves four positions."""
-    table = rows_of(score(build({REACTIVITY: one_row([1, 2, 3, 4, 5, 6])}),
+    table = rows_of(score(build({MISMATCH_RATE: one_row([1, 2, 3, 4, 5, 6])}),
                           {NAME: SEQUENCE}, {NAME: ".(.(.("}, bases="A,C"))
 
     assert only(table)["paired"] + only(table)["unpaired"] == 4
@@ -216,7 +216,7 @@ def test_a_base_outside_the_bases_is_not_scored(build, score):
 
 def test_a_reference_written_as_dna_is_scored_at_u(build, score):
     """T and U name one base, so a DNA reference is scored at its T."""
-    table = rows_of(score(build({REACTIVITY: one_row([1, 2, 3, 4, 5, 6])}),
+    table = rows_of(score(build({MISMATCH_RATE: one_row([1, 2, 3, 4, 5, 6])}),
                           {NAME: "ACGTAT"}, {NAME: ".(.((."}, bases="U"))
 
     assert only(table)["paired"] == 1
@@ -224,7 +224,7 @@ def test_a_reference_written_as_dna_is_scored_at_u(build, score):
 
 
 def test_a_position_below_the_coverage_floor_is_not_scored(build, score):
-    path = build({REACTIVITY: one_row([1, 2, 3, 4, 5, 6]),
+    path = build({MISMATCH_RATE: one_row([1, 2, 3, 4, 5, 6]),
                   COVERAGE: one_row([100, 100, 100, 1, 1, 1])})
 
     table = rows_of(score(path, {NAME: SEQUENCE}, {NAME: ".(.(.("},
@@ -234,7 +234,7 @@ def test_a_position_below_the_coverage_floor_is_not_scored(build, score):
 
 
 def test_a_position_with_no_reactivity_is_not_scored(build, score):
-    table = rows_of(score(build({REACTIVITY: one_row([1, 2, np.nan, 4, 5, 6])}),
+    table = rows_of(score(build({MISMATCH_RATE: one_row([1, 2, np.nan, 4, 5, 6])}),
                           {NAME: SEQUENCE}, {NAME: ".(.(.("}))
 
     assert only(table)["paired"] + only(table)["unpaired"] == 5
@@ -243,7 +243,7 @@ def test_a_position_with_no_reactivity_is_not_scored(build, score):
 def test_a_record_may_carry_its_sequence(build, tmp_path):
     """A dot bracket file often holds the sequence before the pairing, which is
     passed over."""
-    path = build({REACTIVITY: one_row([9, 1, 8, 2, 7, 3])})
+    path = build({MISMATCH_RATE: one_row([9, 1, 8, 2, 7, 3])})
     fasta = write_fasta(tmp_path / "refs.fasta", {NAME: SEQUENCE})
     structures = write_structures(tmp_path / "refs.db", {NAME: ".(.(.("},
                                   sequences={NAME: SEQUENCE})
@@ -262,7 +262,7 @@ def test_a_record_may_carry_its_sequence(build, tmp_path):
 def test_a_reference_of_one_class_is_left_out(build, tmp_path, pairing):
     """A ranking needs both classes, so a reference holding one is not scored,
     and a run left with no other reference fails."""
-    path = build({REACTIVITY: one_row([1, 2, 3, 4, 5, 6])})
+    path = build({MISMATCH_RATE: one_row([1, 2, 3, 4, 5, 6])})
     fasta = write_fasta(tmp_path / "refs.fasta", {NAME: SEQUENCE})
     structures = write_structures(tmp_path / "refs.db", {NAME: pairing})
 
@@ -273,7 +273,7 @@ def test_a_reference_of_one_class_is_left_out(build, tmp_path, pairing):
 
 
 def test_a_structure_of_another_length_is_not_scored(build, tmp_path):
-    path = build({REACTIVITY: one_row([1, 2, 3, 4, 5, 6])})
+    path = build({MISMATCH_RATE: one_row([1, 2, 3, 4, 5, 6])})
     fasta = write_fasta(tmp_path / "refs.fasta", {NAME: SEQUENCE})
     structures = write_structures(tmp_path / "refs.db", {NAME: ".(.("})
 
@@ -287,7 +287,7 @@ def test_a_structure_longer_than_a_line_is_refused(build, tmp_path):
     """A record longer than the reader's line is named as such, and not
     reported as a pairing with no name."""
     length = 8192
-    path = build({REACTIVITY: np.zeros((N_REFS, length), dtype=np.float32)},
+    path = build({MISMATCH_RATE: np.zeros((N_REFS, length), dtype=np.float32)},
                  cap=length)
     fasta = write_fasta(tmp_path / "refs.fasta", {NAME: "A" * length})
     structures = write_structures(tmp_path / "refs.db",
@@ -300,7 +300,7 @@ def test_a_structure_longer_than_a_line_is_refused(build, tmp_path):
 
 
 def test_a_fasta_longer_than_the_file_is_refused(build, tmp_path):
-    path = build({REACTIVITY: np.zeros((1, CAP), dtype=np.float32)}, n_refs=1)
+    path = build({MISMATCH_RATE: np.zeros((1, CAP), dtype=np.float32)}, n_refs=1)
     fasta = write_fasta(tmp_path / "refs.fasta", {"a": SEQUENCE, "b": SEQUENCE})
     structures = write_structures(tmp_path / "refs.db",
                                   {"a": ".(.(.(", "b": ".(.(.("})

@@ -4,6 +4,9 @@
  * the scheme draws on; the second re-reads each input and writes it out divided by the
  * scale.
  *
+ * The pool holds the aggregate rate of the three channels: one less the product of the
+ * three no-event rates. The one scale then divides every channel alike.
+ *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
 
@@ -248,28 +251,11 @@ static void scale_f32(float *row, size_t n, double factor)
     }
 }
 
-/* Holds every value within the bounds, leaving NaN as it is and leaving a bound that is
- * NaN unapplied. */
-static void clip_f32(float *row, size_t n, double above)
-{
-    float high = (float)above;
-
-    if (isnan(above)) {
-        return;
-    }
-
-    for (size_t i = 0; i < n; i++) {
-        if (row[i] > high) {
-            row[i] = high;
-        }
-    }
-}
-
-/* Whether the scale divides this field. The rate and its error take it; every count is
- * left as it stands. */
+/* Whether the scale divides this field. Every rate and every error takes it; every count
+ * is left as it stands. */
 static bool is_scaled(fmt_field_id id)
 {
-    return id == FMT_MISMATCH_RATE || id == FMT_MISMATCH_ERROR;
+    return fmt_is_channel(id);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -286,6 +272,20 @@ static int fail_memory(char *error, size_t error_len)
 /* Gathering the pool                                                        */
 /* ------------------------------------------------------------------------ */
 
+/* Gives the rate of an event of any kind: one less the product of the three no-event
+ * rates. NaN in any channel carries through, so a position holds an aggregate only where
+ * every channel holds a rate. */
+static float aggregate_rate(const float *const *rate, size_t i)
+{
+    float none = 1.0F;
+
+    for (size_t c = 0; c < FMT_N_CHANNELS; c++) {
+        none *= 1.0F - rate[c][i];
+    }
+
+    return 1.0F - none;
+}
+
 /* Whether a position's rate joins the pool. ubr takes only the positions whose coverage
  * clears the floor; outlier takes every rate there is. */
 static bool joins_pool(const normalize_config *cfg, float rate, float coverage)
@@ -297,11 +297,28 @@ static bool joins_pool(const normalize_config *cfg, float rate, float coverage)
     return cfg->scheme != NORM_UBR || (double)coverage > cfg->min_coverage;
 }
 
-static int gather_reference(const normalize_config *cfg, rate_pool *p, const float *rate,
-                            const float *coverage, size_t n)
+static int gather_reference(const normalize_config *cfg, rate_pool *p,
+                            const float *const *rate, const float *coverage, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
-        if (joins_pool(cfg, rate[i], coverage[i]) && rate_pool_push(p, rate[i]) < 0) {
+        float combined = aggregate_rate(rate, i);
+
+        if (joins_pool(cfg, combined, coverage[i]) && rate_pool_push(p, combined) < 0) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+static int read_channels(h5reader *in, int32_t tid, float *const *rate, float *cover)
+{
+    if (h5reader_field(in, FMT_COVERAGE, tid, cover) < 0) {
+        return -1;
+    }
+
+    for (size_t c = 0; c < FMT_N_CHANNELS; c++) {
+        if (h5reader_field(in, FMT_CHANNEL_RATES[c], tid, rate[c]) < 0) {
             return -1;
         }
     }
@@ -314,23 +331,28 @@ static int gather_input(const normalize_config *cfg, rate_pool *p, h5reader *in,
 {
     size_t  cap    = h5reader_capacity(in);
     size_t  values = fmt_values(FMT_MISMATCH_RATE, cap, cap);
-    float  *rate   = calloc(values, sizeof *rate);
+    float  *rate[FMT_N_CHANNELS] = { 0 };
     float  *cover  = calloc(values, sizeof *cover);
+    bool    ready  = cover != NULL;
     int     status = -1;
 
-    if (!rate || !cover) {
+    for (size_t c = 0; c < FMT_N_CHANNELS; c++) {
+        rate[c] = calloc(values, sizeof *rate[c]);
+        ready   = ready && rate[c];
+    }
+
+    if (!ready) {
         fail_memory(error, error_len);
         goto done;
     }
 
     for (int32_t tid = 0; tid < h5reader_refs(in); tid++) {
-        if (h5reader_field(in, FMT_MISMATCH_RATE, tid, rate) < 0 ||
-            h5reader_field(in, FMT_COVERAGE, tid, cover) < 0) {
+        if (read_channels(in, tid, rate, cover) < 0) {
             h5reader_fail(in, path, error, error_len);
             goto done;
         }
 
-        if (gather_reference(cfg, p, rate, cover, values) < 0) {
+        if (gather_reference(cfg, p, (const float *const *)rate, cover, values) < 0) {
             fail_memory(error, error_len);
             goto done;
         }
@@ -339,7 +361,10 @@ static int gather_input(const normalize_config *cfg, rate_pool *p, h5reader *in,
     status = 0;
 
 done:
-    free(rate);
+    for (size_t c = 0; c < FMT_N_CHANNELS; c++) {
+        free(rate[c]);
+    }
+
     free(cover);
     return status;
 }
@@ -389,7 +414,6 @@ static int gather(const normalize_config *cfg, const fmt_manifest *writes, rate_
 /* ------------------------------------------------------------------------ */
 
 typedef struct {
-    const normalize_config *cfg;
     const fmt_manifest     *manifest;               /* what it writes */
     fmt_request             requests[FMT_N_FIELDS]; /* derived from the manifest */
     size_t                  n_requests;
@@ -409,14 +433,8 @@ typedef struct {
 
 static void transfer_row(const transfer *t, fmt_field_id id, size_t n)
 {
-    if (!is_scaled(id)) {
-        return;
-    }
-
-    scale_f32(t->row, n, divisor(t->factor));
-
-    if (id == FMT_MISMATCH_RATE) {
-        clip_f32(t->row, n, t->cfg->clip_above);
+    if (is_scaled(id)) {
+        scale_f32(t->row, n, divisor(t->factor));
     }
 }
 
@@ -543,7 +561,6 @@ static int write_output(const normalize_config *cfg, size_t which, const char *p
                         double factor, char *error, size_t error_len)
 {
     transfer t = {
-        .cfg      = cfg,
         .manifest = writes,
         .factor   = factor,
         .in_path  = cfg->inputs[which],

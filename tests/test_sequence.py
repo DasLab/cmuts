@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from oracle import sequences
-from outputs import REACTIVITY, SEQUENCE, delete_field, field_of, layout_of
+from outputs import MISMATCH_RATE, SEQUENCE, delete_field, field_of, layout_of
 from programs import (
     run_cmuts,
     run_divide,
@@ -107,7 +107,7 @@ def test_subtraction_omits_the_sequence_when_an_input_has_none(build, tmp_path):
     output = run_subtract(build(), older, tmp_path / "difference.h5")
 
     assert SEQUENCE not in layout_of(output)
-    assert REACTIVITY in layout_of(output)
+    assert MISMATCH_RATE in layout_of(output)
 
 
 def test_normalization_omits_the_sequence_when_the_input_has_none(build, tmp_path):
@@ -115,4 +115,4 @@ def test_normalization_omits_the_sequence_when_the_input_has_none(build, tmp_pat
     run_normalize([older], [tmp_path / "norm.h5"])
 
     assert SEQUENCE not in layout_of(tmp_path / "norm.h5")
-    assert REACTIVITY in layout_of(tmp_path / "norm.h5")
+    assert MISMATCH_RATE in layout_of(tmp_path / "norm.h5")

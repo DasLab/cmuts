@@ -27,14 +27,18 @@ typedef enum {
 } div_rule;
 
 static const div_rule RULES[FMT_N_FIELDS] = {
-    [FMT_COVERAGE]   = DIV_SUM,
-    [FMT_MISMATCH_RATE] = DIV_RATIO,
-    [FMT_MISMATCH_ERROR]      = DIV_RATIO_ERROR,
-    [FMT_LENGTHS]    = DIV_SUM,
-    [FMT_READS]      = DIV_SUM,
-    [FMT_REJECTED]   = DIV_SUM,
-    [FMT_UNMAPPED]   = DIV_SUM,
-    [FMT_SEQUENCE]   = DIV_SAME,
+    [FMT_COVERAGE]        = DIV_SUM,
+    [FMT_MISMATCH_RATE]   = DIV_RATIO,
+    [FMT_MISMATCH_ERROR]  = DIV_RATIO_ERROR,
+    [FMT_INSERTION_RATE]  = DIV_RATIO,
+    [FMT_INSERTION_ERROR] = DIV_RATIO_ERROR,
+    [FMT_DELETION_RATE]   = DIV_RATIO,
+    [FMT_DELETION_ERROR]  = DIV_RATIO_ERROR,
+    [FMT_LENGTHS]         = DIV_SUM,
+    [FMT_READS]           = DIV_SUM,
+    [FMT_REJECTED]        = DIV_SUM,
+    [FMT_UNMAPPED]        = DIV_SUM,
+    [FMT_SEQUENCE]        = DIV_SAME,
 };
 
 /* ------------------------------------------------------------------------ */
@@ -56,12 +60,13 @@ static void ratio_f32(const float *rates, const float *control, float *out, size
  * Not the relative-error form: that divides by the rate, which is zero at an unreactive
  * position, and squaring the control into a denominator underflows a float long before the
  * control does. */
-static void ratio_error_f32(const combine_rows *rows, float *out, size_t n)
+static void ratio_error_f32(const combine_rows *rows, fmt_field_id id, float *out,
+                            size_t n)
 {
-    const float *rate          = combine_row(rows, DIV_RATES, FMT_MISMATCH_RATE);
-    const float *control       = combine_row(rows, DIV_CONTROL, FMT_MISMATCH_RATE);
-    const float *rate_error    = combine_row(rows, DIV_RATES, FMT_MISMATCH_ERROR);
-    const float *control_error = combine_row(rows, DIV_CONTROL, FMT_MISMATCH_ERROR);
+    const float *rate          = combine_row(rows, DIV_RATES, fmt_rate_of(id));
+    const float *control       = combine_row(rows, DIV_CONTROL, fmt_rate_of(id));
+    const float *rate_error    = combine_row(rows, DIV_RATES, id);
+    const float *control_error = combine_row(rows, DIV_CONTROL, id);
 
     for (size_t i = 0; i < n; i++) {
         float d = control[i];
@@ -86,7 +91,7 @@ static int combine_f32(const combine_rows *rows, fmt_field_id id, div_rule how, 
                       combine_row(rows, DIV_CONTROL, id), out, n);
             return 0;
         case DIV_RATIO_ERROR:
-            ratio_error_f32(rows, out, n);
+            ratio_error_f32(rows, id, out, n);
             return 0;
         case DIV_SUM:
         case DIV_SAME:

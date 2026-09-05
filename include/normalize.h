@@ -24,9 +24,6 @@ typedef struct {
     norm_scheme scheme;
     double      min_coverage;  /* the coverage a position needs to join the ubr pool */
 
-    /* NaN where the bound is not applied. */
-    double clip_above;
-
     bool overwrite;
 } normalize_config;
 
