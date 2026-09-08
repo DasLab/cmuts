@@ -11,6 +11,8 @@
 
 #include <stdlib.h>
 
+#include "filter.h"
+
 typedef struct {
     const cm_bam_record   *read;
     const cm_fasta_record *ref;
@@ -29,13 +31,23 @@ struct tally_scratch {
  * applied, so inserted and soft-clipped bases count. A read longer than the range the
  * bins cover falls in none of them; the reads total gives how many those were.
  *
+ * A supplementary alignment stores the piece it places and not the read, so binning one
+ * would record a length no molecule had.
+ *
  * The bins begin at length 1, since a read storing no sequence has been refused
  * already, so the guard against zero is against that filter changing and not against
  * anything reachable from here. */
 static void add_length(const context *ctx)
 {
-    double *bins   = accum_data(ctx->target, ACCUM_LENGTHS);
-    size_t  length = (size_t)ctx->read->l_qseq;
+    double *bins;
+    size_t  length;
+
+    if (filter_is_supplementary(ctx->read)) {
+        return;
+    }
+
+    bins   = accum_data(ctx->target, ACCUM_LENGTHS);
+    length = (size_t)ctx->read->l_qseq;
 
     if (length > 0 && length <= SHAPE_LENGTH_BINS(ctx->target->cap)) {
         bins[length - 1] += 1.0;
@@ -220,7 +232,9 @@ phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
      * counted, and adds no other value. No value has reached the target: the window is added
      * only on PHMM_OK, and the failure is seen before either count below. */
     if (status == PHMM_NO_PATH) {
-        *accum_data(target, ACCUM_FILTERED) += 1.0;
+        if (!filter_is_supplementary(read)) {
+            *accum_data(target, ACCUM_FILTERED) += 1.0;
+        }
         return status;
     }
 
@@ -228,7 +242,10 @@ phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
         return status;
     }
 
-    *accum_data(target, ACCUM_READS) += 1.0;
+    if (!filter_is_supplementary(read)) {
+        *accum_data(target, ACCUM_READS) += 1.0;
+    }
+
     add_length(&ctx);
 
     return PHMM_OK;

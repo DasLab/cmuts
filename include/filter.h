@@ -27,13 +27,14 @@ typedef enum {
  * Secondary alignments, records storing no sequence, records carrying no CIGAR
  * and placements of unavailable mapping quality are always excluded.
  *
- * The fields are int because the command line writes them directly, through a pointer of
- * the declared type. */
+ * Each field carries the type the command line writes it through, which is int for a
+ * bounded value and bool for a flag. */
 typedef struct {
-    int min_mapq;    /* 0 to 254; alignments scoring below it are discarded */
-    int strand;      /* filter_strand bits; a read on neither strand is discarded */
-    int min_length;  /* FILTER_LENGTH_UNBOUNDED for no lower bound */
-    int max_length;  /* FILTER_LENGTH_UNBOUNDED for no upper bound */
+    int  min_mapq;           /* 0 to 254; alignments scoring below it are discarded */
+    int  strand;             /* filter_strand bits; a read on neither strand is discarded */
+    int  min_length;         /* FILTER_LENGTH_UNBOUNDED for no lower bound */
+    int  max_length;         /* FILTER_LENGTH_UNBOUNDED for no upper bound */
+    bool drop_supplementary; /* discard the further pieces of a split read */
 } filter_config;
 
 filter_config filter_defaults(void);
@@ -43,3 +44,7 @@ filter_config filter_defaults(void);
 bool filter_satisfiable(const filter_config *filter);
 
 bool filter_accepts(const filter_config *filter, const cm_bam_record *read);
+
+/* Returns whether the record places a further piece of a read that another record already
+ * places. A total over reads counts the read once, so it passes over these. */
+bool filter_is_supplementary(const cm_bam_record *read);

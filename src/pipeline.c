@@ -526,7 +526,11 @@ static int loader_main(const pipeline *p, const failure_flag *f,
         }
 
         if (!filter_accepts(&p->filter_config, &rec)) {
-            l.rejected++;
+            /* The total is over reads, and a further piece of a split read is not a read
+             * of its own. */
+            if (!filter_is_supplementary(&rec)) {
+                l.rejected++;
+            }
             continue;
         }
 

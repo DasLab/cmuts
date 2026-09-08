@@ -112,6 +112,13 @@ static const cli_option OPTIONS[] = {
         .maximum     = CLI_UNBOUNDED,
     },
     {
+        .group  = "Filtering",
+        .name   = "drop-supplementary",
+        .type   = OPT_FLAG,
+        .offset = offsetof(cli_args, pipeline.filter_config.drop_supplementary),
+        .help   = "discard the further pieces of a split read",
+    },
+    {
         .group   = "Filtering",
         .name    = "strand",
         .key     = 's',

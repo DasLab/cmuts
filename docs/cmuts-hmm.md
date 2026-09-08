@@ -43,6 +43,12 @@ A read to which the HMM cannot assign a nonzero alignment probability is also re
 
 Unmapped reads are rejected by nature of having no reference to compute mutation rates against.
 
+## Split Reads
+
+A read the aligner could not place in one piece is written as a primary alignment and one supplementary alignment for each further piece. Every piece is processed and adds to the coverage and the rates, but the totals in the `reads` group count the read once, at its primary alignment, and bin it by the length the primary stores.
+
+Pass `--drop-supplementary` to process the primary alignment alone. This suits a library whose molecules hold more than one copy of the reference, where the pieces cover the same positions and counting them all measures one molecule several times. Leave it unset where reads are longer than the reference and each piece covers positions the others do not.
+
 ## Output
 
 <!-- BEGIN GENERATED cmuts-hmm DATASETS -->
@@ -90,6 +96,7 @@ Unmapped reads are rejected by nature of having no reference to compute mutation
 | `-q, --min-mapq N` | discard alignments below this mapping quality (0 to 254; default 20) |
 | `--min-length N` | discard reads shorter than this (default: no limit) |
 | `--max-length N` | discard reads longer than this (default: no limit) |
+| `--drop-supplementary` | discard the further pieces of a split read |
 | `-s, --strand STRANDS` | keep alignments on these strands (forward, reverse; default forward,reverse) |
 
 ### Counting

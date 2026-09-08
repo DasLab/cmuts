@@ -33,7 +33,12 @@ cmuts v2 is a rewrite of cmuts that makes it more accurate, portable, and, in sp
 - `cmuts align` reads an unaligned BAM in place of a FASTQ, which is how PacBio and nanopore instruments deliver reads. It refuses a BAM that is already aligned, and names `cmuts hmm` as the subcommand that counts one.
 - `--pairwise` names the statistics to write. In v1 it was a flag on `cmuts core` that wrote raw joint counts for `cmuts normalize` to process; `cmuts hmm` now writes the finished statistics directly. Mutual information returns as a statistic before the 2.0.0 release.
 - `--params` reads the pair-HMM rates from a file, and `--dump-params` writes the defaults in the same form.
+- `--drop-supplementary` discards the further pieces of a split read. A molecule that is a concatemer of the reference places each copy over the same positions, so the pieces cover it more than once.
 - `--verify` checks the FASTA against the alignment header, by each reference's name, length, and MD5 checksum where present.
+
+### Fixed
+
+- `reads/counted`, `reads/rejected`, and `reads/lengths` count a read once, at its primary alignment. A supplementary alignment previously added a second entry, and in `reads/lengths` recorded the length of the piece it stored rather than the length of the read.
 
 ### Changed
 
