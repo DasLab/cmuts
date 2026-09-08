@@ -21,6 +21,7 @@ CMUTS_SUB = (CMUTS, "sub")
 CMUTS_DIV = (CMUTS, "div")
 CMUTS_NORM = (CMUTS, "norm")
 CMUTS_SCORE = (CMUTS, "score")
+CMUTS_CSV = (CMUTS, "csv")
 CMUTS_PLOT = (CMUTS, "plot")
 PROGRAMS = (CMUTS,)
 
@@ -211,6 +212,25 @@ def run_score(rates, fasta, structures, **options) -> str:
 def try_score(rates, fasta, structures, **options):
     """Scores whether or not the run succeeds."""
     return attempt(_score_command(rates, fasta, structures, options))
+
+
+def _csv_command(rates, fasta, options: dict) -> list:
+    """Builds a run over one output. A FASTA is passed only where the rows are to
+    be named after its records."""
+    named = ["-f", fasta] if fasta is not None else []
+
+    return [*CMUTS_CSV, *named, *_options(options), rates]
+
+
+def run_csv(rates, fasta=None, **options) -> str:
+    """Writes an output as comma separated values, returning the table it
+    wrote."""
+    return execute(_csv_command(rates, fasta, options)).stdout
+
+
+def try_csv(rates, fasta=None, **options):
+    """Writes the table whether or not the run succeeds."""
+    return attempt(_csv_command(rates, fasta, options))
 
 
 def run_generator(prefix, parameters: dict):

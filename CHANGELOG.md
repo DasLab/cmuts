@@ -28,6 +28,7 @@ cmuts v2 is a rewrite of cmuts that makes it more accurate, portable, and, in sp
 ### Added
 
 - `cmuts div` divides reactivity rates by a denatured control.
+- `cmuts csv` writes an output as a table of comma separated values, one row per position of each reference. It reads the bases and the length of every reference from the input. A FASTA is optional, and supplies the reference names.
 - `cmuts align` aligns through minimap2, so the long-read presets `map-ont`, `map-hifi`, and `map-pb` join short reads, and it merges paired-end mates through fastp before alignment.
 - `--pairwise` names the statistics to write. In v1 it was a flag on `cmuts core` that wrote raw joint counts for `cmuts normalize` to process; `cmuts hmm` now writes the finished statistics directly. Mutual information returns as a statistic before the 2.0.0 release.
 - `--params` reads the pair-HMM rates from a file, and `--dump-params` writes the defaults in the same form.

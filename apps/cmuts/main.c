@@ -36,6 +36,7 @@ static const subcommand SUBCOMMANDS[] = {
     { "div",   div_main,   "divide an output by a denatured control" },
     { "norm",  norm_main,  "normalize reactivity values across experiments" },
     { "score", score_main, "measure an output against a known structure" },
+    { "csv",   csv_main,   "write an output as comma separated values" },
     { "plot",  NULL,       "serve an interactive report over outputs" },
     { "gen",   gen_main,   "generate alignments and the reference they came from" },
 };
