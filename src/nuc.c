@@ -13,6 +13,10 @@ const nuc NUC_FROM_CHAR[256] = {
     ['U'] = NUC_T, ['u'] = NUC_T,
 };
 
+/* The character of each token, indexed by the token: the four named bases in the order of
+ * nuc_index, then NUC_TOKEN_N. */
+const char NUC_TOKEN_CHARS[NUC_COUNT] = { 'A', 'C', 'G', 'T', 'N' };
+
 /* BAM gives each base four bits, one per possibility, so only the four powers of two
  * name a single base. */
 const nuc NUC_FROM_READ[16] = {

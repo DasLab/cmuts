@@ -5,6 +5,7 @@ import h5py
 import numpy as np
 import pytest
 
+from alignments import SELF_CONTAINED, mask_last_base
 from oracle import sequences
 from outputs import MISMATCH_RATE, SEQUENCE, delete_field, field_of, layout_of
 from programs import (
@@ -16,9 +17,10 @@ from programs import (
     try_subtract,
 )
 
-# What each base is written as. U and T are one base, and anything else is
-# written as the marker a column outside a reference carries.
+# What each base is written as. U and T are one base, any other base is written
+# as OTHER, and a column outside a reference holds OUTSIDE.
 CODE = {"A": 0, "C": 1, "G": 2, "T": 3, "U": 3}
+OTHER = 4
 OUTSIDE = -1
 
 
@@ -27,7 +29,7 @@ def encoded(bases: str, width: int) -> np.ndarray:
     row = np.full(width, OUTSIDE, dtype=np.int8)
 
     for i, base in enumerate(bases.upper()):
-        row[i] = CODE.get(base, OUTSIDE)
+        row[i] = CODE.get(base, OTHER)
 
     return row
 
@@ -60,6 +62,27 @@ def test_every_reference_holds_its_own_bases(data, tmp_path, falsifiable):
 
     for row, (name, bases) in enumerate(fasta.items()):
         assert np.array_equal(written[row], encoded(bases, written.shape[1])), name
+
+
+@pytest.mark.parametrize("fmt", SELF_CONTAINED, indirect=True)
+def test_an_n_is_written_apart_from_the_padding(data, falsifiable, tmp_path):
+    """The last base of every reference is masked, so the token written there is
+    what separates the reference from the columns after it.
+
+    The masked bases are not the ones the alignments were made from, so the
+    checksums no longer match and only the names are verified. Reading them at
+    all requires a format that stores its own sequence.
+    """
+    masked = mask_last_base(data, tmp_path)
+    lengths = {name: len(bases) for name, bases in sequences(masked.fasta).items()}
+    written = field_of(run_cmuts(masked, tmp_path / "masked.h5", verify="name"),
+                       SEQUENCE)
+
+    falsifiable(len(lengths) > 0)
+
+    for row, (name, length) in enumerate(lengths.items()):
+        assert written[row, length - 1] == OTHER, name
+        assert np.all(written[row, length:] == OUTSIDE), name
 
 
 # ---------------------------------------------------------------------------

@@ -64,8 +64,10 @@ CHANNEL_LABELS = {
     "deletions": "Deletions",
 }
 
-# The bases the sequence dataset is tokenized as; a negative token is padding.
-BASES = "ACGU"
+# The character of each token of the sequence dataset, indexed by the token: the four
+# named bases, then the token for any other base. A negative token is padding. This must
+# match NUC_TOKEN_CHARS in include/nuc.h, which spells token 3 as T.
+BASES = "ACGUN"
 
 # The data-ref value meaning "aggregate over all references".
 AGGREGATE_REF = "agg"

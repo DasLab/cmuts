@@ -67,18 +67,15 @@ static void pair_square(refrow *r, fmt_field_id id, const pairs *pr, size_t len)
     }
 }
 
-/* Fills the scratch with one value for every base of the reference: its index among the
- * named bases, or the marker for a base that is none of them. */
+/* Fills the scratch with the token stored for every base of the reference. */
 static void sequence(refrow *r, const char *seq, size_t len)
 {
     for (size_t i = 0; i < len; i++) {
-        nuc base = nuc_from_char(seq[i]);
-
         /* refrow_create refuses a refrow without a row, so the row is never
          * null; the analyzer conflates it with the null a sourceless field
          * returns from values.
          * NOLINTNEXTLINE(clang-analyzer-core.NullDereference) */
-        r->row[i] = nuc_is_base(base) ? (double)nuc_index(base) : -1.0;
+        r->row[i] = (double)nuc_token(nuc_from_char(seq[i]));
     }
 }
 

@@ -233,6 +233,18 @@ def write_fasta(records: dict, path: Path) -> Path:
     return path
 
 
+def mask_last_base(data: Dataset, directory) -> Dataset:
+    """Writes N over the last base of every reference, leaving every name and
+    length unchanged.
+
+    A reference ending in N is the case in which one token for both N and the
+    padding would hide where the reference ends.
+    """
+    records = {name: seq[:-1] + "N" for name, seq in sequences(data.fasta).items()}
+
+    return replace(data, fasta=write_fasta(records, Path(directory) / "masked.fasta"))
+
+
 def replace_bases(data: Dataset, directory, only=None) -> Dataset:
     """Complements the bases of the reference, leaving every name and length
     unchanged.

@@ -51,3 +51,35 @@ static inline int nuc_index(nuc base)
 {
     return (int)base - (int)NUC_A;
 }
+
+/* The tokens stored in an output's sequence dataset. Every program that reads or writes
+ * that dataset uses the definitions below.
+ *
+ * A named base is stored as its index among NUC_BASES. Any other base is stored as
+ * NUC_TOKEN_N, and a column past the end of a reference as NUC_TOKEN_NONE. These two
+ * values differ, so the length of a reference is the number of tokens before the first
+ * NUC_TOKEN_NONE. */
+#define NUC_TOKEN_N    NUC_BASES
+#define NUC_TOKEN_NONE (-1)
+
+/* The character of each token, indexed by the token. */
+extern const char NUC_TOKEN_CHARS[NUC_COUNT];
+
+/* Encodes one base of a reference as the token stored for it. */
+static inline int8_t nuc_token(nuc base)
+{
+    return nuc_is_base(base) ? (int8_t)nuc_index(base) : (int8_t)NUC_TOKEN_N;
+}
+
+/* Whether a value is a token, and so stands for a base. NUC_TOKEN_NONE is not one. */
+static inline bool nuc_is_token(int8_t token)
+{
+    return token >= 0 && token < NUC_COUNT;
+}
+
+/* Decodes one token of a sequence. Returns 0 where the value is not a token, so a caller
+ * writing the result must reject such a value first. */
+static inline char nuc_char(int8_t token)
+{
+    return nuc_is_token(token) ? NUC_TOKEN_CHARS[token] : '\0';
+}

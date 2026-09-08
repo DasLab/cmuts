@@ -7,6 +7,7 @@
 
 #include <math.h>
 
+#include "nuc.h"
 #include "version.h"
 
 const fmt_field FMT_FIELDS[FMT_N_FIELDS] = {
@@ -124,12 +125,12 @@ const fmt_field FMT_FIELDS[FMT_N_FIELDS] = {
     },
     [FMT_SEQUENCE] = {
         .name     = "sequence",
-        .detail   = "The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.",
+        .detail   = "The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, 4 for any other base, and -1 for every column past the reference's end.",
         .row      = shape_per_base,
         .per_ref  = true,
         .from_ref = true,
         .stored   = FMT_I8,
-        .fill     = -1.0,
+        .fill     = (double)NUC_TOKEN_NONE,
     },
     [FMT_UNMAPPED] = {
         .name    = "reads/unmapped",

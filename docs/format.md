@@ -70,7 +70,7 @@ The number of reads in which each base was present.
 
 **Shape** `(n, l)` · **Type** `int8` · **Fill** `-1`
 
-The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, and -1 for any other base and for every column past the reference's end.
+The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, 4 for any other base, and -1 for every column past the reference's end.
 
 {.field}
 ### `reads/counted`
