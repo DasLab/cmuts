@@ -17,6 +17,19 @@ NAME_LIMIT=254
 # Presets that will reject paired-end sequences
 LONG_READ_PRESETS="map-ont map-hifi map-pb lr:hq ava-ont ava-pb"
 
+# The formats holding reads this program aligns.
+FORMAT_FASTQ="fastq"
+FORMAT_BAM="bam"
+
+# The bytes each format begins with. A BAM is gzip compressed, as a FASTQ may
+# be, so both are read after decompression.
+GZIP_MAGIC=$'\x1f\x8b'
+BAM_MAGIC=$'BAM\x01'
+FASTQ_MAGIC="@"
+
+# The bit a record sets when its read is one of a pair.
+PAIRED_BIT=1
+
 # The presets listed by the help and by --dump-options. minimap2 accepts more, and
 # validates the value.
 PRESETS="sr|map-ont|map-hifi|map-pb"
@@ -27,7 +40,7 @@ GROUP_ALIGNMENT="Alignment"
 GROUP_PERFORMANCE="Performance"
 GROUP_INFORMATION="Information"
 
-HELP_READS="reads to align"
+HELP_READS="reads to align, as FASTQ or unaligned BAM"
 HELP_MATE="the second file of a pair, merged with the first"
 HELP_FASTA="reference sequences"
 HELP_OUTPUT="write sorted alignments to this file"
@@ -320,9 +333,73 @@ if [[ $(head -c 4 "$fasta") == $'MMI\x02' ]]; then
     die "--fasta: $fasta is a minimap2 index; pass the FASTA it was built from"
 fi
 
+# The first bytes of a file, decompressed where it is gzip compressed, so that
+# a BAM and a compressed FASTQ are both read as what they hold.
+leading_bytes() {
+    local file=$1 count=$2
+
+    if [[ $(head -c 2 "$file" 2>/dev/null) == "$GZIP_MAGIC" ]]; then
+        command -v gzip >/dev/null 2>&1 || die "gzip is not on PATH"
+        gzip -dc < "$file" 2>/dev/null | head -c "$count" || true
+    else
+        head -c "$count" "$file" 2>/dev/null || true
+    fi
+}
+
+# The format of a file, or nothing where it holds neither reads this program
+# aligns. Passing an unreadable format on would feed bytes to the aligner that
+# it reports far from where the mistake was made.
+format_of() {
+    case "$(leading_bytes "$1" 4)" in
+        "$BAM_MAGIC"*)   printf '%s' "$FORMAT_BAM"   ;;
+        "$FASTQ_MAGIC"*) printf '%s' "$FORMAT_FASTQ" ;;
+    esac
+}
+
+# Whether a BAM names the references its reads were placed against. Alignments
+# are what cmuts hmm counts, so this program has nothing left to do with them.
+names_references() {
+    local header
+    header=$(samtools view -H "$1" 2>/dev/null || true)
+
+    grep -q '^@SQ' <<< "$header"
+}
+
+# Whether a BAM's first record marks its read as one of a pair. The reads of a
+# pair come back interleaved, which minimap2 does not read as mates.
+holds_pairs() {
+    local flag
+    flag=$(samtools view "$1" 2>/dev/null | head -1 | cut -f 2 || true)
+
+    [[ $flag =~ ^[0-9]+$ ]] && (( (flag & PAIRED_BIT) != 0 ))
+}
+
+formats=()
+
 for file in "${reads[@]}"; do
     [[ -r $file ]] || die "cannot read $file"
+
+    format=$(format_of "$file")
+    [[ -n $format ]] || die "$file is neither a FASTQ nor a BAM"
+
+    formats+=("$format")
 done
+
+# A BAM holds every read of a run, including both mates of a pair, so it is
+# never one file of two.
+if [[ ${#reads[@]} -eq 2 && ( ${formats[0]} == "$FORMAT_BAM" || ${formats[1]} == "$FORMAT_BAM" ) ]]; then
+    die "a BAM holds both mates; pass it on its own"
+fi
+
+if [[ ${formats[0]} == "$FORMAT_BAM" ]]; then
+    if names_references "${reads[0]}"; then
+        die "${reads[0]} is already aligned; count it with cmuts hmm"
+    fi
+
+    if holds_pairs "${reads[0]}"; then
+        die "${reads[0]} holds paired reads; write each mate to a FASTQ first"
+    fi
+fi
 
 [[ ! -d $output ]] || die "$output is a directory; -o names the file to write"
 
@@ -354,11 +431,22 @@ merge() {
         --json /dev/null --html /dev/null
 }
 
+# Reads a BAM's records back as FASTQ, which is what minimap2 accepts.
+unpack() {
+    samtools fastq -@ "$threads" "${reads[0]}"
+}
+
+map() {
+    minimap2 -a -x "$preset" --secondary=no -t "$threads" "$fasta" "$@"
+}
+
 align() {
     if [[ ${#reads[@]} -eq 2 ]]; then
-        merge | minimap2 -a -x "$preset" --secondary=no -t "$threads" "$fasta" -
+        merge | map -
+    elif [[ ${formats[0]} == "$FORMAT_BAM" ]]; then
+        unpack | map -
     else
-        minimap2 -a -x "$preset" --secondary=no -t "$threads" "$fasta" "${reads[@]}"
+        map "${reads[@]}"
     fi
 }
 
