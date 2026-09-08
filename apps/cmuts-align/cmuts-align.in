@@ -17,14 +17,28 @@ NAME_LIMIT=254
 # Presets that will reject paired-end sequences
 LONG_READ_PRESETS="map-ont map-hifi map-pb lr:hq ava-ont ava-pb"
 
-# Just for -h, verification is done by minimap2
+# The presets listed by the help and by --dump-options. minimap2 accepts more, and
+# validates the value.
 PRESETS="sr|map-ont|map-hifi|map-pb"
 
+# Headings for the option groups, used by both the help and --dump-options.
+GROUP_IO="Input and output"
+GROUP_ALIGNMENT="Alignment"
+GROUP_PERFORMANCE="Performance"
+GROUP_INFORMATION="Information"
+
+HELP_READS="reads to align"
+HELP_MATE="the second file of a pair, merged with the first"
 HELP_FASTA="reference sequences"
 HELP_OUTPUT="write sorted alignments to this file"
 HELP_OVERWRITE="replace the output file if it already exists"
 HELP_PRESET="how minimap2 aligns"
 HELP_THREADS="threads for merging, alignment and sorting"
+HELP_HELP="show this help and exit"
+HELP_VERSION="show the version and exit"
+HELP_DUMP_OPTIONS="describe every argument as JSON and exit"
+
+THREADS_DEFAULT=1
 
 # fastp accepts no more threads than this.
 MERGE_THREADS_MAX=16
@@ -52,29 +66,168 @@ usage() {
     printf 'usage: %s [options] -f FASTA -o BAM -x PRESET %s\n' "$PROGRAM" "$ARGUMENTS"
 
     printf '\nArguments\n'
-    option "READS" "reads to align"
-    option "MATE" "the second file of a pair, merged with the first"
+    option "READS" "$HELP_READS"
+    option "MATE" "$HELP_MATE"
 
-    printf '\nInput and output\n'
+    printf '\n%s\n' "$GROUP_IO"
     option "-f, --fasta FASTA" "$HELP_FASTA"
     option "-o, --output BAM" "$HELP_OUTPUT"
     option "    --overwrite" "$HELP_OVERWRITE"
 
-    printf '\nAlignment\n'
+    printf '\n%s\n' "$GROUP_ALIGNMENT"
     option "-x, --preset PRESET" "$HELP_PRESET ($PRESETS)"
 
-    printf '\nPerformance\n'
-    option "-t, --threads N" "$HELP_THREADS (default 1)"
+    printf '\n%s\n' "$GROUP_PERFORMANCE"
+    option "-t, --threads N" "$HELP_THREADS (default $THREADS_DEFAULT)"
 
-    printf '\nInformation\n'
-    option "-h, --help" "show this help and exit"
-    option "-V, --version" "show the version and exit"
+    printf '\n%s\n' "$GROUP_INFORMATION"
+    option "-h, --help" "$HELP_HELP"
+    option "-V, --version" "$HELP_VERSION"
+}
+
+# Prints a JSON string, or null for an empty value. A backslash or a quote would
+# end the string early, so both are escaped.
+json_string() {
+    local text=$1
+
+    if [[ -z $text ]]; then
+        printf 'null'
+        return
+    fi
+
+    text=${text//\\/\\\\}
+    text=${text//\"/\\\"}
+
+    printf '"%s"' "$text"
+}
+
+# Prints the values an option accepts as a JSON array, from the same bar
+# separated list the help prints. An empty list prints null.
+json_choices() {
+    local list=$1 first=true choice
+
+    if [[ -z $list ]]; then
+        printf 'null'
+        return
+    fi
+
+    printf '['
+
+    for choice in ${list//|/ }; do
+        [[ $first == true ]] && first=false || printf ', '
+        json_string "$choice"
+    done
+
+    printf ']'
+}
+
+# Prints the members of a JSON array, separated by commas.
+join_json() {
+    local first=true member
+
+    for member in "$@"; do
+        [[ $first == true ]] && first=false || printf ',\n'
+        printf '%s' "$member"
+    done
+}
+
+# Prints one option, in the shape cli.c gives it. The first six arguments are
+# the group, the long name, the short form, the type, the metavar, and the help.
+# Any of `required`, `hidden`, `choices=A|B`, `default=V`, `minimum=N`, and
+# `maximum=N` may follow, in place of the designated initializers a compiled
+# subcommand's table uses. A field left out is printed as null.
+option_json() {
+    local group=$1 name=$2 short=$3 type=$4 metavar=$5 help=$6
+    local required=false hidden=false choices="" default=null
+    local minimum=null maximum=null
+    local field
+
+    shift 6
+
+    for field in "$@"; do
+        case "$field" in
+            required)  required=true                ;;
+            hidden)    hidden=true                  ;;
+            choices=*) choices=${field#choices=}    ;;
+            default=*) default=${field#default=}    ;;
+            minimum=*) minimum=${field#minimum=}    ;;
+            maximum=*) maximum=${field#maximum=}    ;;
+            *)         die "option_json: unknown field $field" ;;
+        esac
+    done
+
+    printf '    {
+      "name": %s,
+      "short": %s,
+      "group": %s,
+      "type": %s,
+      "metavar": %s,
+      "help": %s,
+      "required": %s,
+      "hidden": %s,
+      "repeatable": false,
+      "unset_label": null,
+      "choices": %s,
+      "default": %s,
+      "minimum": %s, "maximum": %s
+    }' "$(json_string "$name")" "$(json_string "$short")" "$(json_string "$group")" \
+       "$(json_string "$type")" "$(json_string "$metavar")" "$(json_string "$help")" \
+       "$required" "$hidden" "$(json_choices "$choices")" "$default" "$minimum" "$maximum"
+}
+
+# Prints one positional argument, in the same shape. Neither takes every
+# remaining word, so neither is variadic.
+positional_json() {
+    local name=$1 metavar=$2 help=$3 required=$4
+
+    printf '    {
+      "name": %s,
+      "metavar": %s,
+      "help": %s,
+      "required": %s,
+      "variadic": false
+    }' "$(json_string "$name")" "$(json_string "$metavar")" "$(json_string "$help")" \
+       "$required"
+}
+
+# Prints the command line as JSON, in the shape a compiled subcommand's
+# --dump-options gives it, so that one reader covers every program of the suite.
+dump_options() {
+    local options positionals
+
+    options=(
+        "$(option_json "$GROUP_IO" fasta f string FASTA "$HELP_FASTA" required)"
+        "$(option_json "$GROUP_IO" output o string BAM "$HELP_OUTPUT" required)"
+        "$(option_json "$GROUP_IO" overwrite "" flag "" "$HELP_OVERWRITE" default=false)"
+        "$(option_json "$GROUP_ALIGNMENT" preset x string PRESET "$HELP_PRESET" \
+                       required "choices=$PRESETS")"
+        "$(option_json "$GROUP_PERFORMANCE" threads t int N "$HELP_THREADS" \
+                       "default=$THREADS_DEFAULT" minimum=1)"
+        "$(option_json "$GROUP_INFORMATION" help h flag "" "$HELP_HELP")"
+        "$(option_json "$GROUP_INFORMATION" version V flag "" "$HELP_VERSION")"
+        "$(option_json "$GROUP_INFORMATION" dump-options "" flag "" "$HELP_DUMP_OPTIONS" hidden)"
+    )
+
+    positionals=(
+        "$(positional_json reads READS "$HELP_READS" true)"
+        "$(positional_json mate MATE "$HELP_MATE" false)"
+    )
+
+    printf '{\n'
+    printf '  "program": %s,\n' "$(json_string "$PROGRAM")"
+    printf '  "version": %s,\n' "$(json_string "$VERSION")"
+    printf '  "summary": %s,\n' "$(json_string "$SUMMARY")"
+    printf '  "options": [\n'
+    join_json "${options[@]}"
+    printf '\n  ],\n  "positionals": [\n'
+    join_json "${positionals[@]}"
+    printf '\n  ]\n}\n'
 }
 
 fasta=""
 output=""
 preset=""
-threads=1
+threads=$THREADS_DEFAULT
 overwrite=false
 reads=()
 
@@ -86,6 +239,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -V|--version)
             printf '%s %s\n' "$PROGRAM" "$VERSION"
+            exit 0
+            ;;
+        --dump-options)
+            dump_options
             exit 0
             ;;
         -f|--fasta)

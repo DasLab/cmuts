@@ -46,8 +46,9 @@ Paired-end input is merged with `fastp` before alignment. A pair whose mates do 
 
 Paired-end inputs are refused unless the preset is `sr`.
 
-## Options
+## CLI Options
 
+<!-- BEGIN GENERATED cmuts-align OPTIONS -->
 ### Arguments
 
 | Argument | Description |
@@ -67,7 +68,7 @@ Paired-end inputs are refused unless the preset is `sr`.
 
 | Option | Description |
 | --- | --- |
-| `-x, --preset PRESET` | how minimap2 aligns (sr\|map-ont\|map-hifi\|map-pb) (required) |
+| `-x, --preset PRESET` | how minimap2 aligns (sr, map-ont, map-hifi, map-pb; required) |
 
 ### Performance
 
@@ -81,3 +82,12 @@ Paired-end inputs are refused unless the preset is `sr`.
 | --- | --- |
 | `-h, --help` | show this help and exit |
 | `-V, --version` | show the version and exit |
+
+### Advanced
+
+Accepted, and left out of `--help`.
+
+| Option | Description |
+| --- | --- |
+| `--dump-options` | describe every argument as JSON and exit |
+<!-- END GENERATED cmuts-align OPTIONS -->
