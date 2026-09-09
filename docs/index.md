@@ -56,7 +56,6 @@ cmuts-hmm
 cmuts-sub
 cmuts-div
 cmuts-norm
-cmuts-score
 cmuts-csv
 cmuts-plot
 cmuts-gen
