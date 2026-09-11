@@ -21,7 +21,7 @@ cmuts plot \
     untreated.h5 --label "Untreated"
 ```
 
-The server runs until interrupted with Ctrl-C. Saving the page from the browser captures the rendered figures, so the snapshot can be viewed and shared offline.
+The server runs until interrupted with Ctrl-C. The page embeds every condition's figures for the view it shows, so saving it from the browser gives a snapshot that can be viewed and shared offline: the condition chips still switch, while the reference dropdown and the channel checkboxes need the running server.
 
 ## Reactivity
 

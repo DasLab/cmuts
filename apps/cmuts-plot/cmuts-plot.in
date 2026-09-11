@@ -8,9 +8,11 @@ not hold the same library: comparisons are by reference index and position, so
 a one-off construct can sit beside a large library, or a mutant beside its
 wild type.
 
-The server holds the files and builds every figure on demand; the browser only
-fetches and draws. Saving the page captures the rendered figures, so the
-snapshot views fine offline.
+The server holds the files and builds every figure on demand. The browser
+fetches every condition's figure for the view in front of it into JSON stores
+inside the page, and draws only from those stores. Saving the page keeps the
+stores, so a snapshot stays interactive offline: the condition chips still
+switch, while the reference dropdown and the channel boxes need the server.
 
 The file reads top-down in layers: reading the files, the array transforms,
 the figure builders, the figure registry, the statistics, the page shell, and
@@ -1162,7 +1164,8 @@ def document(body, embed, n_conditions):
         "</head><body>\n"
         '<header class="report"><h1>cmuts report</h1>'
         f'<p class="subtitle">{subtitle}</p>'
-        '<p class="offline-note" hidden>Offline snapshot, plots are frozen.</p></header>\n'
+        '<p class="offline-note" hidden>Offline snapshot: the condition chips work; '
+        "the reference and channel controls need the server.</p></header>\n"
         + body + "\n" + embed
         + f"<script>{REPORT_JS}</script>\n"
         "</body></html>\n"
@@ -1296,9 +1299,10 @@ select:disabled, button:disabled, .cond-btn:disabled, .disabled {
 
 REPORT_JS = """
 (function () {
-  // The shell fetches every figure from the server and draws it with
-  // Plotly.react. On load it probes the server; a reopened snapshot finds it
-  // gone, keeps the drawn figures, and greys out the controls.
+  // The shell fetches every condition's figure into JSON store nodes inside
+  // each card, and every draw reads from those stores. On load it probes the
+  // server; a reopened snapshot finds it gone, redraws from the saved stores,
+  // and disables only the controls that need the server.
   var EXPORT = {wide: [1000, 400], std: [600, 400], square: [650, 520]};
 
   function readJSON(id) {
@@ -1329,9 +1333,8 @@ REPORT_JS = """
     for (var i = 0; i < boxes.length; i++) {
       boxes[i].addEventListener("change", function () {
         if (channels().length === 0) { this.checked = true; return; }
-        renderAll();
         refreshStats();
-        colorSeqview();
+        renderAll().then(colorSeqview);
       });
     }
   }
@@ -1369,6 +1372,9 @@ REPORT_JS = """
                                    filename: slugify(name)}};
   }
   function drawInto(div, fig, kind, name) {
+    // A snapshot's saved markup is not a live plot; clear it before the
+    // first draw.
+    if (!div._fullLayout) div.innerHTML = "";
     Plotly.react(div, fig.data, fig.layout, figConfig(kind, name));
   }
   function hideCard(div) {
@@ -1379,19 +1385,68 @@ REPORT_JS = """
     var card = div.closest("details.plot-details");
     if (card) card.style.display = "";
   }
-  function renderDiv(div) {
+
+  // --- the JSON stores -------------------------------------------------------
+  // Script nodes hold one value per condition: each card its figures, the
+  // sequence strip its bases. Only the fetches below write them, and every
+  // draw reads them, so a saved page draws from the same source as the live
+  // page.
+  function storeNode(root, cls, cond) {
+    var nodes = root.querySelectorAll("script." + cls);
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].getAttribute("data-cond") === cond) return nodes[i];
+    }
+    return null;
+  }
+  function writeStore(root, cls, cond, value) {
+    var node = storeNode(root, cls, cond);
+    if (!node) {
+      node = document.createElement("script");
+      node.type = "application/json";
+      node.className = cls;
+      node.setAttribute("data-cond", cond);
+      root.appendChild(node);
+    }
+    node.textContent = JSON.stringify(value).replace(/<\\//g, "<\\\\/");
+  }
+  function readStore(root, cls, cond) {
+    var node = storeNode(root, cls, cond);
+    if (!node || !node.textContent) return null;
+    return JSON.parse(node.textContent);
+  }
+  function cardOf(div) {
+    return div.closest("details.plot-details");
+  }
+  function drawFromStore(div) {
+    var fig = readStore(cardOf(div), "figstore", div.getAttribute("data-cond"));
+    if (!fig) { hideCard(div); return; }
+    showCard(div);
+    drawInto(div, fig, figKind(div), figName(specOf(div)));
+  }
+  // Fetches every condition's figure for this card into its store, drawing
+  // the active condition as soon as its figure lands.
+  function renderCard(div) {
     if (!ONLINE) return Promise.resolve();
-    var spec = specOf(div);
-    return fetchFigure(spec).then(function (fig) {
-      if (!fig) { hideCard(div); return; }
-      showCard(div);
-      drawInto(div, fig, figKind(div), figName(spec));
-    });
+    var card = cardOf(div);
+    var kind = div.getAttribute("data-kind");
+    var ref = div.getAttribute("data-ref");
+    return Promise.all(CONDS.map(function (cond) {
+      return fetchFigure({kind: kind, cond: cond, ref: ref}).then(function (fig) {
+        writeStore(card, "figstore", cond, fig);
+        if (cond === div.getAttribute("data-cond")) drawFromStore(div);
+      });
+    }));
   }
   function renderAll() {
     var divs = document.querySelectorAll(".plot[data-kind]");
-    for (var i = 0; i < divs.length; i++) renderDiv(divs[i]);
+    var done = [];
+    for (var i = 0; i < divs.length; i++) done.push(renderCard(divs[i]));
     redrawComparisons();
+    return Promise.all(done);
+  }
+  function drawAllFromStores() {
+    var divs = document.querySelectorAll(".plot[data-kind]");
+    for (var i = 0; i < divs.length; i++) drawFromStore(divs[i]);
   }
 
   // Plotly typed-array-encodes numeric data as {dtype, bdata: base64}; decode
@@ -1441,30 +1496,47 @@ REPORT_JS = """
       .then(function (r) { return r.ok ? r.text() : null; })
       .catch(function () { return null; });
   }
+  function seqWrap() {
+    var div = document.getElementById("seqview");
+    return div ? div.closest(".seqview-wrap") : null;
+  }
+  // Fetches every condition's bases at the current reference into the
+  // strip's store.
+  function fetchSequences() {
+    var wrap = seqWrap();
+    if (!wrap || !ONLINE) return Promise.resolve();
+    var ref = currentRef();
+    return Promise.all(CONDS.map(function (cond) {
+      return fetchSequence(cond, ref).then(function (bases) {
+        writeStore(wrap, "seqstore", cond, bases);
+      });
+    }));
+  }
+  function profileStoreFigure(cond) {
+    var div = document.querySelector('.plot[data-kind="' + KINDS.profile + '"]');
+    if (!div) return null;
+    return readStore(cardOf(div), "figstore", cond);
+  }
   // The strip shows the selected condition's own sequence, colored by its
   // profile, so a wild-type and a mutant condition each show their own bases.
+  // Both come from the stores, so the strip follows the chips offline too.
   function colorSeqview() {
+    var wrap = seqWrap();
+    if (!wrap) return;
     var div = document.getElementById("seqview");
-    if (!div || !ONLINE) return;
-    var wrap = div.closest(".seqview-wrap");
-    var ref = currentRef();
     var cond = activeCond();
-    Promise.all([
-      fetchSequence(cond, ref),
-      fetchFigure({kind: KINDS.profile, cond: cond, ref: ref}),
-    ]).then(function (got) {
-      var letters = got[0];
-      if (!letters) { if (wrap) wrap.hidden = true; return; }
-      if (wrap) wrap.hidden = false;
-      var react = got[1] ? reactivityOf(got[1]) : null;
-      var scale = seqScale(react);
-      var html = "";
-      for (var i = 0; i < letters.length; i++) {
-        html += '<span class="base" style="color:' + seqColor(react ? react[i] / scale : null) + '">'
-              + letters[i] + "</span>";
-      }
-      div.innerHTML = html;
-    });
+    var letters = readStore(wrap, "seqstore", cond);
+    if (!letters) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+    var fig = profileStoreFigure(cond);
+    var react = fig ? reactivityOf(fig) : null;
+    var scale = seqScale(react);
+    var html = "";
+    for (var i = 0; i < letters.length; i++) {
+      html += '<span class="base" style="color:' + seqColor(react ? react[i] / scale : null) + '">'
+            + letters[i] + "</span>";
+    }
+    div.innerHTML = html;
   }
   function activeCond() {
     var btn = document.querySelector("#stats-perseq .cond-btn.active")
@@ -1537,7 +1609,7 @@ REPORT_JS = """
             for (var j = 0; j < btns.length; j++) btns[j].classList.remove("active");
             this.classList.add("active");
             plot.setAttribute("data-cond", this.getAttribute("data-cond"));
-            renderDiv(plot);
+            drawFromStore(plot);
           });
         }
       })(toggles[g]);
@@ -1550,12 +1622,14 @@ REPORT_JS = """
     if (!sel) return;
     sel.addEventListener("change", function () {
       var plots = document.querySelectorAll(".perseq-plot");
+      var done = [];
       for (var i = 0; i < plots.length; i++) {
         plots[i].setAttribute("data-ref", sel.value);
-        renderDiv(plots[i]);
+        done.push(renderCard(plots[i]));
       }
       fetchStats(document.getElementById("stats-perseq"), sel.value);
-      colorSeqview();
+      done.push(fetchSequences());
+      Promise.all(done).then(colorSeqview);
     });
   }
 
@@ -1665,10 +1739,12 @@ REPORT_JS = """
   }
 
   // --- startup / offline handling --------------------------------------------
+  // A snapshot keeps the stores, so the condition chips stay live; only the
+  // controls that make the server recompute are disabled.
   function goOffline() {
     var note = document.querySelector(".offline-note");
     if (note) note.hidden = false;
-    var controls = document.querySelectorAll("select, button, input, .cond-btn");
+    var controls = document.querySelectorAll("select, input, button:not(.cond-btn)");
     for (var i = 0; i < controls.length; i++) {
       controls[i].disabled = true;
       controls[i].classList.add("disabled");
@@ -1680,16 +1756,20 @@ REPORT_JS = """
   document.addEventListener("DOMContentLoaded", function () {
     probe().then(function (online) {
       ONLINE = online;
-      if (!online) { goOffline(); return; }
-      bindChannels();
       bindConditionToggles();
       bindStatToggles();
+      bindCollapsibleResize();
+      if (!online) {
+        goOffline();
+        drawAllFromStores();
+        colorSeqview();
+        return;
+      }
+      bindChannels();
       bindReferenceSelect();
       bindMultiPlot();
       bindDiffPlot();
-      bindCollapsibleResize();
-      renderAll();
-      colorSeqview();
+      Promise.all([renderAll(), fetchSequences()]).then(colorSeqview);
     });
   });
 })();
