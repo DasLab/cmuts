@@ -66,7 +66,7 @@ static const cli_positional POSITIONALS[] = {
     {
         .name     = "input",
         .metavar  = "HDF5",
-        .help     = "the output to convert",
+        .help     = "the cmuts output to convert",
         .offset   = offsetof(csv_args, csv.input_path),
         .required = true,
     },

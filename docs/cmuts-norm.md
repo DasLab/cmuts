@@ -71,8 +71,8 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 
 | Option | Description |
 | --- | --- |
-| `--norm SCHEME` | how the norm is taken from the rates (ubr, outlier; default ubr) |
-| `--min-coverage N` | coverage a position needs before its rate sets the norm (ubr only) (default 500) |
+| `--norm SCHEME` | how the normalization factor is computed from the rates (ubr, outlier; default ubr) |
+| `--min-coverage N` | coverage a position needs before its rate sets the normalization factor (ubr only) (default 500) |
 
 ### Information
 

@@ -51,8 +51,8 @@ High coverage in the output does not imply high-quality data, since it is insens
 
 | Argument | Description |
 | --- | --- |
-| `TREATED` | the modified sample |
-| `UNTREATED` | the background |
+| `TREATED` | the treated sample |
+| `UNTREATED` | the untreated background |
 
 ### Input and output
 

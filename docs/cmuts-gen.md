@@ -33,7 +33,7 @@
 
 | Option | Description |
 | --- | --- |
-| `--mismatch-rate F` | per aligned base (0 to 1; default 0.01) |
+| `--mismatch-rate F` | mismatches per aligned base (0 to 1; default 0.01) |
 | `--insertions DISTRIBUTION` | insertion events per read (default 0:1) |
 | `--insertion-length DISTRIBUTION` | bases per insertion (default 1:5) |
 | `--deletions DISTRIBUTION` | deletion events per read (default 0:1) |
@@ -45,7 +45,7 @@
 
 | Option | Description |
 | --- | --- |
-| `--seed N` | everything generated follows from this (default 1) |
+| `--seed N` | seed for the random number generator (default 1) |
 
 ### Information
 

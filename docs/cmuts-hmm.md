@@ -93,20 +93,20 @@ Pass `--drop-supplementary` to process the primary alignment alone. This suits a
 
 | Option | Description |
 | --- | --- |
-| `-q, --min-mapq N` | discard alignments below this mapping quality (0 to 254; default 20) |
-| `--min-length N` | discard reads shorter than this (default: no limit) |
-| `--max-length N` | discard reads longer than this (default: no limit) |
-| `--drop-supplementary` | discard the further pieces of a split read |
-| `-s, --strand STRANDS` | keep alignments on these strands (forward, reverse; default forward,reverse) |
+| `-q, --min-mapq N` | reject alignments below this mapping quality (0 to 254; default 20) |
+| `--min-length N` | reject reads shorter than this (default: no limit) |
+| `--max-length N` | reject reads longer than this (default: no limit) |
+| `--drop-supplementary` | reject all but the primary piece of a split read |
+| `-s, --strand STRANDS` | reject alignments not on these strands (forward, reverse; default forward,reverse) |
 
 ### Counting
 
 | Option | Description |
 | --- | --- |
-| `--band N` | reference positions the marginal may look either side of the CIGAR (default 2) |
-| `--min-phred Q` | assign bases below this the maximum sequencing error (0 to 255; default 0) |
+| `--band N` | reference positions the pair HMM may look either side of the CIGAR (default 2) |
+| `--min-phred Q` | assign the maximum sequencing error to bases below this quality (0 to 255; default 0) |
 | `--pairwise STATS` | write these statistics of how often two positions are modified together (correlation, conditional, none; default none) |
-| `--min-depth D` | depth a position needs before its rates are written (default 1) |
+| `--min-depth D` | write NaN rates and errors for positions below this depth (default 1) |
 | `--nan-5p N` | write NaN rates and errors for this many bases at the 5' end (default 0) |
 | `--nan-3p N` | write NaN rates and errors for this many bases at the 3' end (default 0) |
 | `--params FILE` | read the pair HMM's rates from this file (default: built in) |

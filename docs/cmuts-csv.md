@@ -62,7 +62,7 @@ The [`sequence`](format.md#sequence) dataset supplies the `base` column. Every r
 
 | Argument | Description |
 | --- | --- |
-| `HDF5` | the output to convert |
+| `HDF5` | the cmuts output to convert |
 
 ### Input
 

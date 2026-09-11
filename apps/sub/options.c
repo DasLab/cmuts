@@ -39,6 +39,7 @@ static const cli_option OPTIONS[] = {
         .type   = OPT_FLAG,
         .offset = offsetof(sub_args, subtract.clip),
         .help   = "raise a negative reactivity to zero",
+        .label  = "Clip Negatives",
     },
 
     {
@@ -80,14 +81,14 @@ static const cli_positional POSITIONALS[] = {
     {
         .name     = "treated",
         .metavar  = "TREATED",
-        .help     = "the modified sample",
+        .help     = "the treated sample",
         .offset   = offsetof(sub_args, subtract.treated_path),
         .required = true,
     },
     {
         .name     = "untreated",
         .metavar  = "UNTREATED",
-        .help     = "the background",
+        .help     = "the untreated background",
         .offset   = offsetof(sub_args, subtract.untreated_path),
         .required = true,
     },

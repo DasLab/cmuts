@@ -82,7 +82,7 @@ Paired-end inputs are refused unless the preset is `sr`.
 
 | Option | Description |
 | --- | --- |
-| `-x, --preset PRESET` | how minimap2 aligns (sr, map-ont, map-hifi, map-pb; required) |
+| `-x, --preset PRESET` | minimap2 preset for the sequencing technology (sr, map-ont, map-hifi, map-pb; required) |
 
 ### Performance
 

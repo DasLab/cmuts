@@ -33,10 +33,12 @@ typedef enum {
 } cli_type;
 
 /* One accepted value of an OPT_ENUM or OPT_SET option. A choice list ends with a NULL
- * name. */
+ * name. The label is a human-readable name for generated interfaces; NULL where the
+ * choice name reads well enough on its own. */
 typedef struct {
     const char *name;
     int         value;
+    const char *label;
 } cli_choice;
 
 /* What an option does besides storing a value. Those that print and exit need no field of
@@ -57,6 +59,9 @@ typedef struct {
     size_t            offset;   /* destination within the args struct */
     const char       *metavar;  /* argument placeholder; NULL when it takes none */
     const char       *help;     /* one line, for the help output */
+    /* Human-readable name for generated interfaces such as the web form. NULL where the
+     * option name reads well enough on its own. */
+    const char       *label;
     bool              required;
     /* The word the help prints in place of a default, for an option that need not be
      * applied at all. NULL where every value is a real setting. */

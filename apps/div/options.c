@@ -72,7 +72,7 @@ static const cli_positional POSITIONALS[] = {
     {
         .name     = "rates",
         .metavar  = "RATES",
-        .help     = "the reactivities to normalize",
+        .help     = "the reactivities to divide",
         .offset   = offsetof(div_args, divide.rates_path),
         .required = true,
     },

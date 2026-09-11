@@ -50,7 +50,7 @@ If any dataset does not match the expected shape or the sequences do not match, 
 
 | Argument | Description |
 | --- | --- |
-| `RATES` | the reactivities to normalize |
+| `RATES` | the reactivities to divide |
 | `CONTROL` | the denatured control |
 
 ### Input and output

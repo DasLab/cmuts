@@ -690,6 +690,43 @@ static void print_json_choices(FILE *out, const cli_option *opt)
     fputc(']', out);
 }
 
+/* Prints the labeled choices as a name-to-label object, or null where no choice carries
+ * a label. */
+static void print_json_choice_labels(FILE *out, const cli_option *opt)
+{
+    bool any = false;
+
+    for (const cli_choice *choice = opt->choices; choice && choice->name; choice++) {
+        if (choice->label) {
+            any = true;
+        }
+    }
+
+    if (!any) {
+        fputs("null", out);
+        return;
+    }
+
+    bool first = true;
+
+    fputc('{', out);
+    for (const cli_choice *choice = opt->choices; choice->name; choice++) {
+        if (!choice->label) {
+            continue;
+        }
+
+        if (!first) {
+            fputs(", ", out);
+        }
+
+        first = false;
+        print_json_string(out, choice->name);
+        fputs(": ", out);
+        print_json_string(out, choice->label);
+    }
+    fputc('}', out);
+}
+
 /* JSON has no spelling for a value that is not finite, so such a default is described as
  * having no default. */
 static void print_json_double(FILE *out, double value)
@@ -761,11 +798,13 @@ static void print_json_option(FILE *out, const cli_option *opt, const void *defa
     fprintf(out, ",\n      \"type\": \"%s\"", type_name(opt->type));
     fputs(",\n      \"metavar\": ", out);     print_json_string(out, opt->metavar);
     fputs(",\n      \"help\": ", out);        print_json_string(out, opt->help);
+    fputs(",\n      \"label\": ", out);       print_json_string(out, opt->label);
     fprintf(out, ",\n      \"required\": %s", opt->required ? "true" : "false");
     fprintf(out, ",\n      \"hidden\": %s", opt->hidden ? "true" : "false");
     fprintf(out, ",\n      \"repeatable\": %s", opt->repeatable ? "true" : "false");
     fputs(",\n      \"unset_label\": ", out); print_json_string(out, opt->unset_label);
     fputs(",\n      \"choices\": ", out);     print_json_choices(out, opt);
+    fputs(",\n      \"choice_labels\": ", out); print_json_choice_labels(out, opt);
     fputs(",\n      \"default\": ", out);     print_json_default(out, opt, defaults);
     fputs(",\n", out);                        print_json_bounds(out, opt);
     fprintf(out, "    }%s\n", last ? "" : ",");
