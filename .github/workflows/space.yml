@@ -1,9 +1,11 @@
 name: Pin space to this commit
 
-# Bumps CMUTS_SHA in the DasLab/cmuts-space Dockerfile to the pushed commit.
-# The space repo's own sync workflow then deploys it to Hugging Face, so this
-# workflow never touches the space directly. SPACE_TOKEN is a fine-grained
-# token with contents write access to DasLab/cmuts-space only.
+# Bumps CMUTS_SHA in the DasLab/cmuts-space Dockerfile to the pushed commit,
+# then waits for the deployment that bump triggers and fails if it does, so a
+# cmuts push that breaks the space turns this repository's checks red. The
+# space repo's own sync workflow does the deploying; this workflow never
+# touches the space directly. SPACE_TOKEN is a fine-grained token with
+# contents write access to DasLab/cmuts-space only.
 
 on:
   push:
@@ -23,6 +25,7 @@ jobs:
             "https://x-access-token:${{ secrets.SPACE_TOKEN }}@github.com/DasLab/cmuts-space.git" space
 
       - name: Update the pinned commit
+        id: pin
         run: |
           cd space
           sed -i "s/^ARG CMUTS_SHA=.*/ARG CMUTS_SHA=${GITHUB_SHA}/" Dockerfile
@@ -35,4 +38,28 @@ jobs:
             git commit -m "Pin cmuts@${GITHUB_SHA::8}"
             git pull --rebase origin main
             git push origin main
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           fi
+
+      # The pin commit triggers the space's Sync HF Space workflow, which
+      # smoke-tests, deploys, and smoke-tests again. Mirror its conclusion,
+      # so a downstream failure fails this run too.
+      - name: Wait for the space deployment
+        if: steps.pin.outputs.sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIN_SHA: ${{ steps.pin.outputs.sha }}
+        run: |
+          deadline=$((SECONDS + 3000))
+          while [ $SECONDS -lt $deadline ]; do
+            run=$(gh api "repos/DasLab/cmuts-space/actions/runs?head_sha=$PIN_SHA" \
+              --jq '.workflow_runs[0] | .status + " " + (.conclusion // "")' 2>/dev/null || true)
+            echo "${run:-no run yet}"
+            case "$run" in
+              "completed success") exit 0 ;;
+              completed*) echo "the space deployment failed"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "timed out waiting for the space deployment"
+          exit 1
