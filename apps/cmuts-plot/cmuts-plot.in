@@ -1933,7 +1933,9 @@ def parse_arguments():
     parser.add_argument("-V", "--version", action="version",
                         version=f"cmuts plot {VERSION}")
 
-    return parser.parse_args()
+    # Intermixed parsing accepts a --label between files. Both lists keep
+    # command-line order, and the first n labels name the first n files.
+    return parser.parse_intermixed_args()
 
 
 def main():
