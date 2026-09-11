@@ -1,0 +1,38 @@
+name: Pin space to this commit
+
+# Bumps CMUTS_SHA in the DasLab/cmuts-space Dockerfile to the pushed commit.
+# The space repo's own sync workflow then deploys it to Hugging Face, so this
+# workflow never touches the space directly. SPACE_TOKEN is a fine-grained
+# token with contents write access to DasLab/cmuts-space only.
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: pin-space
+  cancel-in-progress: false
+
+jobs:
+  pin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the space repo
+        run: |
+          GIT_LFS_SKIP_SMUDGE=1 git clone \
+            "https://x-access-token:${{ secrets.SPACE_TOKEN }}@github.com/DasLab/cmuts-space.git" space
+
+      - name: Update the pinned commit
+        run: |
+          cd space
+          sed -i "s/^ARG CMUTS_SHA=.*/ARG CMUTS_SHA=${GITHUB_SHA}/" Dockerfile
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add Dockerfile
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Pin cmuts@${GITHUB_SHA::8}"
+            git pull --rebase origin main
+            git push origin main
+          fi
