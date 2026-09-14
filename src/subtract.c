@@ -127,7 +127,7 @@ static int subtract_field(const combine_rows *rows, fmt_field_id id, void *out, 
         return COMBINE_NO_RULE;
     }
 
-    return combine_f32(rows, id, RULES[id], cfg->clip, out, n);
+    return combine_f32(rows, id, RULES[id], !cfg->keep_negative, out, n);
 }
 
 /* ------------------------------------------------------------------------ */

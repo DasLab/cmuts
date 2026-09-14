@@ -29,33 +29,34 @@ def subtract(tmp_path):
 
 
 @rates
-def test_a_background_above_the_signal_leaves_a_negative_rate(build, subtract, rate):
+def test_a_background_above_the_signal_holds_the_difference_at_zero(build, subtract,
+                                                                    rate):
     treated = build({rate: 0.25})
     untreated = build({rate: 0.75})
 
-    difference = field_of(subtract(treated, untreated), rate)
+    output = subtract(treated, untreated)
 
-    assert np.all(difference == np.float32(-0.5))
+    assert np.all(field_of(output, rate) == 0)
 
 
 @rates
-def test_clipping_holds_the_difference_at_zero(build, subtract, rate):
+def test_keeping_the_negatives_leaves_a_difference_below_zero(build, subtract, rate):
     treated = build({rate: 0.25})
     untreated = build({rate: 0.75})
 
-    output = subtract(treated, untreated, clip=True)
+    difference = field_of(subtract(treated, untreated, keep_negative=True), rate)
 
-    assert np.all(field_of(output, rate) == 0)
+    assert np.all(difference == np.float32(-0.5))
 
 
 @rates
 def test_clipping_leaves_a_difference_above_zero_alone(build, tmp_path, rate):
     treated, untreated = build(random_fields(seed=13)), build(random_fields(seed=14))
 
-    plain = run_subtract(treated, untreated, tmp_path / "plain.h5")
-    clipped = run_subtract(treated, untreated, tmp_path / "clipped.h5", clip=True)
+    clipped = run_subtract(treated, untreated, tmp_path / "clipped.h5")
+    kept = run_subtract(treated, untreated, tmp_path / "kept.h5", keep_negative=True)
 
-    unclipped = field_of(plain, rate)
+    unclipped = field_of(kept, rate)
 
     assert (unclipped < 0).any()
     assert np.array_equal(field_of(clipped, rate), np.maximum(unclipped, 0))
@@ -65,7 +66,7 @@ def test_clipping_leaves_a_difference_above_zero_alone(build, tmp_path, rate):
 def test_clipping_does_not_raise_a_missing_value_to_zero(build, subtract, rate):
     left, right = missing_in_each_input(N_REFS, CAP)
 
-    output = subtract(build({rate: left}), build({rate: right}), clip=True)
+    output = subtract(build({rate: left}), build({rate: right}))
     result = field_of(output, rate)
 
     assert np.array_equal(np.isnan(result), np.isnan(left) | np.isnan(right))
@@ -75,11 +76,11 @@ def test_clipping_reaches_no_field_but_the_rates(build, tmp_path):
     treated = build(random_fields(seed=15), unmapped=11)
     untreated = build(random_fields(seed=16), unmapped=4)
 
-    plain = run_subtract(treated, untreated, tmp_path / "plain.h5")
-    clipped = run_subtract(treated, untreated, tmp_path / "clipped.h5", clip=True)
+    clipped = run_subtract(treated, untreated, tmp_path / "clipped.h5")
+    kept = run_subtract(treated, untreated, tmp_path / "kept.h5", keep_negative=True)
 
     for name in set(ALL_FIELDS) - set(RATE_FIELDS):
-        assert np.array_equal(field_of(clipped, name), field_of(plain, name)), name
+        assert np.array_equal(field_of(clipped, name), field_of(kept, name)), name
 
 
 @errors
@@ -110,8 +111,9 @@ def test_a_file_against_itself_leaves_a_rate_of_zero(build, subtract, rate):
 def test_swapping_the_two_inputs_negates_only_the_rates(build, subtract, tmp_path):
     treated, untreated = build(random_fields(seed=4)), build(random_fields(seed=40))
 
-    forward = subtract(treated, untreated)
-    backward = run_subtract(untreated, treated, tmp_path / "backward.h5")
+    forward = subtract(treated, untreated, keep_negative=True)
+    backward = run_subtract(untreated, treated, tmp_path / "backward.h5",
+                            keep_negative=True)
 
     for rate in RATE_FIELDS:
         assert np.array_equal(field_of(backward, rate),

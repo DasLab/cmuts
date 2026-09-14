@@ -143,9 +143,10 @@ def test_the_two_programs_give_the_rate_over_the_control(build, tmp_path, rate):
     untreated_rate = field_of(untreated, rate)
     control_rate = field_of(control, rate)
 
+    difference = np.maximum(treated_rate - untreated_rate, np.float32(0))
+
     with np.errstate(divide="ignore", invalid="ignore"):
-        normalized = np.where(control_rate > 0,
-                              (treated_rate - untreated_rate) / control_rate,
+        normalized = np.where(control_rate > 0, difference / control_rate,
                               np.float32(np.nan))
 
     assert np.array_equal(field_of(output, rate), normalized, equal_nan=True)
@@ -188,13 +189,13 @@ def test_every_count_is_summed_over_all_three_inputs(build, tmp_path):
 
 
 @rates
-def test_clipping_the_difference_holds_the_normalized_rate_at_zero(build, tmp_path,
-                                                                   rate):
+def test_a_clipped_difference_holds_the_normalized_rate_at_zero(build, tmp_path,
+                                                                rate):
     treated = build({rate: 0.25})
     untreated = build({rate: 0.75})
     control = build({rate: 0.5})
 
-    output = _normalized(tmp_path, treated, untreated, control, clip=True)
+    output = _normalized(tmp_path, treated, untreated, control)
 
     assert np.all(field_of(output, rate) == 0)
 
@@ -209,7 +210,7 @@ def test_a_clipped_rate_carries_no_uncertainty_from_the_control(build, tmp_path,
     untreated = build({rate: 0.75, error: 0.4})
     control = build({rate: 0.5, error: 0.1})
 
-    output = _normalized(tmp_path, treated, untreated, control, clip=True)
+    output = _normalized(tmp_path, treated, untreated, control)
 
     quadrature = np.sqrt(np.float32(0.3) ** 2 + np.float32(0.4) ** 2)
 

@@ -33,7 +33,9 @@ def _add(values, rates):
 
 
 def _subtract(values, rates):
-    return values[0] - values[1]
+    """Raises a negative difference to zero, as the program does unless it is
+    told to keep one."""
+    return np.maximum(values[0] - values[1], np.float32(0))
 
 
 def _quadrature(values, rates):

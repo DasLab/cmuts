@@ -17,7 +17,7 @@ Both must be in [`cmuts`-compatible HDF5 files](format.md).
 cmuts sub -o reactivity.h5 treated.h5 untreated.h5
 ```
 
-The untreated reactivity is subtracted from the treated reactivity. The result is NaN if either input is NaN there.
+The untreated reactivity is subtracted from the treated reactivity. The result is NaN if either input is NaN there. A negative difference is raised to zero, unless `--keep-negative` is given.
 
 If any dataset does not match the expected shape or the sequences do not match, the program exits early.
 
@@ -65,7 +65,7 @@ High coverage in the output does not imply high-quality data, since it is insens
 
 | Option | Description |
 | --- | --- |
-| `--clip` | raise a negative reactivity to zero |
+| `--keep-negative` | leave a negative reactivity as it is |
 
 ### Information
 

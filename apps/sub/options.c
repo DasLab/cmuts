@@ -35,11 +35,11 @@ static const cli_option OPTIONS[] = {
 
     {
         .group  = "Subtraction",
-        .name   = "clip",
+        .name   = "keep-negative",
         .type   = OPT_FLAG,
-        .offset = offsetof(sub_args, subtract.clip),
-        .help   = "raise a negative reactivity to zero",
-        .label  = "Clip Negatives",
+        .offset = offsetof(sub_args, subtract.keep_negative),
+        .help   = "leave a negative reactivity as it is",
+        .label  = "Keep Negatives",
     },
 
     {

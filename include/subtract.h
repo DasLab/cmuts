@@ -15,7 +15,7 @@ typedef struct {
     const char *untreated_path;
     const char *output_path;
     bool        overwrite;
-    bool        clip;  /* whether a negative reactivity is raised to zero */
+    bool        keep_negative;  /* whether a negative reactivity is left as it is */
 } subtract_config;
 
 /* Takes the background off the treated run, field by field, into a file of the same
