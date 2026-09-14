@@ -3,7 +3,7 @@
 
 Each input file is one condition. The page shows one report with a chip per
 condition on every figure, and computes the reactivity profile from the three
-event channels, aggregated the same way cmuts norm pools them. The files need
+event channels, summed over the channels the page has checked. The files need
 not hold the same library: comparisons are by reference index and position, so
 a one-off construct can sit beside a large library, or a mutant beside its
 wild type.
@@ -154,43 +154,29 @@ def decode_sequence(handle, ref):
 # ===========================================================================
 
 
-def aggregate_rate(rates):
-    """The rate of an event of any kind: one less the product of the no-event
-    rates of the channels given. NaN in any channel carries through."""
-    none = np.float32(1.0)
+def summed_rate(rates):
+    """The sum of the rates of the channels given. NaN in any channel carries
+    through."""
+    total = np.zeros_like(rates[0], dtype=np.float32)
 
     for rate in rates:
-        none = none * (np.float32(1.0) - rate)
+        total = total + rate
 
-    return np.float32(1.0) - none
+    return total
 
 
-def aggregate_error(rates, errors):
-    """The error of the aggregate: each channel's error scaled by the product
-    of the other channels' no-event rates, added in quadrature."""
+def summed_error(errors):
+    """The error of the sum: the channels' errors added in quadrature."""
     total = np.zeros_like(errors[0], dtype=np.float32)
 
-    for i, error in enumerate(errors):
-        others = [rate for j, rate in enumerate(rates) if j != i]
-        scaled = aggregate_error_term(others, error)
-        total = total + scaled * scaled
+    for error in errors:
+        total = total + error * error
 
     return np.sqrt(total)
 
 
-def aggregate_error_term(other_rates, error):
-    """One channel's contribution: its error times the others' no-event
-    product."""
-    weight = np.float32(1.0)
-
-    for rate in other_rates:
-        weight = weight * (np.float32(1.0) - rate)
-
-    return weight * error
-
-
 def reactivity_of(handle, channels, ref=None):
-    """The aggregate rate and error over the selected channels, for one
+    """The summed rate and error over the selected channels, for one
     reference or for every reference at once. None where the file lacks a
     selected rate; a missing error counts as zero."""
     rows = slice(None) if ref is None else ref
@@ -210,7 +196,7 @@ def reactivity_of(handle, channels, ref=None):
     if not rates:
         return None, None
 
-    return aggregate_rate(rates), aggregate_error(rates, errors)
+    return summed_rate(rates), summed_error(errors)
 
 
 def mean_of(values):
@@ -805,7 +791,7 @@ def condition_path(conditions, label):
 
 
 def series_of(conditions, spec, channels):
-    """One overlay or difference series: the selected condition's aggregate
+    """One overlay or difference series: the selected condition's summed
     reactivity at one reference, with its legend label. None where the
     reference lies past this condition's library."""
     ref = int(spec.get("ref", 0) or 0)
@@ -929,8 +915,7 @@ def read_stats(handle, ref):
 
 
 def reactivity_stats(handle, channels, ref):
-    """The Reactivity and SNR groups, over the aggregate of the selected
-    channels."""
+    """The Reactivity and SNR groups, over the sum of the selected channels."""
     n_refs, _ = file_shape(handle)
     reactivity, error = reactivity_of(handle, channels, ref)
 

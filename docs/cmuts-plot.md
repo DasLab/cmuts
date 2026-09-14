@@ -25,7 +25,7 @@ The server runs until interrupted with Ctrl-C. The page embeds every condition's
 
 ## Reactivity
 
-The outputs hold one rate per event channel rather than one reactivity, so the report computes its reactivity as `cmuts norm` pools its scale: the aggregate of the mismatch, insertion, and deletion rates, one less the product of their no-event rates. Checkboxes at the top of the page select the channels the aggregate is taken over. Plotting an output of `cmuts norm` shows normalized profiles, since the norm divides every channel by the one scale.
+The outputs hold one rate per event channel rather than one reactivity, so the report computes its reactivity as the sum of the mismatch, insertion, and deletion rates. Checkboxes at the top of the page select the channels the sum is taken over. Plotting an output of `cmuts norm` shows normalized profiles, since the norm divides every channel by the one scale.
 
 ## Conditions
 
