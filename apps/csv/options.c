@@ -23,8 +23,8 @@ static const cli_option OPTIONS[] = {
         .type        = OPT_STRING,
         .offset      = offsetof(csv_args, csv.fasta_path),
         .metavar     = "FASTA",
-        .help        = "name the references from this file, in the order of the rows",
-        .unset_label = "the row number",
+        .help        = "populate the reference field with the names from this file",
+        .unset_label = "the reference number",
     },
 
     {

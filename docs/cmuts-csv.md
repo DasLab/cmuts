@@ -2,27 +2,25 @@
 
 ## Purpose
 
-Convert an output into a table that a spreadsheet or a dataframe library reads.
+Converting a `cmuts` HDF5 file into a comma-separated table.
 
 ## Requires
 
-- An [output](format.md)
+- A [`cmuts`-compatible HDF5 file](format.md)
 
 ## Usage
 
-Pass the output. The table is written to standard output, one reference after another, in the order the rows of the file follow.
+Provide the HDF5 file and redirect the output to a file.
 
 ```sh
 cmuts csv reactivity.h5 > reactivity.csv
 ```
 
-The file holds no reference names, so the `reference` column counts the rows from one. Give a FASTA to name them instead.
+Providing a FASTA populates the `reference` column with the corresponding name.
 
 ```sh
 cmuts csv -f references.fasta reactivity.h5 > reactivity.csv
 ```
-
-The FASTA must be the one the input was counted against. It is refused unless it holds one record for each row, of the same length as that row.
 
 ## Input
 
@@ -43,17 +41,17 @@ All other datasets in an input are ignored.
 
 ## Output
 
-Each row holds one position of one reference. The first three columns identify the position, and each column after them is one dataset of the input, under the name it has in the [format](format.md).
+Each row is one position in one reference. The first three columns identify the position as follows.
 
 | Column | Meaning |
 | --- | --- |
-| `reference` | the row number, or the name of the record in the FASTA |
+| `reference` | the reference number, or the name of the record in the FASTA |
 | `position` | the position in the reference, counting from one |
-| `base` | the base at that position, decoded from the sequence |
+| `base` | the base at that position, taken from the [`sequence`](format.md#sequence) dataset |
 
-A dataset the input does not hold gets no column. A value the run did not measure is not a number, and is written as an empty field.
+Each column after these is one dataset of the input, under the name it has in the [format](format.md). NaN values are converted to empty fields.
 
-The [`sequence`](format.md#sequence) dataset supplies the `base` column. Every row is as wide as the longest reference in the file, and the columns past the end of a reference hold a token of their own. The sequence therefore also gives the length of each reference, and a column past the end gets no row.
+In ragged libraries references are not padded.
 
 ## CLI Options
 
@@ -68,7 +66,7 @@ The [`sequence`](format.md#sequence) dataset supplies the `base` column. Every r
 
 | Option | Description |
 | --- | --- |
-| `-f, --fasta FASTA` | name the references from this file, in the order of the rows (default: the row number) |
+| `-f, --fasta FASTA` | populate the reference field with the names from this file (default: the reference number) |
 
 ### Information
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Serving an interactive HTML report summarizing and plotting the results of one or more `cmuts` outputs.
+Serving an interactive HTML report summarizing and plotting the results contained in one or more `cmuts` HDF5 files.
 
 ## Requires
 
@@ -21,17 +21,13 @@ cmuts plot \
     untreated.h5 --label "Untreated"
 ```
 
-The server runs until interrupted with Ctrl-C. The page embeds every condition's figures for the view it shows, so saving it from the browser gives a snapshot that can be viewed and shared offline: the condition chips still switch, while the reference dropdown and the channel checkboxes need the running server.
+The server runs until interrupted with Ctrl-C.
+
+Saving it from the browser provides a static copy that can be viewed and shared offline. Only the currently selected reference is embedded, meaning reference selection is disabled in the static copy.
 
 ## Reactivity
 
-The outputs hold one rate per event channel rather than one reactivity, so the report computes its reactivity as the sum of the mismatch, insertion, and deletion rates. Checkboxes at the top of the page select the channels the sum is taken over. Plotting an output of `cmuts norm` shows normalized profiles, since the norm divides every channel by the one scale.
-
-## Conditions
-
-The inputs need not hold the same library. Comparisons are by reference index and position, so a one-off construct can sit beside a large library, or a mutant beside its wild type. Each condition reports its own reference count, the sequence strip shows the selected condition's own bases, and a reference a condition does not hold simply shows nothing for it.
-
-The report uses the combined single-reference layout only when every input holds one reference. Otherwise it shows aggregate and per-sequence sections, with the reference dropdown reaching the largest library.
+The report computes the reactivity as the sum of the channels selected at the top of the page.
 
 ## Options
 
