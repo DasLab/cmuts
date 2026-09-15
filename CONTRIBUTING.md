@@ -94,7 +94,7 @@ On macOS system libraries stay dynamic; a musl compiler (`scripts/static-deps.sh
 
 Pushing a `v*` tag runs the `Release` workflow, which builds these binaries for Linux (x86_64, aarch64, via Alpine containers) and macOS (arm64), runs the test suite against each, and attaches `scripts/package.sh` tarballs to a draft GitHub release.
 
-Each platform job first runs `scripts/check-tag.sh`, which fails where the tag names a version other than the one in `include/version.h`. Set the version in that header and commit it before you tag. The draft takes its notes from `scripts/release-notes.sh`, which prints the `CHANGELOG.md` entry for the version, so the changelog must hold one under `## [<version>]`.
+A first job runs `scripts/check-tag.sh`, which fails where the tag names a version other than the one in `include/version.h`. The same job runs `scripts/release-notes.sh`, which fails where `CHANGELOG.md` holds no entry under `## [<version>]`. The platform jobs wait on that job, so a tag which disagrees with either file fails before anything is built. Set the version in the header and write the changelog entry before you tag. The draft takes its notes from the entry `scripts/release-notes.sh` prints.
 
 # Contributing
 

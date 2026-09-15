@@ -43,9 +43,20 @@ HDF5_URL=https://github.com/HDFGroup/hdf5/releases/download/hdf5_$HDF5_VERSION/h
 
 MUSL_COPYRIGHT_URL=https://git.musl-libc.org/cgit/musl/plain/COPYRIGHT
 
+# A build uses this many jobs where the number of processors cannot be read.
+FALLBACK_JOBS=4
+
 die() {
     printf '%s: %s\n' "$PROGRAM" "$1" >&2
     exit 1
+}
+
+# Prints the number of processors to build with. Some minimal systems have no
+# getconf, Alpine among them, and some have no nproc.
+processors() {
+    getconf _NPROCESSORS_ONLN 2>/dev/null && return
+    nproc 2>/dev/null && return
+    printf '%s\n' "$FALLBACK_JOBS"
 }
 
 sha256() {
@@ -185,7 +196,7 @@ build_hdf5() {
 mkdir -p "$1"
 PREFIX=$(cd "$1" && pwd)
 CC=${2:-cc}
-JOBS=${JOBS:-$(getconf _NPROCESSORS_ONLN)}
+JOBS=${JOBS:-$(processors)}
 SRC=$PREFIX/src
 WORK=$PREFIX/work
 LICENSES=$PREFIX/licenses
