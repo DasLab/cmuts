@@ -11,6 +11,7 @@ import shutil
 import pytest
 
 from alignments import NATIVE, measure_dataset
+from oracle import sequences
 from programs import (CMUTS_ALIGN, attempt, run_align, samtools, samtools_into,
                       try_align, try_cmuts)
 
@@ -242,6 +243,22 @@ def test_a_minimap2_index_in_place_of_the_fasta_is_refused(alignable, tmp_path):
     attempt(["minimap2", "-d", index, fasta])
 
     assert try_align(index, tmp_path / "out.bam", PRESET, reads).returncode != 0
+
+
+def test_a_fasta_that_repeats_a_reference_name_is_refused(alignable, tmp_path):
+    """The report names the file and the reference that repeats, rather than
+    the failure that the repeated name causes further down the pipeline."""
+    fasta, reads = alignable
+    repeated = tmp_path / "repeated.fasta"
+    name = next(iter(sequences(fasta)))
+
+    repeated.write_text(fasta.read_text() * 2)
+    result = try_align(repeated, tmp_path / "out.bam", PRESET, reads)
+    reason = result.stderr.strip().splitlines()[-1]
+
+    assert result.returncode != 0
+    assert str(repeated) in reason
+    assert f'"{name}"' in reason
 
 
 def test_an_existing_output_is_kept_unless_overwriting_is_asked_for(alignable, aligned):

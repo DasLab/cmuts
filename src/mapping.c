@@ -22,6 +22,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <htslib/khash.h>
 #include <htslib/kstring.h>
 #include <htslib/sam.h>
 
@@ -139,6 +140,108 @@ static int check_reference(const mapping_config *cfg, char *error, size_t error_
     }
 
     return 0;
+}
+
+/* A set of reference names. A FASTA record lends its name only until the next record is
+ * read, so each entry holds a copy of its own and keys on it. */
+KHASH_INIT(name_set, const char *, char *, 1, kh_str_hash_func, kh_str_hash_equal)
+
+/* Frees every name the set holds, and then the set. */
+static void free_names(khash_t(name_set) *names)
+{
+    for (khint_t k = kh_begin(names); k != kh_end(names); k++) {
+        if (kh_exist(names, k)) {
+            free(kh_val(names, k));
+        }
+    }
+
+    kh_destroy(name_set, names);
+}
+
+/* Adds a copy of the name to the set. Returns 1 where the set already holds the name, 0
+ * where it did not, and -1 where no memory is left. */
+static int add_name(khash_t(name_set) *names, const char *name)
+{
+    char    *copy;
+    khiter_t at;
+    int      absent;
+
+    if (kh_get(name_set, names, name) != kh_end(names)) {
+        return 1;
+    }
+
+    copy = strdup(name);
+
+    if (!copy) {
+        return -1;
+    }
+
+    at = kh_put(name_set, names, copy, &absent);
+
+    if (absent < 0) {
+        free(copy);
+        return -1;
+    }
+
+    kh_val(names, at) = copy;
+
+    return 0;
+}
+
+/* Reads each record until one repeats a name that an earlier record gave. */
+static int find_repeated_name(cm_fasta_reader *reader, khash_t(name_set) *names,
+                              const char *fasta_path, char *error, size_t error_len)
+{
+    cm_fasta_record record;
+    int             repeated = 0;
+
+    while (repeated == 0 && cm_fasta_next(reader, &record) == CM_ITER_OK) {
+        repeated = add_name(names, record.name);
+    }
+
+    if (repeated < 0) {
+        return fail_plainly("out of memory", error, error_len);
+    }
+
+    if (repeated > 0) {
+        snprintf(error, error_len, "%s: the reference name \"%s\" appears more than once",
+                 fasta_path, record.name);
+        return -1;
+    }
+
+    if (cm_fasta_error(reader)) {
+        return fail(fasta_path, cm_fasta_error(reader), error, error_len);
+    }
+
+    return 0;
+}
+
+/* minimap2 accepts two references with the same name. The header it then writes names
+ * both, and htslib refuses to read that header, so the repeated name is refused here. */
+static int check_unique_names(const mapping_config *cfg, char *error, size_t error_len)
+{
+    const char        *why    = NULL;
+    cm_fasta_reader   *reader = cm_fasta_open(cfg->fasta_path, &why);
+    khash_t(name_set) *names;
+    int                status;
+
+    if (!reader) {
+        return fail(cfg->fasta_path, why, error, error_len);
+    }
+
+    names = kh_init(name_set);
+
+    if (!names) {
+        cm_fasta_close(reader);
+        return fail_plainly("out of memory", error, error_len);
+    }
+
+    status = find_repeated_name(reader, names, cfg->fasta_path, error, error_len);
+
+    free_names(names);
+    cm_fasta_close(reader);
+
+    return status;
 }
 
 /* Reads the first bytes of every file of reads to find out what it holds. A format this
@@ -882,6 +985,7 @@ int mapping_run(const mapping_config *cfg, char *error, size_t error_len)
 
     if (check_tools(cfg, error, error_len) < 0
         || check_reference(cfg, error, error_len) < 0
+        || check_unique_names(cfg, error, error_len) < 0
         || classify_reads(cfg, formats, error, error_len) < 0
         || check_pair(cfg, formats, error, error_len) < 0
         || check_single_bam(cfg, formats, error, error_len) < 0
