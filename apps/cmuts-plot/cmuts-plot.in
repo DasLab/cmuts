@@ -2,11 +2,10 @@
 """cmuts-plot -- serve an interactive HTML report over cmuts outputs.
 
 Each input file is one condition. The page shows one report with a chip per
-condition on every figure, and computes the reactivity profile from the three
-event channels, summed over the channels the page has checked. The files need
-not hold the same library: comparisons are by reference index and position, so
-a one-off construct can sit beside a large library, or a mutant beside its
-wild type.
+condition on every figure, and computes the reactivity profile from the event
+channels the page has checked, summed. The files need not hold the same
+library: comparisons are by reference index and position, so a one-off
+construct can sit beside a large library, or a mutant beside its wild type.
 
 The server holds the files and builds every figure on demand. The browser
 fetches every condition's figure for the view in front of it into JSON stores
@@ -59,12 +58,18 @@ PAIRWISE_COVERAGE = "pairwise/coverage"
 
 # The event channels, each a group holding a rate and its error. The labels
 # are what the page's checkboxes say.
-CHANNELS = ("mismatches", "insertions", "deletions")
+CHANNELS = ("mismatches", "insertions", "deletions", "terminations")
 CHANNEL_LABELS = {
     "mismatches": "Substitutions",
     "insertions": "Insertions",
     "deletions": "Deletions",
+    "terminations": "Terminations",
 }
+
+# The channels the reactivity is summed over when the page opens. A read which
+# stops at a base has not modified it. The termination channel is therefore
+# unchecked at the start, and its checkbox turns it on.
+DEFAULT_CHANNELS = ("mismatches", "insertions", "deletions")
 
 # The character of each token of the sequence dataset, indexed by the token: the four
 # named bases, then the token for any other base. A negative token is padding. This must
@@ -777,7 +782,7 @@ def parse_ref(value):
 def parse_channels(value):
     """The checked channels, in canonical order."""
     if value is None:
-        value = list(CHANNELS)
+        value = list(DEFAULT_CHANNELS)
 
     return [c for c in CHANNELS if c in value]
 
@@ -1031,9 +1036,10 @@ def stats_conditions_html(conditions, channels, ref):
 
 
 def channel_toggle_html():
-    """The three channel checkboxes, all checked to start."""
+    """Gives one checkbox per channel, with the default channels checked."""
     boxes = "".join(
-        f'<label class="channel"><input type="checkbox" data-channel="{c}" checked>'
+        f'<label class="channel"><input type="checkbox" data-channel="{c}"'
+        f'{" checked" if c in DEFAULT_CHANNELS else ""}>'
         f'{CHANNEL_LABELS[c]}</label>'
         for c in CHANNELS
     )
@@ -1162,7 +1168,7 @@ def build_shell(conditions):
     and the comparison sections, with every figure fetched by the client. The
     single-reference layout applies only when every condition holds one
     reference; the dropdown otherwise reaches the largest library."""
-    channels = list(CHANNELS)
+    channels = list(DEFAULT_CHANNELS)
     refs = condition_refs(conditions)
     n_refs = max(refs)
 

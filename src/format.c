@@ -67,6 +67,22 @@ const fmt_field FMT_FIELDS[FMT_N_FIELDS] = {
         .stored  = FMT_F32,
         .fill    = (double)NAN,
     },
+    [FMT_TERMINATION_RATE] = {
+        .name    = "terminations/rate",
+        .detail  = "The rate of reads whose 5'-most paired base is each base, over the coverage.",
+        .row     = shape_per_base,
+        .per_ref = true,
+        .stored  = FMT_F32,
+        .fill    = (double)NAN,
+    },
+    [FMT_TERMINATION_ERROR] = {
+        .name    = "terminations/error",
+        .detail  = "Binomial standard error of the termination rate.",
+        .row     = shape_per_base,
+        .per_ref = true,
+        .stored  = FMT_F32,
+        .fill    = (double)NAN,
+    },
     [FMT_LENGTHS] = {
         .name    = "reads/lengths",
         .detail  = "The number of reads contributing to the rates, binned by length.",
@@ -142,21 +158,23 @@ const fmt_field FMT_FIELDS[FMT_N_FIELDS] = {
     },
 };
 
+#define RATE_OF(channel, rate, error)  [channel] = (rate),
+#define ERROR_OF(channel, rate, error) [channel] = (error),
+
 const fmt_field_id FMT_CHANNEL_RATES[FMT_N_CHANNELS] = {
-    FMT_MISMATCH_RATE,
-    FMT_INSERTION_RATE,
-    FMT_DELETION_RATE,
+    FMT_CHANNELS(RATE_OF)
 };
 
 const fmt_field_id FMT_CHANNEL_ERRORS[FMT_N_CHANNELS] = {
-    FMT_MISMATCH_ERROR,
-    FMT_INSERTION_ERROR,
-    FMT_DELETION_ERROR,
+    FMT_CHANNELS(ERROR_OF)
 };
+
+#undef RATE_OF
+#undef ERROR_OF
 
 fmt_field_id fmt_rate_of(fmt_field_id id)
 {
-    for (size_t c = 0; c < FMT_N_CHANNELS; c++) {
+    for (fmt_channel c = 0; c < FMT_N_CHANNELS; c++) {
         if (FMT_CHANNEL_ERRORS[c] == id) {
             return FMT_CHANNEL_RATES[c];
         }
@@ -167,7 +185,7 @@ fmt_field_id fmt_rate_of(fmt_field_id id)
 
 bool fmt_is_channel(fmt_field_id id)
 {
-    for (size_t c = 0; c < FMT_N_CHANNELS; c++) {
+    for (fmt_channel c = 0; c < FMT_N_CHANNELS; c++) {
         if (FMT_CHANNEL_RATES[c] == id || FMT_CHANNEL_ERRORS[c] == id) {
             return true;
         }
@@ -203,20 +221,19 @@ void fmt_selection(const fmt_manifest *manifest, bool *wanted)
     }
 }
 
-/* Adds one field to the requests, keeping each field a single entry. */
-static size_t requests_add(fmt_request *requests, size_t n, fmt_field_id id,
-                           bool required)
+/* Adds one field to the requests, keeping each field a single entry which carries every
+ * claim made of it. */
+static size_t requests_add(fmt_request *requests, size_t n, fmt_request asked)
 {
     for (size_t i = 0; i < n; i++) {
-        if (requests[i].id == id) {
-            if (required) {
-                requests[i].required = true;
-            }
+        if (requests[i].id == asked.id) {
+            requests[i].required |= asked.required;
+            requests[i].any_of   |= asked.any_of;
             return n;
         }
     }
 
-    requests[n] = (fmt_request){ id, required };
+    requests[n] = asked;
     return n + 1;
 }
 
@@ -229,8 +246,14 @@ size_t fmt_requests_of(const fmt_manifest *manifest, fmt_request *requests)
 
         for (const fmt_field_id *dep = field->depends;
              dep && *dep != FMT_N_FIELDS; dep++) {
-            n = requests_add(requests, n, *dep, field->required);
+            n = requests_add(requests, n,
+                             (fmt_request){ .id = *dep, .required = field->required });
         }
+    }
+
+    for (const fmt_field_id *id = manifest->any_of;
+         id && *id != FMT_N_FIELDS; id++) {
+        n = requests_add(requests, n, (fmt_request){ .id = *id, .any_of = true });
     }
 
     return n;
@@ -429,15 +452,26 @@ static void dump_attributes(FILE *out)
     }
 }
 
+/* Gives what the documentation calls one field's requirement. A field an input must
+ * hold is named as such, whether or not the set holds it too. */
+static const char *requirement_name(const fmt_request *request)
+{
+    if (request->required) {
+        return "required";
+    }
+
+    return request->any_of ? "one of" : "optional";
+}
+
 /* Every dataset the program reads of an input, as the objects of a JSON array. */
 static void print_inputs(FILE *out, const fmt_request *requests, size_t n)
 {
     fputs("  \"inputs\": [\n", out);
 
     for (size_t i = 0; i < n; i++) {
-        fprintf(out, "    { \"name\": \"%s\", \"required\": %s }%s\n",
+        fprintf(out, "    { \"name\": \"%s\", \"requirement\": \"%s\" }%s\n",
                 FMT_FIELDS[requests[i].id].name,
-                requests[i].required ? "true" : "false",
+                requirement_name(&requests[i]),
                 i + 1 < n ? "," : "");
     }
 

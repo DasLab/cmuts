@@ -79,6 +79,17 @@ static void sequence(refrow *r, const char *seq, size_t len)
     }
 }
 
+/* The two cases of one channel, which differ only in the channel each passes on. Every
+ * case is named, so the switch is exhaustive and catches a field added with no
+ * source of its own. */
+#define CHANNEL_CASES(channel, rate, error)                   \
+    case rate:                                                \
+        rate_of(&r->rates, acc, len, channel, r->row);        \
+        return r->row;                                        \
+    case error:                                               \
+        rate_error_of(&r->rates, acc, len, channel, r->row);  \
+        return r->row;
+
 /* Gives one output field's values for this reference, computed into the scratch row where
  * they are derived and read in place where they are not, or NULL where the reference has
  * none of them.
@@ -107,24 +118,7 @@ static const double *values(refrow *r, fmt_field_id id, const char *seq, const a
         case FMT_NORM:
         case FMT_UNMAPPED:
         case FMT_N_FIELDS:   break;
-        case FMT_MISMATCH_RATE:
-            rate_of(&r->rates, acc, len, RATE_MISMATCHES, r->row);
-            return r->row;
-        case FMT_MISMATCH_ERROR:
-            rate_error_of(&r->rates, acc, len, RATE_MISMATCHES, r->row);
-            return r->row;
-        case FMT_INSERTION_RATE:
-            rate_of(&r->rates, acc, len, RATE_INSERTIONS, r->row);
-            return r->row;
-        case FMT_INSERTION_ERROR:
-            rate_error_of(&r->rates, acc, len, RATE_INSERTIONS, r->row);
-            return r->row;
-        case FMT_DELETION_RATE:
-            rate_of(&r->rates, acc, len, RATE_DELETIONS, r->row);
-            return r->row;
-        case FMT_DELETION_ERROR:
-            rate_error_of(&r->rates, acc, len, RATE_DELETIONS, r->row);
-            return r->row;
+        FMT_CHANNELS(CHANNEL_CASES)
         case FMT_PAIRWISE_CORRELATION:
         case FMT_PAIRWISE_CONDITIONAL:
         case FMT_PAIRWISE_COVERAGE:
@@ -137,6 +131,8 @@ static const double *values(refrow *r, fmt_field_id id, const char *seq, const a
 
     return NULL;
 }
+
+#undef CHANNEL_CASES
 
 /* Whether a field's row spans more than one extent, and so is written as a block rather
  * than as a row. */

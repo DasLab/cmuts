@@ -52,6 +52,20 @@ The rate of deletion runs ending at each base, over the reads pairing the base 3
 Binomial standard error of the deletion rate.
 
 {.field}
+### `terminations/rate`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+The rate of reads whose 5'-most paired base is each base, over the coverage.
+
+{.field}
+### `terminations/error`
+
+**Shape** `(n, l)` · **Type** `float32` · **Fill** `NaN`
+
+Binomial standard error of the termination rate.
+
+{.field}
 ### `norm`
 
 **Shape** `()` · **Type** `float32` · **Fill** `NaN`

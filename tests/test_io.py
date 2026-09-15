@@ -36,12 +36,14 @@ from outputs import (
     FLOAT_FIELDS,
     NORM,
     MISMATCH_RATE,
+    POOLED_RATE_FIELDS,
     RATE_FIELDS,
     SEQUENCE,
     UNMAPPED,
     add_field,
     attributes_of,
     delete_field,
+    delete_fields,
     field_of,
     layout_of,
     outputs_agree,
@@ -83,6 +85,7 @@ class Program:
     command: tuple
     arity: int        # how many inputs a run here drives it with
     required: tuple   # the datasets an input must hold
+    any_of: tuple     # the datasets an input must hold at least one of
     added: tuple      # the datasets the program adds to its output
     rules: dict       # how each field is formed, None where the file says
     rounds: tuple     # the fields compared to a tolerance and not exactly
@@ -95,14 +98,14 @@ class Program:
 
 SUBTRACT = Program(
     name="sub", command=CMUTS_SUB, arity=2,
-    required=(COVERAGE,) + RATE_FIELDS, added=(), rules=SUB_RULES, rounds=(),
+    required=(COVERAGE,), any_of=RATE_FIELDS, added=(), rules=SUB_RULES, rounds=(),
     run=lambda inputs, output, **options: run_subtract(*inputs, output, **options),
     attempt=lambda inputs, output, **options: try_subtract(*inputs, output, **options),
 )
 
 DIVIDE = Program(
     name="div", command=CMUTS_DIV, arity=2,
-    required=(COVERAGE,) + RATE_FIELDS, added=(), rules=DIV_RULES,
+    required=(COVERAGE,), any_of=RATE_FIELDS, added=(), rules=DIV_RULES,
     rounds=ERROR_FIELDS,
     run=lambda inputs, output, **options: run_divide(*inputs, output, **options),
     attempt=lambda inputs, output, **options: try_divide(*inputs, output, **options),
@@ -110,7 +113,8 @@ DIVIDE = Program(
 
 NORMALIZE = Program(
     name="norm", command=CMUTS_NORM, arity=1,
-    required=(COVERAGE,) + RATE_FIELDS, added=(NORM,), rules=None, rounds=(),
+    required=(COVERAGE,), any_of=POOLED_RATE_FIELDS, added=(NORM,), rules=None,
+    rounds=(),
     run=lambda inputs, output, **options: run_normalize(inputs, [output], **options)[0],
     attempt=lambda inputs, output, **options: try_normalize(inputs, [output], **options),
 )
@@ -217,11 +221,38 @@ def test_an_input_missing_a_required_dataset_is_refused(program, build, tmp_path
 
 
 @readers
+def test_an_input_holding_one_of_the_required_set_is_accepted(program, build, tmp_path):
+    """A reader works from whichever of the set an input holds, so one member is
+    enough. The members the input does not hold are left out of the output."""
+    for written, kept in enumerate(program.any_of):
+        dropped = [name for name in program.any_of if name != kept]
+        inputs = [delete_fields(build(), dropped) for _ in range(program.arity)]
+
+        layout = layout_of(program.run(inputs, tmp_path / f"one{written}.h5"))
+
+        assert kept in layout, kept
+
+        for name in dropped:
+            assert name not in layout, name
+
+
+@readers
+def test_an_input_holding_none_of_the_required_set_is_refused(program, build, tmp_path):
+    for position in range(program.arity):
+        inputs = [build() for _ in range(program.arity)]
+        inputs[position] = delete_fields(build(), program.any_of)
+
+        failed = program.attempt(inputs, tmp_path / "out.h5")
+
+        assert failed.returncode != 0, f"set missing from input {position}"
+
+
+@readers
 def test_an_input_missing_a_dataset_that_is_not_required_is_skipped(program, build,
                                                                     tmp_path):
     written = 0
 
-    for name in set(ALL_FIELDS) - set(program.required):
+    for name in set(ALL_FIELDS) - set(program.required) - set(program.any_of):
         for position in range(program.arity):
             inputs = [build() for _ in range(program.arity)]
             inputs[position] = delete_field(build(), name)
@@ -332,7 +363,7 @@ def test_a_run_that_refuses_its_inputs_leaves_the_output_intact(program, build,
     before = output.read_bytes()
 
     refused = {
-        "missing dataset": delete_field(build(), MISMATCH_RATE),
+        "missing dataset": delete_field(build(), COVERAGE),
         "not hdf5": not_hdf5(tmp_path),
     }
 

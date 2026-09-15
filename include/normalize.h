@@ -1,4 +1,4 @@
-/* normalize.h -- reactivity rates divided by a scale taken from the rates themselves.
+/* normalize.h -- reactivity rates divided by a norm taken from the rates themselves.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -10,7 +10,7 @@
 
 #include "format.h"
 
-/* How the scale is taken from the pooled rates. */
+/* How the norm is taken from the pooled rates. */
 typedef enum {
     NORM_UBR,
     NORM_OUTLIER,
@@ -27,7 +27,7 @@ typedef struct {
     bool overwrite;
 } normalize_config;
 
-/* Divides every input by one scale pooled over all of them, writing each to its own
+/* Divides every input by one norm pooled over all of them, writing each to its own
  * output. program is recorded in each as what produced it. Returns 0, or -1 with a
  * description in error. */
 int normalize_run(const normalize_config *cfg, const char *program,

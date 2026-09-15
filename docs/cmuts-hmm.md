@@ -54,6 +54,8 @@ Unmapped reads are rejected by nature of having no reference to compute mutation
 | [`insertions/error`](format.md#insertionserror) | The binomial standard error of the rate at the position's depth. |
 | [`deletions/rate`](format.md#deletionsrate) | Estimated by the HMM. |
 | [`deletions/error`](format.md#deletionserror) | The binomial standard error of the rate at the position's depth. |
+| [`terminations/rate`](format.md#terminationsrate) | Estimated by the HMM. |
+| [`terminations/error`](format.md#terminationserror) | The binomial standard error of the rate at the position's depth. |
 | [`coverage`](format.md#coverage) | Estimated by the HMM. |
 | [`sequence`](format.md#sequence) | Tokenized from the FASTA. |
 | [`reads/lengths`](format.md#readslengths) | The read length reported in the alignment. |

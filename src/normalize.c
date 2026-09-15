@@ -1,11 +1,12 @@
-/* normalize.c -- one scale, pooled over every input, divided out of each.
+/* normalize.c -- one norm, pooled over every input, divided out of each.
  *
  * Done in two passes. The first reads the rates every input holds and pools the values
  * the scheme draws on; the second re-reads each input and writes it out divided by the
- * scale.
+ * norm.
  *
- * The pool holds the aggregate rate of the three channels: one less the product of the
- * three no-event rates. The one scale then divides every channel alike.
+ * The pool holds the aggregate rate of whichever pooled channels an input carries: one
+ * less the product of their no-event rates. The one norm then divides every channel
+ * alike.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -23,16 +24,27 @@
 #include "h5writer.h"
 #include "progress.h"
 
-/* The rate the ubr scale sits at, as a fraction of the way up the pool. */
+/* The rate the ubr norm sits at, as a fraction of the way up the pool. */
 #define UBR_PERCENTILE 0.90
 
-/* The band the outlier scale averages, as fractions of the pool counted from the highest
+/* The band the outlier norm averages, as fractions of the pool counted from the highest
  * value down. */
 #define OUTLIER_HIGHEST 0.02
 #define OUTLIER_LOWEST  0.10
 
-/* Rates the pool holds before it first grows. */
+/* How many rates the pool holds before it first grows. */
 #define POOL_INITIAL_CAPACITY 1024
+
+/* The channels the norm is pooled from. The termination rate is excluded, because a
+ * termination is not a chemical modification. The norm divides every channel, which keeps
+ * the rates comparable. */
+static const fmt_channel POOLED[] = {
+    FMT_CHANNEL_MISMATCHES,
+    FMT_CHANNEL_INSERTIONS,
+    FMT_CHANNEL_DELETIONS,
+};
+
+#define N_POOLED (sizeof POOLED / sizeof *POOLED)
 
 /* The rates the scheme draws on, gathered from every input. */
 typedef struct {
@@ -191,14 +203,14 @@ static size_t rank_from_top(size_t n, double fraction)
     return at < 1 ? 1 : (size_t)at;
 }
 
-static double ubr_factor(rate_pool *p)
+static double ubr_norm(rate_pool *p)
 {
     return p->count ? percentile(p->value, p->count, UBR_PERCENTILE) : 1.0;
 }
 
 /* Averages the band between the two fractions, which drops the highest rates as outliers
- * and takes the scale from what sits just below them. */
-static double outlier_factor(rate_pool *p)
+ * and takes the norm from what sits just below them. */
+static double outlier_norm(rate_pool *p)
 {
     size_t lowest, highest, first, last;
     double total = 0.0;
@@ -224,36 +236,36 @@ static double outlier_factor(rate_pool *p)
     return total / (double)((last - first) + 1);
 }
 
-/* Gives the scale the pooled rates come to, or NaN where they support none: a scale is
- * a divisor, so one that is not above zero is no scale at all. */
-static double pooled_factor(const normalize_config *cfg, rate_pool *p)
+/* Gives the norm the pooled rates come to, or NaN where they support none. A norm is a
+ * divisor, so one that is not above zero is no norm at all. */
+static double pooled_norm(const normalize_config *cfg, rate_pool *p)
 {
-    double factor = cfg->scheme == NORM_UBR ? ubr_factor(p) : outlier_factor(p);
+    double norm = cfg->scheme == NORM_UBR ? ubr_norm(p) : outlier_norm(p);
 
-    return (isnan(factor) || factor <= 0.0) ? (double)NAN : factor;
+    return (isnan(norm) || norm <= 0.0) ? (double)NAN : norm;
 }
 
-/* Gives what the rates are divided by. Where there is no scale they are left as they
+/* Gives what the rates are divided by. Where there is no norm they are left as they
  * are, which is dividing by one. */
-static double divisor(double factor)
+static double divisor(double norm)
 {
-    return isnan(factor) ? 1.0 : factor;
+    return isnan(norm) ? 1.0 : norm;
 }
 
 /* ------------------------------------------------------------------------ */
 /* Arithmetic                                                                */
 /* ------------------------------------------------------------------------ */
 
-static void scale_f32(float *row, size_t n, double factor)
+static void normalize_f32(float *row, size_t n, double norm)
 {
     for (size_t i = 0; i < n; i++) {
-        row[i] = (float)((double)row[i] / factor);
+        row[i] = (float)((double)row[i] / norm);
     }
 }
 
-/* Whether the scale divides this field. Every rate and every error takes it; every count
+/* Whether the norm divides this field. Every rate and every error takes it; every count
  * is left as it stands. */
-static bool is_scaled(fmt_field_id id)
+static bool is_normalized(fmt_field_id id)
 {
     return fmt_is_channel(id);
 }
@@ -272,15 +284,57 @@ static int fail_memory(char *error, size_t error_len)
 /* Gathering the pool                                                        */
 /* ------------------------------------------------------------------------ */
 
-/* Gives the rate of an event of any kind: one less the product of the three no-event
- * rates. NaN in any channel carries through, so a position holds an aggregate only where
- * every channel holds a rate. */
-static float aggregate_rate(const float *const *rate, size_t i)
+/* Which of the pooled rates one input holds, and a row per rate to read into. */
+typedef struct {
+    fmt_field_id field[N_POOLED];
+    float       *row[N_POOLED];
+    size_t       n;
+} pooled_rates;
+
+/* Names the pooled rates this input holds. */
+static void pooled_rates_of(pooled_rates *held, const h5reader *in)
+{
+    held->n = 0;
+
+    for (size_t c = 0; c < N_POOLED; c++) {
+        fmt_field_id id = FMT_CHANNEL_RATES[POOLED[c]];
+
+        if (h5reader_holds(in, id)) {
+            held->field[held->n++] = id;
+        }
+    }
+}
+
+/* Gives each named rate a row of its own. Returns -1 where a row cannot be allocated. */
+static int pooled_rates_alloc(pooled_rates *held, size_t values)
+{
+    for (size_t c = 0; c < held->n; c++) {
+        held->row[c] = calloc(values, sizeof *held->row[c]);
+
+        if (!held->row[c]) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+static void pooled_rates_free(pooled_rates *held)
+{
+    for (size_t c = 0; c < held->n; c++) {
+        free(held->row[c]);
+    }
+}
+
+/* Gives the rate of an event of any kind: one less the product of the no-event rates.
+ * NaN in any rate carries through, so a position holds an aggregate only where every
+ * rate is present. */
+static float aggregate_rate(const pooled_rates *held, size_t i)
 {
     float none = 1.0F;
 
-    for (size_t c = 0; c < FMT_N_CHANNELS; c++) {
-        none *= 1.0F - rate[c][i];
+    for (size_t c = 0; c < held->n; c++) {
+        none *= 1.0F - held->row[c][i];
     }
 
     return 1.0F - none;
@@ -298,10 +352,10 @@ static bool joins_pool(const normalize_config *cfg, float rate, float coverage)
 }
 
 static int gather_reference(const normalize_config *cfg, rate_pool *p,
-                            const float *const *rate, const float *coverage, size_t n)
+                            const pooled_rates *held, const float *coverage, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
-        float combined = aggregate_rate(rate, i);
+        float combined = aggregate_rate(held, i);
 
         if (joins_pool(cfg, combined, coverage[i]) && rate_pool_push(p, combined) < 0) {
             return -1;
@@ -311,14 +365,16 @@ static int gather_reference(const normalize_config *cfg, rate_pool *p,
     return 0;
 }
 
-static int read_channels(h5reader *in, int32_t tid, float *const *rate, float *cover)
+/* Reads one reference's coverage and held rates into the rows they occupy. */
+static int read_channels(h5reader *in, int32_t tid, const pooled_rates *held,
+                         float *cover)
 {
     if (h5reader_field(in, FMT_COVERAGE, tid, cover) < 0) {
         return -1;
     }
 
-    for (size_t c = 0; c < FMT_N_CHANNELS; c++) {
-        if (h5reader_field(in, FMT_CHANNEL_RATES[c], tid, rate[c]) < 0) {
+    for (size_t c = 0; c < held->n; c++) {
+        if (h5reader_field(in, held->field[c], tid, held->row[c]) < 0) {
             return -1;
         }
     }
@@ -329,30 +385,26 @@ static int read_channels(h5reader *in, int32_t tid, float *const *rate, float *c
 static int gather_input(const normalize_config *cfg, rate_pool *p, h5reader *in,
                         const char *path, char *error, size_t error_len)
 {
-    size_t  cap    = h5reader_capacity(in);
-    size_t  values = fmt_values(FMT_MISMATCH_RATE, cap, cap);
-    float  *rate[FMT_N_CHANNELS] = { 0 };
-    float  *cover  = calloc(values, sizeof *cover);
-    bool    ready  = cover != NULL;
-    int     status = -1;
+    size_t       cap    = h5reader_capacity(in);
+    size_t       values = fmt_values(FMT_MISMATCH_RATE, cap, cap);
+    pooled_rates held   = { 0 };
+    float       *cover  = calloc(values, sizeof *cover);
+    int          status = -1;
 
-    for (size_t c = 0; c < FMT_N_CHANNELS; c++) {
-        rate[c] = calloc(values, sizeof *rate[c]);
-        ready   = ready && rate[c];
-    }
+    pooled_rates_of(&held, in);
 
-    if (!ready) {
+    if (!cover || pooled_rates_alloc(&held, values) < 0) {
         fail_memory(error, error_len);
         goto done;
     }
 
     for (int32_t tid = 0; tid < h5reader_refs(in); tid++) {
-        if (read_channels(in, tid, rate, cover) < 0) {
+        if (read_channels(in, tid, &held, cover) < 0) {
             h5reader_fail(in, path, error, error_len);
             goto done;
         }
 
-        if (gather_reference(cfg, p, (const float *const *)rate, cover, values) < 0) {
+        if (gather_reference(cfg, p, &held, cover, values) < 0) {
             fail_memory(error, error_len);
             goto done;
         }
@@ -361,10 +413,7 @@ static int gather_input(const normalize_config *cfg, rate_pool *p, h5reader *in,
     status = 0;
 
 done:
-    for (size_t c = 0; c < FMT_N_CHANNELS; c++) {
-        free(rate[c]);
-    }
-
+    pooled_rates_free(&held);
     free(cover);
     return status;
 }
@@ -417,7 +466,7 @@ typedef struct {
     const fmt_manifest     *manifest;               /* what it writes */
     fmt_request             requests[FMT_N_FIELDS]; /* derived from the manifest */
     size_t                  n_requests;
-    double                  factor;
+    double                  norm;
     bool                    writes[FMT_N_FIELDS];   /* what this run leaves behind */
 
     h5reader   *in;
@@ -433,8 +482,8 @@ typedef struct {
 
 static void transfer_row(const transfer *t, fmt_field_id id, size_t n)
 {
-    if (is_scaled(id)) {
-        scale_f32(t->row, n, divisor(t->factor));
+    if (is_normalized(id)) {
+        normalize_f32(t->row, n, divisor(t->norm));
     }
 }
 
@@ -493,7 +542,7 @@ static int transfer_file(const transfer *t, char *error, size_t error_len)
         return -1;
     }
 
-    if (h5writer_value(t->out, FMT_NORM, t->factor) < 0) {
+    if (h5writer_value(t->out, FMT_NORM, t->norm) < 0) {
         return h5writer_fail(t->out, t->out_path, error, error_len);
     }
 
@@ -558,11 +607,11 @@ static void transfer_teardown(transfer *t)
 
 static int write_output(const normalize_config *cfg, size_t which, const char *program,
                         const fmt_manifest *writes,
-                        double factor, char *error, size_t error_len)
+                        double norm, char *error, size_t error_len)
 {
     transfer t = {
         .manifest = writes,
-        .factor   = factor,
+        .norm   = norm,
         .in_path  = cfg->inputs[which],
         .out_path = cfg->outputs[which],
         .program  = program,
@@ -609,11 +658,11 @@ static int check_outputs(const normalize_config *cfg, char *error, size_t error_
 }
 
 static int write_outputs(const normalize_config *cfg, const char *program,
-                         const fmt_manifest *writes, double factor,
+                         const fmt_manifest *writes, double norm,
                          progress *bar, char *error, size_t error_len)
 {
     for (size_t i = 0; i < cfg->n_files; i++) {
-        if (write_output(cfg, i, program, writes, factor, error, error_len) < 0) {
+        if (write_output(cfg, i, program, writes, norm, error, error_len) < 0) {
             return -1;
         }
 
@@ -639,7 +688,7 @@ int normalize_run(const normalize_config *cfg, const char *program,
     bar = progress_start(2 * (uint64_t)cfg->n_files);
 
     if (gather(cfg, writes, &p, bar, error, error_len) == 0) {
-        status = write_outputs(cfg, program, writes, pooled_factor(cfg, &p),
+        status = write_outputs(cfg, program, writes, pooled_norm(cfg, &p),
                                bar, error, error_len);
     }
 

@@ -35,6 +35,8 @@ If any dataset does not match the expected shape or the sequences do not match, 
 | [`insertions/error`](format.md#insertionserror) | Propagated from the inputs. |
 | [`deletions/rate`](format.md#deletionsrate) | Sample over control. |
 | [`deletions/error`](format.md#deletionserror) | Propagated from the inputs. |
+| [`terminations/rate`](format.md#terminationsrate) | Sample over control. |
+| [`terminations/error`](format.md#terminationserror) | Propagated from the inputs. |
 | [`coverage`](format.md#coverage) | Summed over the inputs. |
 | [`sequence`](format.md#sequence) | Copied from the inputs. |
 | [`reads/lengths`](format.md#readslengths) | Summed over the inputs. |

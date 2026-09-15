@@ -206,7 +206,7 @@ def _normalize_command(inputs, outputs, options: dict) -> list:
 
 
 def run_normalize(inputs, outputs, **options):
-    """Normalizes every input against one scale, returning the paths written."""
+    """Normalizes every input against one norm, returning the paths written."""
     execute(_normalize_command(inputs, outputs, options))
 
     return outputs

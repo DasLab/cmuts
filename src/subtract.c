@@ -27,20 +27,23 @@ typedef enum {
     SUB_QUADRATURE,
 } sub_rule;
 
+/* Every channel takes the same two rules. A rate is subtracted, and an error is added in
+ * quadrature. */
+#define CHANNEL(channel, rate, error) \
+    [rate] = SUB_DIFFERENCE,          \
+    [error] = SUB_QUADRATURE,
+
 static const sub_rule RULES[FMT_N_FIELDS] = {
-    [FMT_COVERAGE]        = SUB_SUM,
-    [FMT_MISMATCH_RATE]   = SUB_DIFFERENCE,
-    [FMT_MISMATCH_ERROR]  = SUB_QUADRATURE,
-    [FMT_INSERTION_RATE]  = SUB_DIFFERENCE,
-    [FMT_INSERTION_ERROR] = SUB_QUADRATURE,
-    [FMT_DELETION_RATE]   = SUB_DIFFERENCE,
-    [FMT_DELETION_ERROR]  = SUB_QUADRATURE,
-    [FMT_LENGTHS]         = SUB_SUM,
-    [FMT_READS]           = SUB_SUM,
-    [FMT_REJECTED]        = SUB_SUM,
-    [FMT_UNMAPPED]        = SUB_SUM,
-    [FMT_SEQUENCE]        = SUB_SAME,
+    FMT_CHANNELS(CHANNEL)
+    [FMT_COVERAGE] = SUB_SUM,
+    [FMT_LENGTHS]  = SUB_SUM,
+    [FMT_READS]    = SUB_SUM,
+    [FMT_REJECTED] = SUB_SUM,
+    [FMT_UNMAPPED] = SUB_SUM,
+    [FMT_SEQUENCE] = SUB_SAME,
 };
+
+#undef CHANNEL
 
 /* ------------------------------------------------------------------------ */
 /* Arithmetic                                                                */

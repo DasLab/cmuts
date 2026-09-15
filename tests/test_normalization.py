@@ -1,14 +1,14 @@
-"""Dividing the rates by one scale taken from the rates themselves.
+"""Dividing the rates by one norm taken from the rates themselves.
 
-The scale is pooled over the aggregate rate, one less the product of the three
-no-event rates, and divides every rate and error alike. The result depends only on the
-values in the input files, so the inputs are written by hand and not counted
-from an alignment. inputs.py builds them and outputs.py describes the layout
-the programs share. The contracts this program shares with the other readers
-of outputs are in test_io.py.
+The norm is pooled over the aggregate rate, one less the product of the
+pooled channels' no-event rates, and divides every rate and error alike.
+The result depends only on the values in the input files, so the inputs are
+written by hand and not counted from an alignment. inputs.py builds them
+and outputs.py describes the layout the programs share. The contracts this
+program shares with the other readers of outputs are in test_io.py.
 
 random_fields gives coverage in [0, 1), which no position clears the default
-floor with, so every test of the ubr scale sets the coverage it wants.
+floor with, so every test of the ubr norm sets the coverage it wants.
 """
 
 from __future__ import annotations
@@ -23,13 +23,14 @@ from inputs import (
     not_hdf5,
     random_fields,
 )
-from normalization import OUTLIER, UBR, expected, factor, pool
+from normalization import OUTLIER, UBR, expected, norm, pool
 from outputs import (
     ALL_FIELDS,
     COUNTED,
     COVERAGE,
     ERROR_FIELDS,
     NORM,
+    POOLED_RATE_FIELDS,
     RATE_FIELDS,
     UNMAPPED,
     field_of,
@@ -37,7 +38,7 @@ from outputs import (
 )
 from programs import CMUTS_NORM, attempt, run_normalize, try_normalize
 
-# The scale is computed in float64 over values narrowed to float32, so a field
+# The norm is computed in float64 over values narrowed to float32, so a field
 # that carries it agrees to a tolerance and not exactly.
 TOLERANCE = 1e-6
 
@@ -45,8 +46,8 @@ TOLERANCE = 1e-6
 # reaches the ubr pool.
 COVERED = 1000.0
 
-# The fields the scale divides.
-SCALED = RATE_FIELDS + ERROR_FIELDS
+# The fields the norm divides.
+NORMALIZED = RATE_FIELDS + ERROR_FIELDS
 
 
 @pytest.fixture
@@ -67,43 +68,43 @@ def covered(values=None, **rest):
 
 
 def every_rate(value):
-    """The three channel rates, all set to one value."""
+    """Every channel rate, all set to one value."""
     return dict.fromkeys(RATE_FIELDS, value)
 
 
 def aggregate(rate: float) -> float:
-    """The aggregate of three channels all at one rate."""
-    return 1.0 - ((1.0 - rate) ** 3)
+    """The aggregate of the pooled channels all at one rate."""
+    return 1.0 - ((1.0 - rate) ** len(POOLED_RATE_FIELDS))
 
 
 def recorded(path) -> float:
-    """The scale an output records for itself."""
+    """The norm an output records for itself."""
     return float(field_of(path, NORM))
 
 
-def besides_the_scale(path) -> dict:
-    """The datasets an output holds other than the scale, the one dataset this
+def besides_the_norm(path) -> dict:
+    """The datasets an output holds other than the norm, the one dataset this
     program adds."""
     return {name: shape for name, shape in layout_of(path).items() if name != NORM}
 
 
 # ---------------------------------------------------------------------------
-# The scale
+# The norm
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("scheme", [UBR, OUTLIER])
-def test_the_scale_matches_its_oracle(build, normalize, scheme):
+def test_the_norm_matches_its_oracle(build, normalize, scheme):
     rates = build(covered(random_fields(seed=1)))
 
     output, = normalize(rates, norm=scheme)
 
-    assert recorded(output) == pytest.approx(factor(scheme, [rates]), rel=TOLERANCE)
+    assert recorded(output) == pytest.approx(norm(scheme, [rates]), rel=TOLERANCE)
 
 
-def test_a_constant_aggregate_is_its_own_scale(build, normalize):
+def test_a_constant_aggregate_is_its_own_norm(build, normalize):
     """Every value of the pool is the same, so any percentile of it is that
-    value: the aggregate of the three rates, not any one of them."""
+    value: the aggregate of the pooled rates, not any one of them."""
     output, = normalize(build(covered(every_rate(0.25))))
 
     assert recorded(output) == pytest.approx(aggregate(0.25), rel=TOLERANCE)
@@ -114,9 +115,9 @@ def test_a_constant_aggregate_is_its_own_scale(build, normalize):
 
 
 @pytest.mark.parametrize("scheme", [UBR, OUTLIER])
-def test_rates_supporting_no_scale_record_none(build, normalize, scheme):
-    """A scale is a divisor, so rates that come to zero support none. The rates are
-    left as they are, and the output says it holds no scale rather than one."""
+def test_rates_supporting_no_norm_record_none(build, normalize, scheme):
+    """A norm is a divisor, so rates that come to zero support none. The rates are
+    left as they are, and the output says it holds no norm rather than one."""
     rates = build(covered(every_rate(0.0)))
 
     output, = normalize(rates, norm=scheme)
@@ -129,20 +130,20 @@ def test_rates_supporting_no_scale_record_none(build, normalize, scheme):
 
 @pytest.mark.parametrize("scheme", [UBR, OUTLIER])
 @pytest.mark.parametrize("name", ALL_FIELDS)
-def test_each_field_follows_the_scale(build, normalize, scheme, name):
+def test_each_field_follows_the_norm(build, normalize, scheme, name):
     rates = build(covered(random_fields(seed=2)), unmapped=17)
 
     output, = normalize(rates, norm=scheme)
-    wanted = expected(rates, name, factor(scheme, [rates]))
+    wanted = expected(rates, name, norm(scheme, [rates]))
 
-    if name in SCALED:
+    if name in NORMALIZED:
         assert np.allclose(field_of(output, name), wanted, rtol=TOLERANCE,
                            equal_nan=True), name
     else:
         assert np.array_equal(field_of(output, name), wanted), name
 
 
-def test_every_error_carries_the_scale(build, normalize):
+def test_every_error_carries_the_norm(build, normalize):
     values = every_rate(0.5) | dict.fromkeys(ERROR_FIELDS, 0.25)
 
     output, = normalize(build(covered(values)))
@@ -159,7 +160,7 @@ def test_counts_and_coverage_are_left_alone(build, normalize):
 
     output, = normalize(rates)
 
-    for name in set(ALL_FIELDS) - set(SCALED):
+    for name in set(ALL_FIELDS) - set(NORMALIZED):
         assert np.array_equal(field_of(output, name), field_of(rates, name)), name
 
 
@@ -169,7 +170,7 @@ def test_counts_and_coverage_are_left_alone(build, normalize):
 
 
 def test_a_position_below_the_floor_does_not_reach_the_pool(build, normalize):
-    """The floor admits one row and excludes the other, so the scale is the
+    """The floor admits one row and excludes the other, so the norm is the
     admitted row's aggregate alone."""
     coverage = np.full((N_REFS, CAP), np.float32(1.0))
     coverage[0, :] = COVERED
@@ -200,14 +201,14 @@ def test_lowering_the_floor_admits_more_of_the_pool(build, tmp_path):
     loose = run_normalize([rates], [tmp_path / "loose.h5"], min_coverage="0")
 
     assert recorded(strict[0]) == 1.0
-    assert recorded(loose[0]) == pytest.approx(factor(UBR, [rates], min_coverage=0),
+    assert recorded(loose[0]) == pytest.approx(norm(UBR, [rates], min_coverage=0),
                                                rel=TOLERANCE)
     assert recorded(loose[0]) != 1.0
 
 
 def test_the_outlier_scheme_ignores_the_floor(build, tmp_path):
     """Only ubr consults the coverage, so lowering the floor cannot move an
-    outlier scale."""
+    outlier norm."""
     rates = build(random_fields(seed=6))
 
     strict = run_normalize([rates], [tmp_path / "strict.h5"], norm=OUTLIER)
@@ -217,38 +218,52 @@ def test_the_outlier_scheme_ignores_the_floor(build, tmp_path):
     assert recorded(strict[0]) == recorded(loose[0])
 
 
-@pytest.mark.parametrize("channel", RATE_FIELDS)
-def test_a_position_missing_any_channel_does_not_reach_the_pool(build, normalize,
-                                                                channel):
-    """NaN in one channel leaves the position no aggregate, whichever channel
-    it is."""
+@pytest.mark.parametrize("channel", POOLED_RATE_FIELDS)
+def test_a_position_missing_any_pooled_channel_does_not_reach_the_pool(build, normalize,
+                                                                       channel):
+
     left, _ = missing_in_each_input(N_REFS, CAP)
 
     rates = build(covered(every_rate(0.5) | {channel: left}))
     output, = normalize(rates)
 
     assert pool(UBR, [rates]).size < left.size
-    assert recorded(output) == pytest.approx(factor(UBR, [rates]), rel=TOLERANCE)
+    assert recorded(output) == pytest.approx(norm(UBR, [rates]), rel=TOLERANCE)
+
+
+@pytest.mark.parametrize("channel",
+                         [name for name in RATE_FIELDS
+                          if name not in POOLED_RATE_FIELDS])
+def test_a_position_missing_an_unpooled_channel_still_reaches_the_pool(build, normalize,
+                                                                       channel):
+
+    left, _ = missing_in_each_input(N_REFS, CAP)
+
+    rates = build(covered(every_rate(0.5) | {channel: left}))
+    output, = normalize(rates)
+
+    assert pool(UBR, [rates]).size == left.size
+    assert recorded(output) == pytest.approx(aggregate(0.5), rel=TOLERANCE)
 
 
 # ---------------------------------------------------------------------------
-# One scale over several inputs
+# One norm over several inputs
 # ---------------------------------------------------------------------------
 
 
-def test_every_input_is_given_the_same_scale(build, normalize):
+def test_every_input_is_given_the_same_norm(build, normalize):
     first = build(covered(every_rate(0.2)))
     second = build(covered(every_rate(0.8)))
 
     outputs = normalize(first, second)
 
     assert recorded(outputs[0]) == recorded(outputs[1])
-    assert recorded(outputs[0]) == pytest.approx(factor(UBR, [first, second]),
+    assert recorded(outputs[0]) == pytest.approx(norm(UBR, [first, second]),
                                                  rel=TOLERANCE)
 
 
-def test_the_pooled_scale_differs_from_either_input_alone(build, normalize, tmp_path):
-    """Running the two together is the only way to put them on one scale, which
+def test_the_pooled_norm_differs_from_either_input_alone(build, normalize, tmp_path):
+    """Running the two together is the only way to make the two comparable, which
     is what separate runs give up."""
     first = build(covered(every_rate(0.2)))
     second = build(covered(every_rate(0.8)))
@@ -260,8 +275,8 @@ def test_the_pooled_scale_differs_from_either_input_alone(build, normalize, tmp_
     assert recorded(together[0]) != pytest.approx(recorded(alone[0]), rel=TOLERANCE)
 
 
-def test_inputs_of_different_shapes_share_a_scale(build, normalize):
-    """The scale is one number, so the inputs need not have been counted against
+def test_inputs_of_different_shapes_share_a_norm(build, normalize):
+    """The norm is one number, so the inputs need not have been counted against
     the same references."""
     first = build(covered(every_rate(0.4)), n_refs=2, cap=3)
     second = build(covered(every_rate(0.4)), n_refs=5, cap=7)
@@ -269,8 +284,8 @@ def test_inputs_of_different_shapes_share_a_scale(build, normalize):
     outputs = normalize(first, second)
 
     assert recorded(outputs[0]) == recorded(outputs[1])
-    assert besides_the_scale(outputs[0]) == layout_of(first)
-    assert besides_the_scale(outputs[1]) == layout_of(second)
+    assert besides_the_norm(outputs[0]) == layout_of(first)
+    assert besides_the_norm(outputs[1]) == layout_of(second)
 
 
 def test_each_output_matches_the_input_it_was_paired_with(build, normalize):
@@ -291,17 +306,17 @@ def test_each_output_matches_the_input_it_was_paired_with(build, normalize):
 
 
 @pytest.mark.parametrize("n_refs, cap", [(1, 1), (1, 40), (3, 1), (400, 2)])
-def test_the_scale_holds_at_any_shape(build, normalize, n_refs, cap):
+def test_the_norm_holds_at_any_shape(build, normalize, n_refs, cap):
     shaped = dict(n_refs=n_refs, cap=cap)
 
     rates = build(covered(random_fields(seed=13, **shaped)), unmapped=7, **shaped)
     output, = normalize(rates)
 
-    assert recorded(output) == pytest.approx(factor(UBR, [rates]), rel=TOLERANCE)
+    assert recorded(output) == pytest.approx(norm(UBR, [rates]), rel=TOLERANCE)
 
     for name in RATE_FIELDS:
         assert np.allclose(field_of(output, name),
-                           expected(rates, name, factor(UBR, [rates])),
+                           expected(rates, name, norm(UBR, [rates])),
                            rtol=TOLERANCE, equal_nan=True), name
 
 

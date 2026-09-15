@@ -27,7 +27,9 @@ This is only suggested if the two experiments had significantly different condit
 
 ## Normalization Schemes
 
-`--norm ubr` (the default) takes the 90th percentile of the pooled rates, counting only positions whose coverage exceeds `--min-coverage`. `--norm outlier` drops the highest 2% of the pooled rates as outliers and averages what lies between there and the highest 10%; it reads no coverage, so `--min-coverage` does not apply to it.
+All normalization schemes compute the norm using the aggregated mismatch, insertion, and deletion rates.
+
+`--norm ubr` (the default) takes the 90th percentile of the aggregate rate, counting only positions whose coverage exceeds `--min-coverage`. `--norm outlier` drops the highest 2% of the aggregate rate as outliers and averages what lies between there and the highest 10%; it reads no coverage, so `--min-coverage` does not apply to it.
 
 A norm that comes out as zero, negative, or undefined is not applied and is recorded as NaN.
 
@@ -42,7 +44,9 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 | [`insertions/error`](format.md#insertionserror) | Divided by the norm. |
 | [`deletions/rate`](format.md#deletionsrate) | Divided by the norm. |
 | [`deletions/error`](format.md#deletionserror) | Divided by the norm. |
-| [`norm`](format.md#norm) | Estimated per the specified scheme, over the aggregate of the three rates. |
+| [`terminations/rate`](format.md#terminationsrate) | Divided by the norm. |
+| [`terminations/error`](format.md#terminationserror) | Divided by the norm. |
+| [`norm`](format.md#norm) | Estimated per the specified scheme, over the aggregate of whichever mismatch, insertion and deletion rates the input holds. |
 | [`coverage`](format.md#coverage) | Copied from the input. |
 | [`sequence`](format.md#sequence) | Copied from the input. |
 | [`reads/lengths`](format.md#readslengths) | Copied from the input. |
@@ -71,8 +75,8 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 
 | Option | Description |
 | --- | --- |
-| `--norm SCHEME` | how the normalization factor is computed from the rates (ubr, outlier; default ubr) |
-| `--min-coverage N` | coverage a position needs before its rate sets the normalization factor (ubr only) (default 500) |
+| `--norm SCHEME` | how the norm is computed from the rates (ubr, outlier; default ubr) |
+| `--min-coverage N` | coverage a position needs before its rate sets the norm (ubr only) (default 500) |
 
 ### Information
 

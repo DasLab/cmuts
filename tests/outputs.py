@@ -14,6 +14,8 @@ INSERTION_RATE = "insertions/rate"
 INSERTION_ERROR = "insertions/error"
 DELETION_RATE = "deletions/rate"
 DELETION_ERROR = "deletions/error"
+TERMINATION_RATE = "terminations/rate"
+TERMINATION_ERROR = "terminations/error"
 LENGTHS = "reads/lengths"
 COUNTED = "reads/counted"
 REJECTED = "reads/rejected"
@@ -52,6 +54,8 @@ FIELDS = (
     Field(INSERTION_ERROR, PER_BASE, "f4", np.nan, rate=True),
     Field(DELETION_RATE, PER_BASE, "f4", np.nan, rate=True),
     Field(DELETION_ERROR, PER_BASE, "f4", np.nan, rate=True),
+    Field(TERMINATION_RATE, PER_BASE, "f4", np.nan, rate=True),
+    Field(TERMINATION_ERROR, PER_BASE, "f4", np.nan, rate=True),
     Field(LENGTHS, PER_LENGTH, "u8", 0),
     Field(COUNTED, SCALAR, "u8", 0),
     Field(REJECTED, SCALAR, "u8", 0),
@@ -72,9 +76,13 @@ FLOAT_FIELDS = _field_names(lambda field: field.dtype.startswith("f"))
 
 # The rate of each kind of event, the error alongside each, and the rate each
 # error belongs to.
-RATE_FIELDS = (MISMATCH_RATE, INSERTION_RATE, DELETION_RATE)
-ERROR_FIELDS = (MISMATCH_ERROR, INSERTION_ERROR, DELETION_ERROR)
+RATE_FIELDS = (MISMATCH_RATE, INSERTION_RATE, DELETION_RATE, TERMINATION_RATE)
+ERROR_FIELDS = (MISMATCH_ERROR, INSERTION_ERROR, DELETION_ERROR, TERMINATION_ERROR)
 RATE_OF = dict(zip(ERROR_FIELDS, RATE_FIELDS))
+
+# The rates the norm is pooled from, as POOLED names them in src/normalize.c.
+# The termination rate is excluded because it is not a chemical modification.
+POOLED_RATE_FIELDS = (MISMATCH_RATE, INSERTION_RATE, DELETION_RATE)
 
 # The fields holding counts, in which a zero is a measured value and not a
 # missing one.
@@ -268,6 +276,14 @@ def delete_field(path, name):
     """Removes a dataset from a file."""
     with h5py.File(path, "r+") as handle:
         del handle[name]
+
+    return path
+
+
+def delete_fields(path, names):
+    """Removes several datasets from a file."""
+    for name in names:
+        delete_field(path, name)
 
     return path
 

@@ -25,6 +25,8 @@ struct h5reader {
     hid_t   filespace[FMT_N_FIELDS];
     bool    taken[FMT_N_FIELDS];     /* the fields it opened */
     bool    required[FMT_N_FIELDS];  /* the fields the caller's requests insist on */
+    /* The fields of the set the caller must hold one of. */
+    bool    any_of[FMT_N_FIELDS];
     bool    skipped[FMT_N_FIELDS];   /* optional fields present with a non-numeric type */
     hid_t   memspace;   /* one row of the widest field, selected down to size */
     int32_t n_refs;
@@ -194,6 +196,55 @@ static int open_field(h5reader *r, fmt_field_id id)
     return r->filespace[id] < 0 ? fail_field(r, id, "cannot be described") : 0;
 }
 
+/* Writes the names of the fields the caller asked for one of, comma separated, into a
+ * buffer holding room for CM_ERROR_MAX characters. */
+static void name_any_of(const h5reader *r, char *into)
+{
+    size_t used = 0;
+
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
+        if (!r->any_of[id]) {
+            continue;
+        }
+
+        used += (size_t)snprintf(into + used, CM_ERROR_MAX - used, "%s%s",
+                                 used ? ", " : "", FMT_FIELDS[id].name);
+
+        if (used >= CM_ERROR_MAX) {
+            return;
+        }
+    }
+}
+
+/* Returns -1 if the caller requires at least one of a set of fields and the file holds
+ * none of them. Returns zero otherwise, including where the caller named no such set. */
+static int check_any_of(h5reader *r)
+{
+    char names[CM_ERROR_MAX];
+    bool asked = false;
+
+    for (fmt_field_id id = 0; id < FMT_N_FIELDS; id++) {
+        if (!r->any_of[id]) {
+            continue;
+        }
+
+        if (r->taken[id]) {
+            return 0;
+        }
+
+        asked = true;
+    }
+
+    if (!asked) {
+        return 0;
+    }
+
+    name_any_of(r, names);
+    snprintf(r->error, sizeof r->error, "holds none of %s", names);
+
+    return -1;
+}
+
 /* Opens the requested fields. */
 static int open_fields(h5reader *r)
 {
@@ -207,7 +258,7 @@ static int open_fields(h5reader *r)
         }
     }
 
-    return 0;
+    return check_any_of(r);
 }
 
 /* H5Ovisit3 and H5O_info2_t arrived in HDF5 1.12, and 1.10 has the original visit and
@@ -282,6 +333,7 @@ static h5reader *reader_alloc(const fmt_request *requests, size_t n)
     for (size_t i = 0; i < n; i++) {
         r->taken[requests[i].id]    = true;
         r->required[requests[i].id] = requests[i].required;
+        r->any_of[requests[i].id]   = requests[i].any_of;
     }
 
     /* Report failures through h5reader_error, with HDF5's own stack trace on stderr

@@ -26,6 +26,8 @@ from outputs import (
     MISMATCH_ERROR,
     MISMATCH_RATE,
     SEQUENCE,
+    TERMINATION_ERROR,
+    TERMINATION_RATE,
     delete_field,
     field_of,
 )
@@ -35,7 +37,8 @@ from programs import CMUTS_CSV, attempt, run_cmuts, run_csv, try_csv
 # they are written.
 KEY_COLUMNS = ("reference", "position", "base")
 VALUE_COLUMNS = (MISMATCH_RATE, MISMATCH_ERROR, INSERTION_RATE, INSERTION_ERROR,
-                 DELETION_RATE, DELETION_ERROR, COVERAGE)
+                 DELETION_RATE, DELETION_ERROR, TERMINATION_RATE, TERMINATION_ERROR,
+                 COVERAGE)
 
 # The character of each token, and the value a column past the end of a
 # reference holds.

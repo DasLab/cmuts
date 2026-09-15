@@ -33,6 +33,8 @@ cmuts csv -f references.fasta reactivity.h5 > reactivity.csv
 | [`insertions/error`](format.md#insertionserror) | if present |
 | [`deletions/rate`](format.md#deletionsrate) | if present |
 | [`deletions/error`](format.md#deletionserror) | if present |
+| [`terminations/rate`](format.md#terminationsrate) | if present |
+| [`terminations/error`](format.md#terminationserror) | if present |
 | [`coverage`](format.md#coverage) | required |
 | [`sequence`](format.md#sequence) | required |
 

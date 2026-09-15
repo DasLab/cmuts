@@ -25,6 +25,8 @@ typedef enum {
     FMT_INSERTION_ERROR,
     FMT_DELETION_RATE,
     FMT_DELETION_ERROR,
+    FMT_TERMINATION_RATE,
+    FMT_TERMINATION_ERROR,
     FMT_NORM,
     FMT_COVERAGE,
     FMT_SEQUENCE,
@@ -60,11 +62,26 @@ typedef struct {
 
 extern const fmt_field FMT_FIELDS[FMT_N_FIELDS];
 
-/* The rate of each kind of event, and the error alongside each. */
-#define FMT_N_CHANNELS 3
+/* The kinds of event a rate is reported for. Every channel holds a rate and an error.
+ * The two arrays below give each channel's rate field and error field. */
+typedef enum {
+    FMT_CHANNEL_MISMATCHES,
+    FMT_CHANNEL_INSERTIONS,
+    FMT_CHANNEL_DELETIONS,
+    FMT_CHANNEL_TERMINATIONS,
+    FMT_N_CHANNELS,
+} fmt_channel;
 
 extern const fmt_field_id FMT_CHANNEL_RATES[FMT_N_CHANNELS];
 extern const fmt_field_id FMT_CHANNEL_ERRORS[FMT_N_CHANNELS];
+
+/* Expands entry once per channel, with the channel and its rate and error fields. A
+ * table whose rows are the same for every channel is written once through this. */
+#define FMT_CHANNELS(entry)                                                    \
+    entry(FMT_CHANNEL_MISMATCHES,   FMT_MISMATCH_RATE,    FMT_MISMATCH_ERROR)  \
+    entry(FMT_CHANNEL_INSERTIONS,   FMT_INSERTION_RATE,   FMT_INSERTION_ERROR) \
+    entry(FMT_CHANNEL_DELETIONS,    FMT_DELETION_RATE,    FMT_DELETION_ERROR)  \
+    entry(FMT_CHANNEL_TERMINATIONS, FMT_TERMINATION_RATE, FMT_TERMINATION_ERROR)
 
 /* Gives the rate an error belongs to, and any other field unchanged. */
 fmt_field_id fmt_rate_of(fmt_field_id id);
@@ -115,20 +132,27 @@ typedef struct {
 typedef struct {
     const fmt_written *fields;
     size_t             n_fields;
+    /* The fields an input must carry at least one of, ending in FMT_N_FIELDS. NULL where
+     * a program asks for no such set. */
+    const fmt_field_id *any_of;
 } fmt_manifest;
 
 /* Fills one entry per field with whether the manifest holds it. */
 void fmt_selection(const fmt_manifest *manifest, bool *wanted);
 
-/* One field a program asks to read of an input file. */
+/* One field a program asks to read of an input file. Any one member of the set a
+ * manifest names satisfies the whole set. The required flag and the any_of flag are
+ * therefore independent, and a field may carry either, both, or neither. */
 typedef struct {
     fmt_field_id id;
     bool         required;  /* an input lacking it is refused */
+    bool         any_of;    /* a member of the set an input must hold one of */
 } fmt_request;
 
 /* Fills requests, which must hold FMT_N_FIELDS entries, with every field the manifest's
- * entries depend on, each once, required where a required entry depends on it. Returns
- * how many it filled. */
+ * entries depend on and every field of its any_of set, each once. A field is required
+ * where a required entry depends on it, and carries any_of where the set holds it.
+ * Returns how many it filled. */
 size_t fmt_requests_of(const fmt_manifest *manifest, fmt_request *requests);
 
 /* Whether a selection holds a field. */

@@ -12,13 +12,13 @@ static const char HMM[] = "Estimated by the HMM.";
 static const char BINOMIAL[] =
     "The binomial standard error of the rate at the position's depth.";
 
+/* Every channel is estimated and reported the same way. */
+#define CHANNEL(channel, rate, error) \
+    { .id = (rate),  .how = HMM },      \
+    { .id = (error), .how = BINOMIAL },
+
 static const fmt_written WRITTEN[] = {
-    { .id = FMT_MISMATCH_RATE,   .how = HMM },
-    { .id = FMT_MISMATCH_ERROR,  .how = BINOMIAL },
-    { .id = FMT_INSERTION_RATE,  .how = HMM },
-    { .id = FMT_INSERTION_ERROR, .how = BINOMIAL },
-    { .id = FMT_DELETION_RATE,   .how = HMM },
-    { .id = FMT_DELETION_ERROR,  .how = BINOMIAL },
+    FMT_CHANNELS(CHANNEL)
     { .id = FMT_COVERAGE,  .how = HMM },
     { .id = FMT_SEQUENCE,  .how = "Tokenized from the FASTA." },
     { .id = FMT_LENGTHS,   .how = "The read length reported in the alignment." },
@@ -35,4 +35,8 @@ static const fmt_written WRITTEN[] = {
 };
 
 
-const fmt_manifest CMUTS_HMM_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTEN };
+#undef CHANNEL
+
+const fmt_manifest CMUTS_HMM_WRITES = {
+    WRITTEN, sizeof WRITTEN / sizeof *WRITTEN, NULL,
+};

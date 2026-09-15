@@ -13,30 +13,32 @@ rate_config rate_defaults(void)
 }
 
 /* The accumulated events each channel counts. */
-static const accum_field_id EVENTS_OF[RATE_N_CHANNELS] = {
-    [RATE_MISMATCHES] = ACCUM_MISMATCHES,
-    [RATE_INSERTIONS] = ACCUM_INSERTIONS,
-    [RATE_DELETIONS]  = ACCUM_DELETIONS,
+static const accum_field_id EVENTS_OF[FMT_N_CHANNELS] = {
+    [FMT_CHANNEL_MISMATCHES]   = ACCUM_MISMATCHES,
+    [FMT_CHANNEL_INSERTIONS]   = ACCUM_INSERTIONS,
+    [FMT_CHANNEL_DELETIONS]    = ACCUM_DELETIONS,
+    [FMT_CHANNEL_TERMINATIONS] = ACCUM_ENDS,
 };
 
-/* Where each channel's trials sit. A mismatch is tried on every pairing of the
- * position. Each opening is one arm of the decision a pairing makes toward the next
- * base, so its trials are the pairings that decide: the coverage less the reads whose
- * placed span ends there, at the position itself for an insertion and one base 3' of
- * it for a deletion. */
+/* Where each channel's trials sit. A mismatch is tried on every pairing of the position,
+ * and so is the end of a read's placed span. Each opening is one arm of the decision a
+ * pairing makes toward the next base. Its trials are therefore the pairings that decide,
+ * which are the coverage less the reads whose placed span ends there. That pairing sits
+ * at the position itself for an insertion, and one base 3' of it for a deletion. */
 static const struct {
     size_t shift;      /* bases 3' of the position the deciding pairing sits */
     bool   deciding;   /* count only the pairings a decision follows */
-} TRIALS_OF[RATE_N_CHANNELS] = {
-    [RATE_MISMATCHES] = { 0, false },
-    [RATE_INSERTIONS] = { 0, true },
-    [RATE_DELETIONS]  = { 1, true },
+} TRIALS_OF[FMT_N_CHANNELS] = {
+    [FMT_CHANNEL_MISMATCHES]   = { 0, false },
+    [FMT_CHANNEL_INSERTIONS]   = { 0, true },
+    [FMT_CHANNEL_DELETIONS]    = { 1, true },
+    [FMT_CHANNEL_TERMINATIONS] = { 0, false },
 };
 
 /* Returns a channel's trials at one position, or zero where the deciding pairing falls
  * past the reference. Rounding can push the difference a hair below zero, so it is
  * floored. */
-static double depth_at(rate_channel channel, const double *coverage,
+static double depth_at(fmt_channel channel, const double *coverage,
                        const double *ends, size_t i, size_t len)
 {
     size_t at = i + TRIALS_OF[channel].shift;
@@ -108,7 +110,7 @@ static double error_at(const rate_config *cfg, double events, double depth,
 }
 
 void rate_of(const rate_config *cfg, const accum *acc, size_t len,
-             rate_channel channel, double *restrict out)
+             fmt_channel channel, double *restrict out)
 {
     const double *events   = accum_const_data(acc, EVENTS_OF[channel]);
     const double *coverage = accum_const_data(acc, ACCUM_COVERAGE);
@@ -122,7 +124,7 @@ void rate_of(const rate_config *cfg, const accum *acc, size_t len,
 }
 
 void rate_error_of(const rate_config *cfg, const accum *acc, size_t len,
-                   rate_channel channel, double *restrict out)
+                   fmt_channel channel, double *restrict out)
 {
     const double *events   = accum_const_data(acc, EVENTS_OF[channel]);
     const double *coverage = accum_const_data(acc, ACCUM_COVERAGE);

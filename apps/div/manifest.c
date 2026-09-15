@@ -7,30 +7,29 @@
 
 /* The datasets a run leaves behind, which are those every output holds: what it was
  * given, divided by the control it was given. */
-static const char SUMMED[] = "Summed over the inputs.";
+static const char SUMMED[]     = "Summed over the inputs.";
+static const char DIVIDED[]    = "Sample over control.";
+static const char PROPAGATED[] = "Propagated from the inputs.";
+
+/* Every channel is divided the same way. An error is propagated through the ratio, so it
+ * is written only where every input holds the rate as well. */
+#define CHANNEL(channel, rate, error)        \
+    { .id = (rate),                          \
+      .how = DIVIDED,                        \
+      .depends = FMT_DEPENDS(rate) },        \
+    { .id = (error),                         \
+      .how = PROPAGATED,                     \
+      .depends = FMT_DEPENDS(rate, error) },
+
+/* At least one rate is required. */
+#define ANY_RATE(channel, rate, error) rate,
+
+static const fmt_field_id ANY_OF[] = { FMT_CHANNELS(ANY_RATE) FMT_N_FIELDS };
+
+#undef ANY_RATE
 
 static const fmt_written WRITTEN[] = {
-    { .id = FMT_MISMATCH_RATE,
-      .how = "Sample over control.",
-      .depends = FMT_DEPENDS(FMT_MISMATCH_RATE),
-      .required = true },
-    { .id = FMT_MISMATCH_ERROR,
-      .how = "Propagated from the inputs.",
-      .depends = FMT_DEPENDS(FMT_MISMATCH_RATE, FMT_MISMATCH_ERROR) },
-    { .id = FMT_INSERTION_RATE,
-      .how = "Sample over control.",
-      .depends = FMT_DEPENDS(FMT_INSERTION_RATE),
-      .required = true },
-    { .id = FMT_INSERTION_ERROR,
-      .how = "Propagated from the inputs.",
-      .depends = FMT_DEPENDS(FMT_INSERTION_RATE, FMT_INSERTION_ERROR) },
-    { .id = FMT_DELETION_RATE,
-      .how = "Sample over control.",
-      .depends = FMT_DEPENDS(FMT_DELETION_RATE),
-      .required = true },
-    { .id = FMT_DELETION_ERROR,
-      .how = "Propagated from the inputs.",
-      .depends = FMT_DEPENDS(FMT_DELETION_RATE, FMT_DELETION_ERROR) },
+    FMT_CHANNELS(CHANNEL)
     { .id = FMT_COVERAGE,  .how = SUMMED, .depends = FMT_DEPENDS(FMT_COVERAGE) },
     { .id = FMT_SEQUENCE,
       .how = "Copied from the inputs.",
@@ -41,4 +40,8 @@ static const fmt_written WRITTEN[] = {
     { .id = FMT_UNMAPPED,  .how = SUMMED, .depends = FMT_DEPENDS(FMT_UNMAPPED) },
 };
 
-const fmt_manifest CMUTS_DIV_WRITES = { WRITTEN, sizeof WRITTEN / sizeof *WRITTEN };
+#undef CHANNEL
+
+const fmt_manifest CMUTS_DIV_WRITES = {
+    WRITTEN, sizeof WRITTEN / sizeof *WRITTEN, ANY_OF,
+};

@@ -117,9 +117,17 @@ def anchored(name: str) -> str:
     return f"[`{name}`]({FORMAT_PAGE}#{name.replace('/', '')})"
 
 
+# What the documentation calls each requirement a program places on an input.
+INPUT_STATUS = {
+    "required": "required",
+    "one of": "one of these is required",
+    "optional": "if present",
+}
+
+
 def read_status(name: str, read: dict) -> str:
     """Whether an input must hold the dataset for this program to accept it."""
-    return "required" if read[name] else "if present"
+    return INPUT_STATUS[read[name]]
 
 
 def datasets(program: list) -> str:
@@ -136,7 +144,7 @@ def datasets(program: list) -> str:
                      [[anchored(entry["name"]), entry["how"]]
                       for entry in written])
 
-    read = {d["name"]: d["required"] for d in spoken["inputs"]}
+    read = {d["name"]: d["requirement"] for d in spoken["inputs"]}
     rows = [[anchored(name), read_status(name, read)] for name in read]
 
     return "\n".join([table(["Dataset", "Input"], rows), "",

@@ -26,20 +26,23 @@ typedef enum {
     DIV_RATIO_ERROR,
 } div_rule;
 
+/* Every channel takes the same two rules. A rate is divided, and an error is propagated
+ * through that ratio. */
+#define CHANNEL(channel, rate, error) \
+    [rate] = DIV_RATIO,               \
+    [error] = DIV_RATIO_ERROR,
+
 static const div_rule RULES[FMT_N_FIELDS] = {
-    [FMT_COVERAGE]        = DIV_SUM,
-    [FMT_MISMATCH_RATE]   = DIV_RATIO,
-    [FMT_MISMATCH_ERROR]  = DIV_RATIO_ERROR,
-    [FMT_INSERTION_RATE]  = DIV_RATIO,
-    [FMT_INSERTION_ERROR] = DIV_RATIO_ERROR,
-    [FMT_DELETION_RATE]   = DIV_RATIO,
-    [FMT_DELETION_ERROR]  = DIV_RATIO_ERROR,
-    [FMT_LENGTHS]         = DIV_SUM,
-    [FMT_READS]           = DIV_SUM,
-    [FMT_REJECTED]        = DIV_SUM,
-    [FMT_UNMAPPED]        = DIV_SUM,
-    [FMT_SEQUENCE]        = DIV_SAME,
+    FMT_CHANNELS(CHANNEL)
+    [FMT_COVERAGE] = DIV_SUM,
+    [FMT_LENGTHS]  = DIV_SUM,
+    [FMT_READS]    = DIV_SUM,
+    [FMT_REJECTED] = DIV_SUM,
+    [FMT_UNMAPPED] = DIV_SUM,
+    [FMT_SEQUENCE] = DIV_SAME,
 };
+
+#undef CHANNEL
 
 /* ------------------------------------------------------------------------ */
 /* Arithmetic                                                                */
