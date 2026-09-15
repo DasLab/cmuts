@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """cmuts-plot -- serve an interactive HTML report over cmuts outputs.
 
-Each input file is one condition. The page shows one report with a chip per
-condition on every figure, and computes the reactivity profile from the event
-channels the page has checked, summed. The files need not hold the same
+Each input file is one condition. One chip row at the top of the page selects
+the condition every figure and every statistic is shown for, so the page holds
+one condition at a time. Each condition carries its own checked event channels,
+which the reactivity profile is summed over. The files need not hold the same
 library: comparisons are by reference index and position, so a one-off
 construct can sit beside a large library, or a mutant beside its wild type.
+
+The multi-plot and the difference plot are where conditions meet. Each of
+their rows names its own condition, and is drawn from the channels that
+condition carries.
 
 The server holds the files and builds every figure on demand. The browser
 fetches every condition's figure for the view in front of it into JSON stores
@@ -794,6 +799,18 @@ def parse_channels(value):
     return [c for c in CHANNELS if c in value]
 
 
+def parse_channel_map(value, conditions):
+    """Every condition's checked channels, keyed by label. A condition the
+    request omits falls back to the default channels."""
+    value = value or {}
+
+    return {c.label: parse_channels(value.get(c.label)) for c in conditions}
+
+
+def default_channel_map(conditions):
+    return {c.label: list(DEFAULT_CHANNELS) for c in conditions}
+
+
 def condition_path(conditions, label):
     for condition in conditions:
         if condition.label == label:
@@ -802,11 +819,13 @@ def condition_path(conditions, label):
     raise KeyError(f"no condition labeled {label}")
 
 
-def series_of(conditions, spec, channels):
+def series_of(conditions, spec):
     """One overlay or difference series: the selected condition's summed
-    reactivity at one reference, with its legend label. None where the
-    reference lies past this condition's library."""
+    reactivity at one reference, over the channels that condition carries,
+    with its legend label. None where the reference lies past this
+    condition's library."""
     ref = int(spec.get("ref", 0) or 0)
+    channels = parse_channels(spec.get("channels"))
 
     with h5py.File(condition_path(conditions, spec["cond"]), "r") as handle:
         if ref >= file_shape(handle)[0]:
@@ -822,19 +841,19 @@ def series_of(conditions, spec, channels):
 
 def render_figure(conditions, spec):
     """Build the requested figure, or None where the kind is unknown or the
-    data is absent. spec carries kind, channels, and the coordinates: cond and
-    ref for a card figure, series for an overlay, a and b for a difference."""
+    data is absent. spec carries kind and the coordinates: cond, ref and
+    channels for a card figure, series for an overlay, a and b for a
+    difference. Each series carries the channels of its own condition."""
     kind = spec["kind"]
-    channels = parse_channels(spec.get("channels"))
 
     if kind == OVERLAY:
-        series = [series_of(conditions, s, channels) for s in spec["series"]]
+        series = [series_of(conditions, s) for s in spec["series"]]
 
         return plot_overlay([s for s in series if s is not None])
 
     if kind == DIFFERENCE:
-        a = series_of(conditions, spec["a"], channels)
-        b = series_of(conditions, spec["b"], channels)
+        a = series_of(conditions, spec["a"])
+        b = series_of(conditions, spec["b"])
 
         if a is None or b is None:
             return None
@@ -852,7 +871,7 @@ def render_figure(conditions, spec):
         if ref is not None and ref >= file_shape(handle)[0]:
             return None
 
-        return plot.render(handle, ref, channels)
+        return plot.render(handle, ref, parse_channels(spec.get("channels")))
 
 
 # ===========================================================================
@@ -1004,7 +1023,8 @@ def active(label, default):
 
 
 def cond_toggle_html(labels):
-    """The condition chip row; the first condition starts active."""
+    """The chip row selecting the condition the whole page is shown for; the
+    first condition starts active."""
     buttons = "".join(
         f'<button type="button" class="cond-btn{active(c, labels[0])}" '
         f'data-cond="{escape(c)}">{escape(c)}</button>'
@@ -1024,22 +1044,20 @@ def condition_block_html(condition, channels, ref):
         return grouped_stats_html(condition_stats(handle, channels, ref))
 
 
-def stats_conditions_html(conditions, channels, ref):
-    """Each condition's grouped stats behind the chip toggle, one shown at a
-    time. This is also the body the /stats endpoint returns, so the client
-    can refetch it when the checked channels or the reference change."""
-    labels = [c.label for c in conditions]
+def stats_conditions_html(conditions, channel_map, ref):
+    """One block per condition, each over that condition's channels, with the
+    chip row at the top of the page showing one of them. This is also the body
+    the /stats endpoint returns, so the client can refetch it when the checked
+    channels or the reference change."""
+    first = conditions[0].label
     blocks = ""
 
     for condition in conditions:
-        blocks += (f'<div class="cond-stats{active(condition.label, labels[0])}" '
+        blocks += (f'<div class="cond-stats{active(condition.label, first)}" '
                    f'data-cond="{escape(condition.label)}">'
-                   f'{condition_block_html(condition, channels, ref)}</div>')
+                   f'{condition_block_html(condition, channel_map[condition.label], ref)}</div>')
 
-    if len(labels) == 1:
-        return f'<div class="stats-conditions">{blocks}</div>'
-
-    return f'<div class="stats-conditions">{cond_toggle_html(labels)}{blocks}</div>'
+    return f'<div class="stats-conditions">{blocks}</div>'
 
 
 def channel_presets_html():
@@ -1054,7 +1072,9 @@ def channel_presets_html():
 
 
 def channel_toggle_html():
-    """Gives one checkbox per channel, with the default channels checked."""
+    """Gives one checkbox per channel, then the chips selecting a named set of
+    them. The boxes hold the channels of the condition the page shows, and the
+    default channels start checked."""
     boxes = "".join(
         f'<label class="channel"><input type="checkbox" data-channel="{c}"'
         f'{" checked" if c in DEFAULT_CHANNELS else ""}>'
@@ -1062,23 +1082,21 @@ def channel_toggle_html():
         for c in CHANNELS
     )
 
-    return (f'<div class="channel-toggle">{channel_presets_html()}'
-            f'<span class="channel-label">'
-            f'Reactivity from:</span>{boxes}</div>')
+    return (f'<div class="channel-toggle">{boxes}'
+            f'<span class="control-label">Presets:</span>'
+            f'{channel_presets_html()}</div>')
 
 
-def plot_card(plot, labels, ref, extra_class=""):
-    """A collapsible figure card: the condition chips and an empty placeholder
-    the client fetches into."""
+def plot_card(plot, first_label, ref, extra_class=""):
+    """A collapsible figure card: an empty placeholder the client fetches
+    into, starting on the condition the chips start on."""
     cls = "plot-details wide" if plot.aspect == "wide" else "plot-details"
     inner_cls = ("plot " + extra_class).strip()
     div = (f'<div class="figure {plot.aspect}">'
            f'<div class="{inner_cls}" data-kind="{plot.key}" '
-           f'data-cond="{escape(labels[0])}" data-ref="{ref}"></div></div>')
-    toggle = cond_toggle_html(labels) if len(labels) > 1 else ""
+           f'data-cond="{escape(first_label)}" data-ref="{ref}"></div></div>')
 
-    return (f'<details class="{cls}"><summary>{plot.label}</summary>'
-            f'{toggle}{div}</details>')
+    return f'<details class="{cls}"><summary>{plot.label}</summary>{div}</details>'
 
 
 def plots_grid(cards):
@@ -1101,30 +1119,30 @@ def reference_select_html(n_refs):
     return f'<select class="seqselect" id="refselect">{options}</select>'
 
 
-def single_section(conditions, channels):
-    labels = [c.label for c in conditions]
-    cards = [plot_card(plot, labels, 0) for plot in SINGLE]
+def single_section(conditions, channel_map):
+    first = conditions[0].label
+    cards = [plot_card(plot, first, 0) for plot in SINGLE]
 
-    return (f'<div id="stats-main">{stats_conditions_html(conditions, channels, None)}</div>'
+    return (f'<div id="stats-main">{stats_conditions_html(conditions, channel_map, None)}</div>'
             + seqview_html() + plots_grid(cards))
 
 
-def aggregate_section(conditions, channels):
-    labels = [c.label for c in conditions]
-    cards = [plot_card(plot, labels, AGGREGATE_REF) for plot in AGGREGATE]
+def aggregate_section(conditions, channel_map):
+    first = conditions[0].label
+    cards = [plot_card(plot, first, AGGREGATE_REF) for plot in AGGREGATE]
 
     return ("<h3>Aggregate data</h3>"
-            + f'<div id="stats-main">{stats_conditions_html(conditions, channels, None)}</div>'
+            + f'<div id="stats-main">{stats_conditions_html(conditions, channel_map, None)}</div>'
             + plots_grid(cards))
 
 
-def per_sequence_section(conditions, channels, n_refs):
-    labels = [c.label for c in conditions]
-    cards = [plot_card(plot, labels, 0, "perseq-plot") for plot in PER_SEQ]
+def per_sequence_section(conditions, channel_map, n_refs):
+    first = conditions[0].label
+    cards = [plot_card(plot, first, 0, "perseq-plot") for plot in PER_SEQ]
 
     return ("<h3>Per-sequence data</h3>"
             + reference_select_html(n_refs)
-            + f'<div id="stats-perseq">{stats_conditions_html(conditions, channels, 0)}</div>'
+            + f'<div id="stats-perseq">{stats_conditions_html(conditions, channel_map, 0)}</div>'
             + seqview_html() + plots_grid(cards))
 
 
@@ -1147,11 +1165,13 @@ def comparison_sections():
 
 def manifest_of(conditions, refs):
     """The compact JSON the client reads: the condition labels, each one's
-    reference count, and the channel vocabulary."""
+    reference count, the channel vocabulary, and the channels every condition
+    starts with."""
     return {
         "conditions": [c.label for c in conditions],
         "refs": refs,
         "channels": list(CHANNELS),
+        "defaults": list(DEFAULT_CHANNELS),
         "kinds": {"profile": PROFILE_PLOT.key, "overlay": OVERLAY, "difference": DIFFERENCE},
     }
 
@@ -1182,22 +1202,40 @@ def document(body, embed, n_conditions):
     )
 
 
+def control_row_html(label, control):
+    """One labeled row of the top bar."""
+    return f'<span class="control-label">{label}</span>{control}'
+
+
+def controls_html(labels):
+    """The top bar: the condition chips, then the channels of the condition
+    they select. A single-condition report shows the channels alone."""
+    rows = ""
+
+    if len(labels) > 1:
+        rows += control_row_html("Condition:", cond_toggle_html(labels))
+
+    rows += control_row_html("Reactivity from:", channel_toggle_html())
+
+    return f'<div class="controls">{rows}</div>'
+
+
 def build_shell(conditions):
-    """The whole page: the channel checkboxes, the stats, the figure cards,
-    and the comparison sections, with every figure fetched by the client. The
+    """The whole page: the top bar, the stats, the figure cards, and the
+    comparison sections, with every figure fetched by the client. The
     single-reference layout applies only when every condition holds one
     reference; the dropdown otherwise reaches the largest library."""
-    channels = list(DEFAULT_CHANNELS)
+    channel_map = default_channel_map(conditions)
     refs = condition_refs(conditions)
     n_refs = max(refs)
 
-    parts = [channel_toggle_html()]
+    parts = [controls_html([c.label for c in conditions])]
 
     if n_refs == 1:
-        parts.append(single_section(conditions, channels))
+        parts.append(single_section(conditions, channel_map))
     else:
-        parts.append(aggregate_section(conditions, channels))
-        parts.append(per_sequence_section(conditions, channels, n_refs))
+        parts.append(aggregate_section(conditions, channel_map))
+        parts.append(per_sequence_section(conditions, channel_map, n_refs))
 
     if len(conditions) > 1 or n_refs > 1:
         parts.extend(comparison_sections())
@@ -1253,10 +1291,12 @@ h3 { font-size: 1.05rem; font-weight: 650; color: var(--muted); text-transform: 
         padding: 0.7rem 0.9rem; }
 .stat-value { font-size: 1.45rem; font-weight: 600; line-height: 1.15; }
 .stat-label { font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem; }
-.channel-toggle { display: flex; align-items: center; gap: 1rem; margin: 0.4rem 0 1rem;
-                  padding: 0.55rem 0.9rem; background: var(--surface);
-                  border: 1px solid var(--border); border-radius: 9px; }
-.channel-label { font-size: 0.78rem; font-weight: 650; color: var(--muted);
+.controls { display: grid; grid-template-columns: auto 1fr; align-items: center;
+            justify-items: start; gap: 0.5rem 0.9rem; margin: 0.4rem 0 1rem;
+            padding: 0.7rem 0.9rem; background: var(--surface);
+            border: 1px solid var(--border); border-radius: 9px; }
+.channel-toggle { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.control-label { font-size: 0.78rem; font-weight: 650; color: var(--muted);
                  text-transform: uppercase; letter-spacing: 0.05em; }
 .channel { font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.35rem; }
 .channel input { accent-color: var(--accent); }
@@ -1266,7 +1306,7 @@ h3 { font-size: 1.05rem; font-weight: 650; color: var(--muted); text-transform: 
               background: var(--bg); color: var(--muted); font-size: 0.82rem; padding: 4px 12px; }
 .preset-btn:first-child { border-left: none; }
 .preset-btn.active { background: var(--accent); color: #fff; }
-.cond-toggle { display: inline-flex; margin: 0.1rem 0 0.4rem; border: 1px solid var(--border);
+.cond-toggle { display: inline-flex; border: 1px solid var(--border);
                border-radius: 7px; overflow: hidden; }
 .cond-btn { margin: 0; border: none; border-radius: 0; border-left: 1px solid var(--border);
             background: var(--bg); color: var(--muted); font-size: 0.82rem; padding: 4px 12px; }
@@ -1336,7 +1376,32 @@ REPORT_JS = """
   }
 
   // --- the channel checkboxes and the preset chips ---------------------------
-  function channels() {
+  // Every condition carries its own channels. The boxes hold the channels of
+  // the condition the chips select, and a store on the page keeps every
+  // condition's set, so a saved page shows the channels its figures hold.
+  var CHANNELS_BY_COND = {};
+  function defaultChannels() {
+    return (MANIFEST.defaults || []).slice();
+  }
+  function readChannelStores() {
+    for (var i = 0; i < CONDS.length; i++) {
+      CHANNELS_BY_COND[CONDS[i]] = readStore(document.body, "chanstore", CONDS[i])
+                                || defaultChannels();
+    }
+  }
+  function channelsOf(cond) {
+    return CHANNELS_BY_COND[cond] || defaultChannels();
+  }
+  function setChannelsOf(cond, on) {
+    CHANNELS_BY_COND[cond] = on;
+    writeStore(document.body, "chanstore", cond, on);
+  }
+  function channelMap() {
+    var map = {};
+    for (var i = 0; i < CONDS.length; i++) map[CONDS[i]] = channelsOf(CONDS[i]);
+    return map;
+  }
+  function checkedChannels() {
     var boxes = document.querySelectorAll(".channel-toggle input");
     var on = [];
     for (var i = 0; i < boxes.length; i++) {
@@ -1344,30 +1409,38 @@ REPORT_JS = """
     }
     return on;
   }
-  function setChannels(on) {
+  function checkChannels(on) {
     var boxes = document.querySelectorAll(".channel-toggle input");
     for (var i = 0; i < boxes.length; i++) {
       boxes[i].checked = on.indexOf(boxes[i].getAttribute("data-channel")) >= 0;
     }
   }
   function syncPresets() {
-    var on = channels().sort().join(",");
+    var on = checkedChannels().sort().join(",");
     var chips = document.querySelectorAll(".preset-btn");
     for (var i = 0; i < chips.length; i++) {
       var want = chips[i].getAttribute("data-preset").split(",").sort();
       chips[i].classList.toggle("active", want.join(",") === on);
     }
   }
+  function showChannels(cond) {
+    checkChannels(channelsOf(cond));
+    syncPresets();
+  }
+  // The channels of one condition changed, so only that condition's figures
+  // are stale.
   function onChannelChange() {
+    var cond = activeCond();
+    setChannelsOf(cond, checkedChannels());
     syncPresets();
     refreshStats();
-    renderAll().then(colorSeqview);
+    renderCondition(cond).then(colorSeqview);
   }
   function bindChannelBoxes() {
     var boxes = document.querySelectorAll(".channel-toggle input");
     for (var i = 0; i < boxes.length; i++) {
       boxes[i].addEventListener("change", function () {
-        if (channels().length === 0) { this.checked = true; return; }
+        if (checkedChannels().length === 0) { this.checked = true; return; }
         onChannelChange();
       });
     }
@@ -1376,7 +1449,7 @@ REPORT_JS = """
     var chips = document.querySelectorAll(".preset-btn");
     for (var i = 0; i < chips.length; i++) {
       chips[i].addEventListener("click", function () {
-        setChannels(this.getAttribute("data-preset").split(","));
+        checkChannels(this.getAttribute("data-preset").split(","));
         onChannelChange();
       });
     }
@@ -1384,12 +1457,13 @@ REPORT_JS = """
   function bindChannels() {
     bindChannelBoxes();
     bindChannelPresets();
-    syncPresets();
   }
 
   // --- figure fetch + render -------------------------------------------------
+  // A card figure names one condition, so it is drawn from that condition's
+  // channels. An overlay or difference carries them on each series instead.
   function fetchFigure(spec) {
-    spec.channels = channels();
+    if (spec.cond) spec.channels = channelsOf(spec.cond);
     var url = "figure?spec=" + encodeURIComponent(JSON.stringify(spec));
     return fetch(url).then(function (r) { return r.ok ? r.json() : null; })
                      .catch(function () { return null; });
@@ -1471,26 +1545,33 @@ REPORT_JS = """
     showCard(div);
     drawInto(div, fig, figKind(div), figName(specOf(div)));
   }
-  // Fetches every condition's figure for this card into its store, drawing
-  // the active condition as soon as its figure lands.
-  function renderCard(div) {
+  // Fetches the named conditions' figures for this card into its store,
+  // drawing the condition on view as soon as its figure lands. Every
+  // condition is fetched where none are named.
+  function renderCard(div, conds) {
     if (!ONLINE) return Promise.resolve();
     var card = cardOf(div);
     var kind = div.getAttribute("data-kind");
     var ref = div.getAttribute("data-ref");
-    return Promise.all(CONDS.map(function (cond) {
+    return Promise.all((conds || CONDS).map(function (cond) {
       return fetchFigure({kind: kind, cond: cond, ref: ref}).then(function (fig) {
         writeStore(card, "figstore", cond, fig);
         if (cond === div.getAttribute("data-cond")) drawFromStore(div);
       });
     }));
   }
-  function renderAll() {
+  function renderCards(conds) {
     var divs = document.querySelectorAll(".plot[data-kind]");
     var done = [];
-    for (var i = 0; i < divs.length; i++) done.push(renderCard(divs[i]));
+    for (var i = 0; i < divs.length; i++) done.push(renderCard(divs[i], conds));
     redrawComparisons();
     return Promise.all(done);
+  }
+  function renderAll() {
+    return renderCards(null);
+  }
+  function renderCondition(cond) {
+    return renderCards([cond]);
   }
   function drawAllFromStores() {
     var divs = document.querySelectorAll(".plot[data-kind]");
@@ -1586,37 +1667,19 @@ REPORT_JS = """
     }
     div.innerHTML = html;
   }
-  function activeCond() {
-    var btn = document.querySelector("#stats-perseq .cond-btn.active")
-           || document.querySelector("#stats-main .cond-btn.active");
-    return btn ? btn.getAttribute("data-cond") : CONDS[0];
-  }
 
   // --- the statistics --------------------------------------------------------
-  function activeCondOf(box) {
-    var btn = box.querySelector(".cond-btn.active");
-    return btn ? btn.getAttribute("data-cond") : null;
-  }
-  function setActiveCond(box, cond) {
-    if (!cond) return;
-    var chips = box.querySelectorAll(".cond-toggle .cond-btn, .cond-stats");
-    for (var i = 0; i < chips.length; i++) {
-      chips[i].classList.toggle("active", chips[i].getAttribute("data-cond") === cond);
-    }
-  }
-  // The fragment arrives with the first condition active, so the selection is
-  // carried over from the chips being replaced.
+  // The fragment arrives with the first condition active, so the condition on
+  // view is applied to the blocks that replace it.
   function fetchStats(box, ref) {
     if (!box || !ONLINE) return;
-    var kept = activeCondOf(box);
-    var spec = {ref: ref, channels: channels()};
+    var spec = {ref: ref, channels: channelMap()};
     fetch("stats?spec=" + encodeURIComponent(JSON.stringify(spec)))
       .then(function (r) { return r.ok ? r.text() : ""; })
       .then(function (html) {
         if (html) {
           box.innerHTML = html;
-          bindStatToggles(box);
-          setActiveCond(box, kept);
+          showCondBlocks(activeCond());
         }
       })
       .catch(function () {});
@@ -1625,42 +1688,43 @@ REPORT_JS = """
     fetchStats(document.getElementById("stats-main"), null);
     fetchStats(document.getElementById("stats-perseq"), currentRef());
   }
-  function bindStatToggles(root) {
-    var wraps = (root || document).querySelectorAll(".stats-conditions");
-    for (var g = 0; g < wraps.length; g++) {
-      (function (wrap) {
-        var btns = wrap.querySelectorAll(".cond-toggle .cond-btn");
-        var blocks = wrap.querySelectorAll(".cond-stats");
-        for (var b = 0; b < btns.length; b++) {
-          btns[b].addEventListener("click", function () {
-            var cond = this.getAttribute("data-cond");
-            for (var i = 0; i < btns.length; i++)
-              btns[i].classList.toggle("active", btns[i].getAttribute("data-cond") === cond);
-            for (var j = 0; j < blocks.length; j++)
-              blocks[j].classList.toggle("active", blocks[j].getAttribute("data-cond") === cond);
-            colorSeqview();
-          });
-        }
-      })(wraps[g]);
+
+  // --- the condition chips ---------------------------------------------------
+  // One chip row holds the condition the whole page is shown for, so every
+  // figure and every statistic on screen comes from the one file.
+  function activeCond() {
+    var btn = document.querySelector(".controls .cond-btn.active");
+    return btn ? btn.getAttribute("data-cond") : CONDS[0];
+  }
+  function showCondBlocks(cond) {
+    var blocks = document.querySelectorAll(".cond-stats");
+    for (var i = 0; i < blocks.length; i++) {
+      blocks[i].classList.toggle("active", blocks[i].getAttribute("data-cond") === cond);
     }
   }
-
-  // --- per-card condition chips ----------------------------------------------
-  function bindConditionToggles() {
-    var toggles = document.querySelectorAll(".plot-details > .cond-toggle");
-    for (var g = 0; g < toggles.length; g++) {
-      (function (toggle) {
-        var plot = toggle.parentNode.querySelector(":scope > .figure .plot");
-        var btns = toggle.querySelectorAll(".cond-btn");
-        for (var b = 0; b < btns.length; b++) {
-          btns[b].addEventListener("click", function () {
-            for (var j = 0; j < btns.length; j++) btns[j].classList.remove("active");
-            this.classList.add("active");
-            plot.setAttribute("data-cond", this.getAttribute("data-cond"));
-            drawFromStore(plot);
-          });
+  function showCondPlots(cond) {
+    var divs = document.querySelectorAll(".plot[data-kind]");
+    for (var i = 0; i < divs.length; i++) {
+      divs[i].setAttribute("data-cond", cond);
+      drawFromStore(divs[i]);
+    }
+  }
+  function applyCondition(cond) {
+    showCondPlots(cond);
+    showCondBlocks(cond);
+    showChannels(cond);
+    colorSeqview();
+  }
+  function bindConditionChips() {
+    var btns = document.querySelectorAll(".controls .cond-btn");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].addEventListener("click", function () {
+        var cond = this.getAttribute("data-cond");
+        for (var j = 0; j < btns.length; j++) {
+          btns[j].classList.toggle("active", btns[j].getAttribute("data-cond") === cond);
         }
-      })(toggles[g]);
+        applyCondition(cond);
+      });
     }
   }
 
@@ -1730,7 +1794,8 @@ REPORT_JS = """
       var parts = [];
       if (CONDS.length > 1) parts.push(condSel.value);
       if (refCountOf(condSel.value) > 1) parts.push("Reference " + (ref + 1));
-      return {cond: condSel.value, ref: ref, label: parts.join(" · ")};
+      return {cond: condSel.value, ref: ref, label: parts.join(" · "),
+              channels: channelsOf(condSel.value)};
     };
     return row;
   }
@@ -1804,8 +1869,9 @@ REPORT_JS = """
   document.addEventListener("DOMContentLoaded", function () {
     probe().then(function (online) {
       ONLINE = online;
-      bindConditionToggles();
-      bindStatToggles();
+      readChannelStores();
+      bindConditionChips();
+      showChannels(activeCond());
       bindCollapsibleResize();
       if (!online) {
         goOffline();
@@ -1882,8 +1948,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             spec = self.spec_of(query)
             ref = parse_ref(spec.get("ref"))
-            channels = parse_channels(spec.get("channels"))
-            body = stats_conditions_html(self.server.conditions, channels, ref)
+            channel_map = parse_channel_map(spec.get("channels"), self.server.conditions)
+            body = stats_conditions_html(self.server.conditions, channel_map, ref)
         except REQUEST_FAILURES as error:
             self.reply(400, "text/plain", str(error).encode())
             return

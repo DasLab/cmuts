@@ -136,6 +136,22 @@ def test_a_figure_is_served(build):
         assert body
 
 
+def test_an_overlay_over_two_channel_selections_is_served(build):
+    """Each series of an overlay carries the channels of its own condition, so
+    one request holds two selections."""
+    files = [build(random_fields(seed=70 + i)) for i in range(2)]
+    series = [
+        {"cond": "input0", "ref": 0, "label": "a", "channels": ["mismatches"]},
+        {"cond": "input1", "ref": 0, "label": "b", "channels": ["mismatches", "deletions"]},
+    ]
+
+    with serving(*files) as address:
+        status, body = fetch(address, spec_path({"kind": "overlay", "series": series}))
+
+        assert status == 200
+        assert body
+
+
 # ---------------------------------------------------------------------------
 # Invocations that are refused
 # ---------------------------------------------------------------------------
