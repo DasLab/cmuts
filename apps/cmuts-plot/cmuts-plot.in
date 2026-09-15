@@ -910,39 +910,57 @@ def library_stats(handle, ref):
     return rows
 
 
-def read_stats(handle, ref):
-    """The Reads group: one reference's count where one is in view, the
-    library-wide rows otherwise. The per-run totals are whole-file numbers,
-    so they appear on the aggregate view only."""
+def counted_read_stats(handle, ref):
+    """Gives the counted reads of the reference in view, or the library-wide
+    rows where no reference is in view."""
     n_refs, _ = file_shape(handle)
     reads = dataset(handle, READS)
-    rows = []
 
     if reads is None:
-        return rows
+        return []
 
     reads = np.asarray(reads, dtype=float)
 
     if ref is not None or n_refs == 1:
-        rows.append(Stat("Reads", float(reads[ref or 0]), "int", group="Reads"))
-    else:
-        rows += [
-            Stat("Total reads", float(reads.sum()), "int", group="Reads"),
-            Stat("Mean reads", float(reads.mean()), "float", group="Reads"),
-            Stat("Median reads", float(np.median(reads)), "int", group="Reads"),
-            Stat("Dropout fraction", float((reads == 0).mean()), "float", group="Reads"),
-        ]
+        return [Stat("Reads", float(reads[ref or 0]), "int", group="Reads")]
 
-    if ref is None:
-        rejected = dataset(handle, REJECTED)
-        unmapped = dataset(handle, UNMAPPED)
+    return [
+        Stat("Total reads", float(reads.sum()), "int", group="Reads"),
+        Stat("Mean reads", float(reads.mean()), "float", group="Reads"),
+        Stat("Median reads", float(np.median(reads)), "int", group="Reads"),
+        Stat("Dropout fraction", float((reads == 0).mean()), "float", group="Reads"),
+    ]
 
-        if rejected is not None:
-            rows.append(Stat("Rejected reads", float(rejected.sum()), "int", group="Reads"))
-        if unmapped is not None:
-            rows.append(Stat("Unmapped reads", float(unmapped), "int", group="Reads"))
 
-    return rows
+def rejected_read_stats(handle, ref):
+    """Gives the rejected reads of the reference in view, or the library-wide
+    total where no reference is in view."""
+    rejected = dataset(handle, REJECTED)
+
+    if rejected is None:
+        return []
+
+    rejected = np.asarray(rejected, dtype=float)
+    value = rejected.sum() if ref is None else rejected[ref]
+
+    return [Stat("Rejected reads", float(value), "int", group="Reads")]
+
+
+def unmapped_read_stats(handle, ref):
+    """Gives the unmapped reads of the whole file where no reference is in
+    view."""
+    unmapped = dataset(handle, UNMAPPED)
+
+    if ref is not None or unmapped is None:
+        return []
+
+    return [Stat("Unmapped reads", float(unmapped), "int", group="Reads")]
+
+
+def read_stats(handle, ref):
+    """Gives the Reads group: the counted, rejected, and unmapped reads."""
+    return (counted_read_stats(handle, ref) + rejected_read_stats(handle, ref)
+            + unmapped_read_stats(handle, ref))
 
 
 def reactivity_stats(handle, channels, ref):
