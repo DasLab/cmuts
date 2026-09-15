@@ -10,9 +10,9 @@
 #include "version.h"
 
 static const cli_choice FORMAT_CHOICES[] = {
-    { "bam", DATASET_BAM },
-    { "sam", DATASET_SAM },
-    { NULL,  0           },
+    { "bam", DATASET_BAM, NULL },
+    { "sam", DATASET_SAM, NULL },
+    { NULL,  0,           NULL },
 };
 
 static const cli_option OPTIONS[] = {

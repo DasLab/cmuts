@@ -16,23 +16,23 @@
 #include "phred.h"
 
 static const cli_choice VERIFY_CHOICES[] = {
-    { "name",     REFSEQ_VERIFY_NAME     },
-    { "checksum", REFSEQ_VERIFY_CHECKSUM },
-    { "none",     0                      },
-    { NULL,       0                      },
+    { "name",     REFSEQ_VERIFY_NAME,     NULL },
+    { "checksum", REFSEQ_VERIFY_CHECKSUM, NULL },
+    { "none",     0,                      NULL },
+    { NULL,       0,                      NULL },
 };
 
 static const cli_choice PAIRWISE_CHOICES[] = {
-    { "correlation", PAIRS_CORRELATION },
-    { "conditional", PAIRS_CONDITIONAL },
-    { "none",        0                 },
-    { NULL,          0                 },
+    { "correlation", PAIRS_CORRELATION, NULL },
+    { "conditional", PAIRS_CONDITIONAL, NULL },
+    { "none",        0,                 NULL },
+    { NULL,          0,                 NULL },
 };
 
 static const cli_choice STRAND_CHOICES[] = {
-    { "forward", FILTER_STRAND_FORWARD },
-    { "reverse", FILTER_STRAND_REVERSE },
-    { NULL,      0                     },
+    { "forward", FILTER_STRAND_FORWARD, NULL },
+    { "reverse", FILTER_STRAND_REVERSE, NULL },
+    { NULL,      0,                     NULL },
 };
 
 static void dump_layout(FILE *out)

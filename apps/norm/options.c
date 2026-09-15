@@ -14,9 +14,9 @@
 #define DEFAULT_MIN_COVERAGE 500
 
 static const cli_choice SCHEME_CHOICES[] = {
-    { "ubr",     NORM_UBR     },
-    { "outlier", NORM_OUTLIER },
-    { NULL,      0            },
+    { "ubr",     NORM_UBR,     NULL },
+    { "outlier", NORM_OUTLIER, NULL },
+    { NULL,      0,            NULL },
 };
 
 static void dump_layout(FILE *out)
