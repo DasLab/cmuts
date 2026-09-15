@@ -14,6 +14,7 @@
 #include "accum.h"
 #include "fasta.h"
 #include "pairs.h"
+#include "phmm.h"
 
 /* Everything a reference accumulates while its reads are in flight.
  *
@@ -26,6 +27,9 @@ typedef struct refctx {
     const char     *name;  /* borrowed from the BAM header, stable for the run */
     char           *seq;   /* owned; the FASTA reader's buffer does not persist */
     size_t          len;
+    phmm_rates      rates;          /* filled by the loader before any read is queued,
+                                       and only read after */
+    double         *rate_storage;   /* owned; PHMM_RATE_ARRAYS values per base */
     accum           acc;
     bool            accumulated;  /* whether any read reached it; guarded by lock */
     pairs           pr;    /* co-modification; held only under --pairwise */

@@ -23,21 +23,22 @@ typedef struct {
 
 tally_config tally_defaults(void);
 
-/* What the tally works from besides the read itself: the quality table and the model's
- * rates. Built once from the config and never written afterwards, so every worker may
- * share one. The rates are filled from the uniform rates, with ends equal at every base,
- * at one value per base of the longest reference so they serve every reference. */
+/* What the tally works from besides the read and its reference's rates: the quality
+ * table, the rates every reference is filled from, and the band. Built once from the
+ * config and never written afterwards, so every worker may share one. */
 typedef struct {
-    phred       quality;
-    phmm_rates  rates;    /* the rates the marginal reads */
-    double     *storage;  /* owned storage behind the arrays of rates */
-    int         band;     /* the half-width every row of the marginal is given */
+    phred              quality;
+    phmm_uniform_rates uniform;  /* the rates tally_rates_fill writes */
+    int                band;     /* the half-width every row of the marginal is given */
 } tally_tables;
 
-/* Returns 0, or -1 when the arrays of rates cannot be allocated. cap is the longest
- * reference, in bases. */
-int  tally_tables_build(tally_tables *tables, const tally_config *config, size_t cap);
-void tally_tables_free(tally_tables *tables);
+void tally_tables_build(tally_tables *tables, const tally_config *config);
+
+/* Fills the rates of a reference of len bases from the uniform rates, with ends equal at
+ * every base. The arrays of rates borrow storage, which must hold PHMM_RATE_ARRAYS times
+ * len values and outlive every use of rates. */
+void tally_rates_fill(phmm_rates *rates, double *storage, size_t len,
+                      const tally_tables *tables);
 
 /* Working buffers one worker reuses across every read it processes. Private to that
  * worker; the marginal writes over the whole of it for each read. */
@@ -48,7 +49,7 @@ void           tally_scratch_destroy(tally_scratch *scratch);
 
 /* Adds one read's contribution to target, which is never cleared here. PHMM_NO_PATH
  * adds one to the rejected count and no other value; any other failure ends the run. target_pairs takes the read's co-modification, and is NULL for a run counting
- * none. */
+ * none. rates are the rates of ref. */
 phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
-                  const tally_tables *tables, tally_scratch *scratch,
-                  accum *target, pairs *target_pairs);
+                  const phmm_rates *rates, const tally_tables *tables,
+                  tally_scratch *scratch, accum *target, pairs *target_pairs);

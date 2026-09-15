@@ -85,13 +85,23 @@ void refctx_open(refctx *ctx, int32_t tid, const char *name, const cm_fasta_reco
 /* Pool                                                                      */
 /* ------------------------------------------------------------------------ */
 
+/* Frees a context's buffers. Each free accepts a buffer never allocated, so this also
+ * serves a context built only in part. */
+static void free_buffers(refctx *ctx)
+{
+    pairs_free(&ctx->pr);
+    accum_free(&ctx->acc);
+    free(ctx->rate_storage);
+    free(ctx->seq);
+    ctx->rate_storage = NULL;
+    ctx->seq          = NULL;
+}
+
 static void release_storage(ctxpool *p, size_t n)
 {
     for (size_t i = 0; i < n; i++) {
         pthread_mutex_destroy(&p->storage[i].lock);
-        pairs_free(&p->storage[i].pr);
-        accum_free(&p->storage[i].acc);
-        free(p->storage[i].seq);
+        free_buffers(&p->storage[i]);
     }
 
     free(p->storage);
@@ -99,21 +109,12 @@ static void release_storage(ctxpool *p, size_t n)
 
 static int build_context(refctx *ctx, size_t ref_cap, bool pairwise)
 {
-    ctx->seq = malloc(ref_cap + 1);
-    if (!ctx->seq) {
-        return -1;
-    }
+    ctx->seq          = malloc(ref_cap + 1);
+    ctx->rate_storage = malloc(PHMM_RATE_ARRAYS * ref_cap * sizeof *ctx->rate_storage);
 
-    if (accum_alloc(&ctx->acc, ref_cap) < 0) {
-        free(ctx->seq);
-        ctx->seq = NULL;
-        return -1;
-    }
-
-    if (pairwise && pairs_alloc(&ctx->pr, ref_cap) < 0) {
-        accum_free(&ctx->acc);
-        free(ctx->seq);
-        ctx->seq = NULL;
+    if (!ctx->seq || !ctx->rate_storage || accum_alloc(&ctx->acc, ref_cap) < 0
+        || (pairwise && pairs_alloc(&ctx->pr, ref_cap) < 0)) {
+        free_buffers(ctx);
         return -1;
     }
 

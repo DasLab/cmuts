@@ -39,6 +39,9 @@ typedef struct {
     const double *ends;
 } phmm_rates;
 
+/* The arrays of phmm_rates. */
+#define PHMM_RATE_ARRAYS 4
+
 /* Sets the transition weights from the extension rates in uniform. The arrays are left
  * as they are. */
 void phmm_rates_set_transitions(phmm_rates *rates, const phmm_uniform_rates *uniform);

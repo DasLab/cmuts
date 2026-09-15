@@ -176,7 +176,7 @@ static const workitem *item_at(void *const *slots, size_t i)
 
 /* Counts every read of a run into the worker's own shadow. */
 static void worker_count_run(worker *w, void **slots, size_t n,
-                             const cm_fasta_record *ref)
+                             const cm_fasta_record *ref, const phmm_rates *rates)
 {
     for (size_t i = 0; i < n; i++) {
         const workitem *item = item_at(slots, i);
@@ -184,7 +184,7 @@ static void worker_count_run(worker *w, void **slots, size_t n,
         phmm_status     status;
 
         cm_bam_record_view(item->rec, &read);
-        status = tally(&read, ref, &w->pipe->tally_tables, w->scratch,
+        status = tally(&read, ref, rates, &w->pipe->tally_tables, w->scratch,
                        &w->shadow,
                        w->shadow_pairs.cells ? &w->shadow_pairs : NULL);
 
@@ -213,7 +213,7 @@ static void worker_process_run(worker *w, void **slots, size_t n)
     /* Once a worker has failed the run is released without being counted, since the
      * output will never be written. */
     if (failure_seen(w->failure) == PHMM_OK) {
-        worker_count_run(w, slots, n, &ref);
+        worker_count_run(w, slots, n, &ref, &ctx->rates);
     }
 
     /* The whole run's carriers go back at once. No thread reads them afterwards:
@@ -378,6 +378,7 @@ static refctx *pipeline_open_reference(const pipeline *p, int32_t tid)
     }
 
     refctx_open(ctx, tid, cm_bam_stream_refname(p->bam, tid), seq);
+    tally_rates_fill(&ctx->rates, ctx->rate_storage, ctx->len, &p->tally_tables);
     h5writer_expect(p->out, tid);
     return ctx;
 }
@@ -717,7 +718,6 @@ pipeline_config pipeline_defaults(void)
 static void pipeline_teardown(pipeline *p)
 {
     progress_finish(p->bar);
-    tally_tables_free(&p->tally_tables);
     refrow_destroy(p->rows);
     h5writer_close(p->out);
     ctxpool_destroy(p->contexts);
@@ -878,10 +878,7 @@ int pipeline_run(const pipeline_config *cfg, const char *program,
         goto done;
     }
 
-    if (tally_tables_build(&p.tally_tables, &cfg->tally_config, p.ref_cap) < 0) {
-        snprintf(error, error_len, "out of memory");
-        goto done;
-    }
+    tally_tables_build(&p.tally_tables, &cfg->tally_config);
 
     /* Started last, so that no setup step fails after the bar is drawn. */
     p.bar = progress_start(cm_bam_stream_span(p.bam));

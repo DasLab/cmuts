@@ -13,9 +13,6 @@
 
 #include "filter.h"
 
-/* The arrays of phmm_rates, each one value per base. */
-#define PER_BASE_ARRAYS 4
-
 /* A value of ends equal at every base, which leaves every placement of a read's 5'-most
  * paired base within its band equally likely. */
 #define UNIFORM_ENDS 1.0
@@ -23,6 +20,7 @@
 typedef struct {
     const cm_bam_record   *read;
     const cm_fasta_record *ref;
+    const phmm_rates      *rates;
     const tally_tables    *tables;
     accum                 *target;
     pairs                 *target_pairs;   /* NULL where no pairs are counted */
@@ -126,8 +124,8 @@ static phmm_status marginalize(const context *ctx, tally_scratch *scratch)
         return PHMM_NO_MEMORY;
     }
 
-    status = phmm_run(&ctx->tables->rates, &ctx->tables->quality, ctx->read, ctx->ref,
-                      half, scratch->phmm, &window);
+    status = phmm_run(ctx->rates, &ctx->tables->quality, ctx->read, ctx->ref, half,
+                      scratch->phmm, &window);
 
     if (status == PHMM_OK) {
         add_window(ctx, &window);
@@ -154,44 +152,44 @@ tally_config tally_defaults(void)
 }
 
 /* Fills one array of rates with a single rate. */
-static void fill_uniform(double *values, size_t cap, double rate)
+static void fill_uniform(double *values, size_t len, double rate)
 {
-    for (size_t i = 0; i < cap; i++) {
+    for (size_t i = 0; i < len; i++) {
         values[i] = rate;
     }
 }
 
-int tally_tables_build(tally_tables *tables, const tally_config *config, size_t cap)
+void tally_tables_build(tally_tables *tables, const tally_config *config)
 {
-    const phmm_uniform_rates *uniform = &config->uniform;
-    double                   *storage = malloc(PER_BASE_ARRAYS * cap * sizeof *storage);
-
-    if (!storage) {
-        return -1;
-    }
-
     phred_build(&tables->quality, config->min_phred);
-    phmm_rates_set_transitions(&tables->rates, uniform);
+    tables->uniform = config->uniform;
     tables->band    = config->band;
-    tables->storage = storage;
-
-    tables->rates.modification   = storage;
-    tables->rates.open_insertion = storage + cap;
-    tables->rates.open_deletion  = storage + 2 * cap;
-    tables->rates.ends           = storage + 3 * cap;
-
-    fill_uniform(storage, cap, uniform->modification);
-    fill_uniform(storage + cap, cap, uniform->open_insertion);
-    fill_uniform(storage + 2 * cap, cap, uniform->open_deletion);
-    fill_uniform(storage + 3 * cap, cap, UNIFORM_ENDS);
-
-    return 0;
 }
 
-void tally_tables_free(tally_tables *tables)
+/* Points each array of rates at its own len values of storage. */
+static void bind_arrays(phmm_rates *rates, const double *storage, size_t len)
 {
-    free(tables->storage);
-    tables->storage = NULL;
+    rates->modification   = storage;
+    rates->open_insertion = storage + len;
+    rates->open_deletion  = storage + 2 * len;
+    rates->ends           = storage + 3 * len;
+}
+
+/* Writes the uniform rates into storage, in the order bind_arrays lays the arrays out. */
+static void fill_arrays(double *storage, size_t len, const phmm_uniform_rates *uniform)
+{
+    fill_uniform(storage, len, uniform->modification);
+    fill_uniform(storage + len, len, uniform->open_insertion);
+    fill_uniform(storage + 2 * len, len, uniform->open_deletion);
+    fill_uniform(storage + 3 * len, len, UNIFORM_ENDS);
+}
+
+void tally_rates_fill(phmm_rates *rates, double *storage, size_t len,
+                      const tally_tables *tables)
+{
+    phmm_rates_set_transitions(rates, &tables->uniform);
+    bind_arrays(rates, storage, len);
+    fill_arrays(storage, len, &tables->uniform);
 }
 
 tally_scratch *tally_scratch_create(void)
@@ -224,12 +222,13 @@ void tally_scratch_destroy(tally_scratch *scratch)
 }
 
 phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
-                  const tally_tables *tables, tally_scratch *scratch,
-                  accum *target, pairs *target_pairs)
+                  const phmm_rates *rates, const tally_tables *tables,
+                  tally_scratch *scratch, accum *target, pairs *target_pairs)
 {
     context ctx = {
         .read         = read,
         .ref          = ref,
+        .rates        = rates,
         .tables       = tables,
         .target       = target,
         .target_pairs = target_pairs,
