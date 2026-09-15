@@ -110,4 +110,6 @@ Two workflows run on every push to `main` and on every pull request against it.
 
 `CI` runs `make check` under gcc and clang on Linux and under clang on macOS, and `make lint` on Linux. The sanitizers are not among them, taking longer than the rest of the run put together; run those locally.
 
+On a push to `main`, and only once those pass, `CI` goes on to pin the `DasLab/cmuts-space` Dockerfile to the commit. It then waits for the space to rebuild and redeploy, and fails where that fails, so a change which breaks the space is reported here.
+
 `Documentation` renders the site, and fails if the generated docs are not current, rather than automatically updating them for you. A push to `main` deploys the rendered site as well.

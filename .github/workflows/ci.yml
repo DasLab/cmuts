@@ -33,3 +33,75 @@ jobs:
       - uses: ./.github/actions/dependencies
       - run: sudo apt-get install -y clang-tidy
       - run: make lint
+
+  # Bumps CMUTS_SHA in the DasLab/cmuts-space Dockerfile to the pushed commit,
+  # then waits for the deployment that bump triggers and fails if it does, so a
+  # cmuts push that breaks the space turns this workflow red. It runs after the
+  # checks above pass, so only a commit they accept reaches the space. The space
+  # repo's own sync workflow does the deploying; this job never touches the
+  # space directly. The credential is a GitHub App owned by DasLab and installed
+  # on DasLab/cmuts-space alone, with contents write and nothing else;
+  # SPACE_APP_ID and SPACE_APP_KEY hold its identifiers, and the token it mints
+  # lasts one hour.
+  pin:
+    name: Pin the space to this commit
+    needs: [check, lint]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pin-space
+      cancel-in-progress: false
+    steps:
+      - name: Mint a token for the space repo
+        id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.SPACE_APP_ID }}
+          private-key: ${{ secrets.SPACE_APP_KEY }}
+          owner: DasLab
+          repositories: cmuts-space
+
+      - name: Clone the space repo
+        run: |
+          GIT_LFS_SKIP_SMUDGE=1 git clone \
+            "https://x-access-token:${{ steps.token.outputs.token }}@github.com/DasLab/cmuts-space.git" space
+
+      - name: Update the pinned commit
+        id: pin
+        run: |
+          cd space
+          sed -i "s/^ARG CMUTS_SHA=.*/ARG CMUTS_SHA=${GITHUB_SHA}/" Dockerfile
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Dockerfile
+          if git diff --cached --quiet; then
+            echo "No changes"
+          else
+            git commit -m "Pin cmuts@${GITHUB_SHA::8}"
+            git pull --rebase origin main
+            git push origin main
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The pin commit triggers the space's Sync HF Space workflow, which
+      # smoke-tests, deploys, and smoke-tests again. Mirror its conclusion,
+      # so a downstream failure fails this run too.
+      - name: Wait for the space deployment
+        if: steps.pin.outputs.sha != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIN_SHA: ${{ steps.pin.outputs.sha }}
+        run: |
+          deadline=$((SECONDS + 3000))
+          while [ $SECONDS -lt $deadline ]; do
+            run=$(gh api "repos/DasLab/cmuts-space/actions/runs?head_sha=$PIN_SHA" \
+              --jq '.workflow_runs[0] | .status + " " + (.conclusion // "")' 2>/dev/null || true)
+            echo "${run:-no run yet}"
+            case "$run" in
+              "completed success") exit 0 ;;
+              completed*) echo "the space deployment failed"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          echo "timed out waiting for the space deployment"
+          exit 1
