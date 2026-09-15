@@ -20,6 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Check the tag against the version the programs report
+        run: bash scripts/check-tag.sh "$GITHUB_REF_NAME"
+
       - name: Cache the static dependencies
         uses: actions/cache@v4
         with:
@@ -62,6 +65,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Check the tag against the version the programs report
+        run: bash scripts/check-tag.sh "$GITHUB_REF_NAME"
+
       - name: Cache the static dependencies
         uses: actions/cache@v4
         with:
@@ -98,13 +104,21 @@ jobs:
     needs: [linux, macos]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
+
       - uses: actions/download-artifact@v4
         with:
           merge-multiple: true
+
+      # The release says what the changelog says, rather than repeating it by
+      # hand in the draft.
+      - name: Take the release notes from the changelog
+        run: bash scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > notes.md
 
       - name: Create the draft release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            --draft --verify-tag --title "$GITHUB_REF_NAME" cmuts-*.tar.gz
+            --draft --verify-tag --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md cmuts-*.tar.gz
