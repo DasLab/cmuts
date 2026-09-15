@@ -4,9 +4,9 @@ Fast, multithreaded pair-HMM counting of MaP-seq mutations.
 
 ## Installing
 
-Each [release](https://github.com/DasLab/cmuts/releases) carries static `cmuts` binaries for Linux (x86_64, aarch64) and macOS (arm64). These are self-contained and have no dependencies. Alternatively, you can [build from source](https://daslab.stanford.edu/cmuts/from-source), which may provide marginal speedups.
+Each [release](https://github.com/DasLab/cmuts/releases) carries static `cmuts` binaries for Linux (x86_64, aarch64) and macOS (arm64). These bundle htslib and HDF5, so no libraries need to be installed to run them. Alternatively, you can [build from source](https://daslab.stanford.edu/cmuts/from-source), which may provide marginal speedups.
 
-The bundled `cmuts-align` helper requires
+`cmuts align` calls separate programs, which must be on the `PATH`.
 
 - [minimap2](https://github.com/lh3/minimap2)
 - [samtools](https://github.com/samtools/samtools)
@@ -24,7 +24,7 @@ On Debian and Ubuntu:
 apt install minimap2 samtools fastp
 ```
 
-The bundled `cmuts-plot` helper requires a Python 3 installation with the `h5py`, `numpy`, and `plotly` packages.
+`cmuts plot` requires a Python 3 installation with the `h5py`, `numpy`, and `plotly` packages.
 
 ```sh
 python3 -m pip install h5py numpy plotly

@@ -415,6 +415,19 @@ static void format_set(const cli_option *opt, int value, char *out, size_t size)
     }
 }
 
+/* Returns the name of the choice that holds this value, or NULL if no choice holds it. A
+ * required option has no choice until the user gives one. */
+static const char *choice_name(const cli_option *opt, int value)
+{
+    for (const cli_choice *choice = opt->choices; choice && choice->name; choice++) {
+        if (choice->value == value) {
+            return choice->name;
+        }
+    }
+
+    return NULL;
+}
+
 /* Renders the note giving an option's default, read from the spec's defaults so
  * that the help cannot advertise a value the program does not use. */
 static void format_default(const cli_option *opt, const void *defaults,
@@ -450,13 +463,14 @@ static void format_default(const cli_option *opt, const void *defaults,
                 snprintf(out, size, " (default %s)", *(const char *const *)field);
             }
             break;
-        case OPT_ENUM:
-            for (const cli_choice *choice = opt->choices; choice->name; choice++) {
-                if (choice->value == *(const int *)field) {
-                    snprintf(out, size, " (default %s)", choice->name);
-                }
+        case OPT_ENUM: {
+            const char *name = choice_name(opt, *(const int *)field);
+
+            if (name) {
+                snprintf(out, size, " (default %s)", name);
             }
             break;
+        }
         case OPT_SET: {
             char names[SET_LIST_MAX];
 
@@ -754,11 +768,7 @@ static void print_json_default(FILE *out, const cli_option *opt, const void *def
         case OPT_INT:    fprintf(out, "%d", *(const int *)field);             break;
         case OPT_DOUBLE: print_json_double(out, *(const double *)field);      break;
         case OPT_ENUM:
-            for (const cli_choice *choice = opt->choices; choice->name; choice++) {
-                if (choice->value == *(const int *)field) {
-                    print_json_string(out, choice->name);
-                }
-            }
+            print_json_string(out, choice_name(opt, *(const int *)field));
             break;
         case OPT_SET: {
             char names[SET_LIST_MAX];
@@ -861,14 +871,14 @@ static cli_status check_required_options(const cli_spec *spec, const bool *seen)
     return CLI_OK;
 }
 
-/* Returns how many positional arguments the spec demands. A variadic one takes any
- * number but demands one where it is required. */
+/* Returns how many positional arguments the spec demands. A variadic one that is required
+ * demands one argument and accepts any number above that. */
 static int fewest_arguments(const cli_spec *spec)
 {
     int fewest = 0;
 
     for (size_t i = 0; i < spec->n_positionals; i++) {
-        if (!spec->positionals[i].variadic || spec->positionals[i].required) {
+        if (spec->positionals[i].required) {
             fewest++;
         }
     }
@@ -888,16 +898,22 @@ static void report_positionals(const cli_spec *spec, int given)
     for (size_t i = 0; i < spec->n_positionals; i++) {
         char form[METAVAR_MAX];
 
-        fprintf(stderr, "%s%s", i ? " " : "",
+        fprintf(stderr, spec->positionals[i].required ? "%s%s" : "%s[%s]", i ? " " : "",
                 positional_form(&spec->positionals[i], form, sizeof form));
     }
 
     fprintf(stderr, ", got %d argument%s\n", given, given == 1 ? "" : "s");
 }
 
+/* Stores one positional argument. An optional one that was not given is left at whatever
+ * the defaults hold. */
 static void store_positional(const cli_positional *pos, void *args, char **argv,
                              int at, int argc)
 {
+    if (at >= argc) {
+        return;
+    }
+
     if (!pos->variadic) {
         *(const char **)((char *)args + pos->offset) = argv[at];
         return;

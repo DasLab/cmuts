@@ -12,7 +12,7 @@ cmuts v2 is a rewrite of cmuts that makes it more accurate, portable, and, in sp
 
 **Fewer dependencies**: Switching to `pthreads` means `OMP`, `MPI`, and `HDF5-MPI` are all no longer needed, and that there is no separate parallel build to manage. The build system is reduced from `cmake` to `make`, and `htscodecs` is dropped, removing `autoconf`, `automake`, and `libtool` as transitive dependencies too.
 
-**No Python**: The Python package is gone. The pipeline is one C binary and one bash script; Python remains only in the test suite.
+**Minimal Python**: The Python package is gone. The pipeline is one C binary, alongside one Python script that serves the interactive report; Python is otherwise only in the test suite.
 
 ### Commands
 
@@ -29,7 +29,6 @@ cmuts v2 is a rewrite of cmuts that makes it more accurate, portable, and, in sp
 
 - `cmuts div` divides reactivity rates by a denatured control.
 - `cmuts csv` writes an output as a table of comma separated values, one row per position of each reference. It reads the bases and the length of every reference from the input. A FASTA is optional, and supplies the reference names.
-- `cmuts align` aligns through minimap2, so the long-read presets `map-ont`, `map-hifi`, and `map-pb` join short reads, and it merges paired-end mates through fastp before alignment.
 - `cmuts align` reads an unaligned BAM in place of a FASTQ, which is how PacBio and nanopore instruments deliver reads. It refuses a BAM that is already aligned, and names `cmuts hmm` as the subcommand that counts one.
 - `--pairwise` names the statistics to write. In v1 it was a flag on `cmuts core` that wrote raw joint counts for `cmuts normalize` to process; `cmuts hmm` now writes the finished statistics directly. Mutual information returns as a statistic before the 2.0.0 release.
 - `--params` reads the pair-HMM rates from a file, and `--dump-params` writes the defaults in the same form.
@@ -45,6 +44,7 @@ cmuts v2 is a rewrite of cmuts that makes it more accurate, portable, and, in sp
 - PHRED scores weight each base's contribution to the counts, in place of the `--min-phred` threshold, `--quality-window`, and the per-type filter toggles.
 - `--substitution-weight`, `--deletion-weight`, and `--insertion-weight`, each 0 to 1, set what each kind of difference counts towards the mutation total, in place of the binary `--exclude-mismatches`, `--exclude-deletions`, and `--include-insertions`.
 - `--strand` names the strands to keep, in place of `--no-reverse` and `--only-reverse`.
+- `cmuts align` uses `minimap2` instead of `bowtie2`, gaining presets `map-ont`, `map-hifi`, `map-pb`, `map-iclr`, and `lr:hq`, and it merges paired-end mates through fastp before alignment.
 - `cmuts hmm` requires coordinate-sorted input and refuses paired reads, whose mates would count their overlap twice. Merge mates before alignment, which `cmuts align` does for paired-end input.
 - Several alignment files given to one run are read as one merged alignment, where v1 wrote one group per input file. Replicates merge the same way.
 - `cmuts sub`, `cmuts div`, and `cmuts norm` read and write whole HDF5 files, where v1's `--experiment` named datasets inside one counts file.

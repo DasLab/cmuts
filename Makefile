@@ -105,13 +105,13 @@ NAME     := cmuts
 # linked into the one binary. A subcommand is its own sources, its own private
 # headers, and whichever members of the library it refers to; adding one means
 # adding a directory, a word here, and an entry point in the dispatcher.
-SUBCOMMANDS := hmm gen sub div norm csv
+SUBCOMMANDS := align hmm gen sub div norm csv
 APPS        := $(NAME) $(SUBCOMMANDS)
 
 # Programs that are scripts rather than sources. One directory each, holding a
 # .in that the version is substituted into, so that no copy of the version is
 # kept anywhere but the header.
-SCRIPTS  := cmuts-align cmuts-plot
+SCRIPTS  := cmuts-plot
 VERSION  := $(shell sed -n 's/.*CMUTS_VERSION "\(.*\)".*/\1/p' include/version.h)
 
 LIB      := $(BUILD)/lib$(NAME).a

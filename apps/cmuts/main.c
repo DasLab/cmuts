@@ -1,7 +1,7 @@
 /* main.c -- dispatch to a subcommand.
  *
- * align and plot are scripts installed alongside the binary, so they are run
- * through exec rather than called.
+ * plot is a script installed alongside the binary, so it is run through exec
+ * rather than called.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -30,7 +30,7 @@ typedef struct {
  * no entry point is a script installed alongside the binary, dispatched by
  * name as cmuts-NAME. */
 static const subcommand SUBCOMMANDS[] = {
-    { "align", NULL,       "align reads to a reference and sort the resulting alignments" },
+    { "align", align_main, "align reads to a reference and sort the resulting alignments" },
     { "hmm",   hmm_main,   "count MaP-seq mutations via the pair HMM" },
     { "sub",   sub_main,   "subtract an untreated background from an output" },
     { "div",   div_main,   "divide an output by a denatured control" },

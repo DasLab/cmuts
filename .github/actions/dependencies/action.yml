@@ -4,15 +4,18 @@ description: What cmuts is built against, and what its tests are run with.
 runs:
   using: composite
   steps:
-    # samtools is the oracle the tests compare against, not a build dependency.
-    - name: Install the libraries and samtools
+    # samtools is the oracle the tests compare against. minimap2 and fastp are
+    # what cmuts align runs, and the tests of it are skipped without them.
+    # None of the three is a build dependency.
+    - name: Install the libraries and the programs the tests run
       shell: bash
       run: |
         if [ "$RUNNER_OS" = macOS ]; then
-          brew install htslib hdf5 samtools
+          brew install htslib hdf5 samtools minimap2 fastp
         else
           sudo apt-get update
-          sudo apt-get install -y libhts-dev libhdf5-dev samtools pkg-config
+          sudo apt-get install -y libhts-dev libhdf5-dev samtools minimap2 fastp \
+                                  pkg-config
         fi
 
     - uses: astral-sh/setup-uv@v5

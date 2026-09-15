@@ -4,15 +4,15 @@
 
 ## Installing
 
-Each [release](https://github.com/DasLab/cmuts/releases) carries static `cmuts` binaries for Linux (x86_64, aarch64) and macOS (arm64). These are self-contained and have no dependencies. Alternatively, you can [build from source](from-source.md), which may provide marginal speedups.
+Each [release](https://github.com/DasLab/cmuts/releases) carries static `cmuts` binaries for Linux (x86_64, aarch64) and macOS (arm64). These bundle htslib and HDF5, so no libraries need to be installed to run them. Alternatively, you can [build from source](from-source.md), which may provide marginal speedups.
 
-The bundled `cmuts-align` helper requires
+`cmuts align` calls separate programs, which must be on the `PATH`.
 
 - [`minimap2`](https://github.com/lh3/minimap2)
 - [`samtools`](https://github.com/samtools/samtools)
 - [`fastp`](https://github.com/OpenGene/fastp) for paired-end input.
 
-The bundled `cmuts-plot` helper requires a Python 3 installation with the `h5py`, `numpy`, and `plotly` packages.
+`cmuts plot` requires a Python 3 installation with the `h5py`, `numpy`, and `plotly` packages.
 
 ::::{tab} macOS
 

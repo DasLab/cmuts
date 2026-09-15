@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 CMUTS = "cmuts"
 
+CMUTS_ALIGN = (CMUTS, "align")
 CMUTS_HMM = (CMUTS, "hmm")
 CMUTS_GEN = (CMUTS, "gen")
 CMUTS_SUB = (CMUTS, "sub")
@@ -119,6 +120,24 @@ def _options(given: dict) -> list:
         words += [option(name)] if value is True else [option(name), value]
 
     return words
+
+
+def _align_command(fasta, output, preset, reads, options: dict) -> list:
+    return [*CMUTS_ALIGN, "-f", fasta, "-o", output, "-x", preset,
+            *_options(options), *reads]
+
+
+def run_align(fasta, output, preset, *reads, **options):
+    """Aligns reads against a reference, returning the path the sorted
+    alignments were written to."""
+    execute(_align_command(fasta, output, preset, reads, options))
+
+    return output
+
+
+def try_align(fasta, output, preset, *reads, **options):
+    """Aligns reads whether or not the run succeeds."""
+    return attempt(_align_command(fasta, output, preset, reads, options))
 
 
 def _cmuts_command(data, output, options: dict) -> list:

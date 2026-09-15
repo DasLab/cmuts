@@ -8,6 +8,7 @@
 
 #pragma once
 
+int align_main(int argc, char **argv);
 int hmm_main(int argc, char **argv);
 int gen_main(int argc, char **argv);
 int sub_main(int argc, char **argv);

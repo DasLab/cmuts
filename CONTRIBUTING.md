@@ -2,7 +2,7 @@
 
 ## Setting up
 
-Beyond the build dependencies in the README, the tests need `samtools` on `PATH` and a Python environment holding the test dependencies:
+Beyond the build dependencies in the README, the tests need `samtools` on `PATH` and a Python environment holding the test dependencies. The tests of `cmuts align` additionally need `minimap2`, and `fastp` for the paired-end case; without them those tests are skipped.
 
 ```sh
 uv venv .venv
