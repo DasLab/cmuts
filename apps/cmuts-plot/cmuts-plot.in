@@ -71,6 +71,13 @@ CHANNEL_LABELS = {
 # unchecked at the start, and its checkbox turns it on.
 DEFAULT_CHANNELS = ("mismatches", "insertions", "deletions")
 
+# The named channel sets the page offers as chips. A chip checks exactly its
+# channels, and is active while exactly those channels are checked.
+CHANNEL_PRESETS = {
+    "DMS": ("mismatches",),
+    "SHAPE": ("mismatches", "deletions"),
+}
+
 # The character of each token of the sequence dataset, indexed by the token: the four
 # named bases, then the token for any other base. A negative token is padding. This must
 # match NUC_TOKEN_CHARS in include/nuc.h, which spells token 3 as T.
@@ -1035,6 +1042,17 @@ def stats_conditions_html(conditions, channels, ref):
     return f'<div class="stats-conditions">{cond_toggle_html(labels)}{blocks}</div>'
 
 
+def channel_presets_html():
+    """Gives one chip per named channel set."""
+    buttons = "".join(
+        f'<button type="button" class="preset-btn" '
+        f'data-preset="{",".join(channels)}">{escape(name)}</button>'
+        for name, channels in CHANNEL_PRESETS.items()
+    )
+
+    return f'<div class="preset-toggle">{buttons}</div>'
+
+
 def channel_toggle_html():
     """Gives one checkbox per channel, with the default channels checked."""
     boxes = "".join(
@@ -1044,7 +1062,8 @@ def channel_toggle_html():
         for c in CHANNELS
     )
 
-    return (f'<div class="channel-toggle"><span class="channel-label">'
+    return (f'<div class="channel-toggle">{channel_presets_html()}'
+            f'<span class="channel-label">'
             f'Reactivity from:</span>{boxes}</div>')
 
 
@@ -1241,6 +1260,12 @@ h3 { font-size: 1.05rem; font-weight: 650; color: var(--muted); text-transform: 
                  text-transform: uppercase; letter-spacing: 0.05em; }
 .channel { font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.35rem; }
 .channel input { accent-color: var(--accent); }
+.preset-toggle { display: inline-flex; border: 1px solid var(--border);
+                 border-radius: 7px; overflow: hidden; }
+.preset-btn { margin: 0; border: none; border-radius: 0; border-left: 1px solid var(--border);
+              background: var(--bg); color: var(--muted); font-size: 0.82rem; padding: 4px 12px; }
+.preset-btn:first-child { border-left: none; }
+.preset-btn.active { background: var(--accent); color: #fff; }
 .cond-toggle { display: inline-flex; margin: 0.1rem 0 0.4rem; border: 1px solid var(--border);
                border-radius: 7px; overflow: hidden; }
 .cond-btn { margin: 0; border: none; border-radius: 0; border-left: 1px solid var(--border);
@@ -1310,7 +1335,7 @@ REPORT_JS = """
     return REFS[CONDS.indexOf(cond)] || 1;
   }
 
-  // --- the channel checkboxes ------------------------------------------------
+  // --- the channel checkboxes and the preset chips ---------------------------
   function channels() {
     var boxes = document.querySelectorAll(".channel-toggle input");
     var on = [];
@@ -1319,15 +1344,47 @@ REPORT_JS = """
     }
     return on;
   }
-  function bindChannels() {
+  function setChannels(on) {
+    var boxes = document.querySelectorAll(".channel-toggle input");
+    for (var i = 0; i < boxes.length; i++) {
+      boxes[i].checked = on.indexOf(boxes[i].getAttribute("data-channel")) >= 0;
+    }
+  }
+  function syncPresets() {
+    var on = channels().sort().join(",");
+    var chips = document.querySelectorAll(".preset-btn");
+    for (var i = 0; i < chips.length; i++) {
+      var want = chips[i].getAttribute("data-preset").split(",").sort();
+      chips[i].classList.toggle("active", want.join(",") === on);
+    }
+  }
+  function onChannelChange() {
+    syncPresets();
+    refreshStats();
+    renderAll().then(colorSeqview);
+  }
+  function bindChannelBoxes() {
     var boxes = document.querySelectorAll(".channel-toggle input");
     for (var i = 0; i < boxes.length; i++) {
       boxes[i].addEventListener("change", function () {
         if (channels().length === 0) { this.checked = true; return; }
-        refreshStats();
-        renderAll().then(colorSeqview);
+        onChannelChange();
       });
     }
+  }
+  function bindChannelPresets() {
+    var chips = document.querySelectorAll(".preset-btn");
+    for (var i = 0; i < chips.length; i++) {
+      chips[i].addEventListener("click", function () {
+        setChannels(this.getAttribute("data-preset").split(","));
+        onChannelChange();
+      });
+    }
+  }
+  function bindChannels() {
+    bindChannelBoxes();
+    bindChannelPresets();
+    syncPresets();
   }
 
   // --- figure fetch + render -------------------------------------------------
