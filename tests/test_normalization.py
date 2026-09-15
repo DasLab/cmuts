@@ -23,7 +23,7 @@ from inputs import (
     not_hdf5,
     random_fields,
 )
-from normalization import NONE, OUTLIER, UBR, expected, norm, pool
+from normalization import OUTLIER, UBR, expected, norm, pool
 from outputs import (
     ALL_FIELDS,
     COUNTED,
@@ -93,7 +93,7 @@ def besides_the_norm(path) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("scheme", [UBR, OUTLIER, NONE])
+@pytest.mark.parametrize("scheme", [UBR, OUTLIER])
 def test_the_norm_matches_its_oracle(build, normalize, scheme):
     rates = build(covered(random_fields(seed=1)))
 
@@ -114,17 +114,6 @@ def test_a_constant_aggregate_is_its_own_norm(build, normalize):
                            rtol=TOLERANCE), name
 
 
-def test_the_none_scheme_leaves_the_rates_alone(build, normalize):
-    """The none scheme takes no norm, so every rate comes through as it went in
-    and the output records a norm of one."""
-    output, = normalize(build(covered(every_rate(0.25))), norm=NONE)
-
-    assert recorded(output) == 1.0
-
-    for name in RATE_FIELDS:
-        assert np.allclose(field_of(output, name), 0.25), name
-
-
 @pytest.mark.parametrize("scheme", [UBR, OUTLIER])
 def test_rates_supporting_no_norm_record_none(build, normalize, scheme):
     """A norm is a divisor, so rates that come to zero support none. The rates are
@@ -139,7 +128,7 @@ def test_rates_supporting_no_norm_record_none(build, normalize, scheme):
         assert np.allclose(field_of(output, name), 0.0), name
 
 
-@pytest.mark.parametrize("scheme", [UBR, OUTLIER, NONE])
+@pytest.mark.parametrize("scheme", [UBR, OUTLIER])
 @pytest.mark.parametrize("name", ALL_FIELDS)
 def test_each_field_follows_the_norm(build, normalize, scheme, name):
     rates = build(covered(random_fields(seed=2)), unmapped=17)

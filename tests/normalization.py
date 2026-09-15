@@ -1,11 +1,10 @@
 """Tools for computing what cmuts norm should divide by, and what dividing by
 it leaves.
 
-The ubr and outlier schemes pool the aggregate rate of every input and return
-one number; the none scheme pools nothing and returns one. The aggregate of a
-position is one less the product of the pooled channels' no-event rates,
-computed in float32. The norm is computed over the pool in float64, as the
-program does, so a caller should allow a tolerance.
+Both schemes pool the aggregate rate of every input and return one number.
+The aggregate of a position is one less the product of the pooled channels'
+no-event rates, computed in float32. The norm is computed over the pool in
+float64, as the program does, so a caller should allow a tolerance.
 """
 
 from __future__ import annotations
@@ -19,7 +18,6 @@ from outputs import (COVERAGE, ERROR_FIELDS, POOLED_RATE_FIELDS, RATE_FIELDS,
 
 UBR = "ubr"
 OUTLIER = "outlier"
-NONE = "none"
 
 # The rate the ubr norm sits at, as a percentile of the pool.
 UBR_PERCENTILE = 90
@@ -87,12 +85,8 @@ def _outlier_norm(values) -> float:
 
 
 def norm(scheme, inputs, min_coverage=MIN_COVERAGE) -> float:
-    """What cmuts norm should divide every input by. The none scheme takes no
-    norm at all. Where the pool supports no norm, the value is one and the
-    rates are left as they are."""
-    if scheme == NONE:
-        return 1.0
-
+    """What cmuts norm should divide every input by. Where the pool supports no
+    norm, the value is one and the rates are left as they are."""
     values = pool(scheme, inputs, min_coverage)
     found = _ubr_norm(values) if scheme == UBR else _outlier_norm(values)
 
