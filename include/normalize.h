@@ -10,10 +10,12 @@
 
 #include "format.h"
 
-/* How the norm is taken from the pooled rates. */
+/* How the norm is taken from the pooled rates. NORM_NONE takes no norm and divides by
+ * one, which writes each input to its own output unchanged. */
 typedef enum {
     NORM_UBR,
     NORM_OUTLIER,
+    NORM_NONE,
 } norm_scheme;
 
 typedef struct {

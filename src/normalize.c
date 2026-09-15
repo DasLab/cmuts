@@ -236,11 +236,34 @@ static double outlier_norm(rate_pool *p)
     return total / (double)((last - first) + 1);
 }
 
+/* Whether a scheme takes its norm from the rates, which is what the gathering pass is
+ * for. */
+static bool pools_rates(norm_scheme scheme)
+{
+    return scheme != NORM_NONE;
+}
+
+/* Gives the norm one scheme takes from the pool. NORM_NONE draws on nothing and comes
+ * to one, which leaves the rates as they are. */
+static double scheme_norm(norm_scheme scheme, rate_pool *p)
+{
+    switch (scheme) {
+        case NORM_UBR:
+            return ubr_norm(p);
+        case NORM_OUTLIER:
+            return outlier_norm(p);
+        case NORM_NONE:
+            break;
+    }
+
+    return 1.0;
+}
+
 /* Gives the norm the pooled rates come to, or NaN where they support none. A norm is a
  * divisor, so one that is not above zero is no norm at all. */
 static double pooled_norm(const normalize_config *cfg, rate_pool *p)
 {
-    double norm = cfg->scheme == NORM_UBR ? ubr_norm(p) : outlier_norm(p);
+    double norm = scheme_norm(cfg->scheme, p);
 
     return (isnan(norm) || norm <= 0.0) ? (double)NAN : norm;
 }
@@ -678,16 +701,18 @@ int normalize_run(const normalize_config *cfg, const char *program,
 {
     rate_pool p      = { 0 };
     int       status = -1;
+    bool      pools  = pools_rates(cfg->scheme);
     progress *bar;
 
     if (check_outputs(cfg, error, error_len) < 0) {
         return -1;
     }
 
-    /* One unit per input per pass: every input is read for the pool, then written. */
-    bar = progress_start(2 * (uint64_t)cfg->n_files);
+    /* One unit per input per pass: every input is read for the pool, then written. A
+     * scheme that pools nothing reads nothing, so it runs the writing pass alone. */
+    bar = progress_start((pools ? 2 : 1) * (uint64_t)cfg->n_files);
 
-    if (gather(cfg, writes, &p, bar, error, error_len) == 0) {
+    if (!pools || gather(cfg, writes, &p, bar, error, error_len) == 0) {
         status = write_outputs(cfg, program, writes, pooled_norm(cfg, &p),
                                bar, error, error_len);
     }

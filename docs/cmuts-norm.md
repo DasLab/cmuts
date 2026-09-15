@@ -20,16 +20,18 @@ Running the inputs separately gives each its own norm instead.
 
 ```sh
 cmuts norm -o apo-normalized.h5 apo.h5
-cmuts norm -o holo-normlized.h5 holo.h5
+cmuts norm -o holo-normalized.h5 holo.h5
 ```
 
 This is only suggested if the two experiments had significantly different conditions which are not directly comparable.
 
 ## Normalization Schemes
 
-All normalization schemes compute the norm using the aggregated mismatch, insertion, and deletion rates.
+Every scheme except `none` computes the norm from the aggregated mismatch, insertion, and deletion rates.
 
-`--norm ubr` (the default) takes the 90th percentile of the aggregate rate, counting only positions whose coverage exceeds `--min-coverage`. `--norm outlier` drops the highest 2% of the aggregate rate as outliers and averages what lies between there and the highest 10%; it reads no coverage, so `--min-coverage` does not apply to it.
+The default `ubr` scheme takes the 90th percentile of the aggregate rate, counting only positions whose coverage exceeds `--min-coverage`. The `outlier` scheme drops the highest 2% of the aggregate rate as outliers and averages what lies between there and the highest 10%; it reads no coverage, so `--min-coverage` does not apply to it.
+
+The `none` scheme records a norm of 1, so the rates come through unchanged. The output holds the same datasets as any other scheme. The scheme exists for programmatic workflows like the [Hugging Face space](https://huggingface.co/spaces/daslab-stanford/cmuts).
 
 A norm that comes out as zero, negative, or undefined is not applied and is recorded as NaN.
 
@@ -75,7 +77,7 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 
 | Option | Description |
 | --- | --- |
-| `--norm SCHEME` | how the norm is computed from the rates (ubr, outlier; default ubr) |
+| `--norm SCHEME` | how the norm is computed from the rates (ubr, outlier, none; default ubr) |
 | `--min-coverage N` | coverage a position needs before its rate sets the norm (ubr only) (default 500) |
 
 ### Information

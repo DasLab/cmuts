@@ -16,6 +16,7 @@
 static const cli_choice SCHEME_CHOICES[] = {
     { "ubr",     NORM_UBR     },
     { "outlier", NORM_OUTLIER },
+    { "none",    NORM_NONE    },
     { NULL,      0            },
 };
 
