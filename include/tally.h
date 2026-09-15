@@ -14,27 +14,27 @@
 
 /* The settings a caller supplies, in types a command line can write into directly. */
 typedef struct {
-    int         band;       /* reference positions the marginal may look either side of
-                               the CIGAR; 0 pins it to the path as written */
-    int         min_phred;  /* a base scoring below this takes the maximum error */
-    phmm_params params;     /* the rates the model runs on */
+    int                band;       /* reference positions the marginal may look either
+                                      side of the CIGAR; 0 pins it to the path as
+                                      written */
+    int                min_phred;  /* a base scoring below this takes the maximum error */
+    phmm_uniform_rates uniform;    /* the rates that fill every base of every reference */
 } tally_config;
 
 tally_config tally_defaults(void);
 
-/* What the tally works from besides the read itself: the quality table, the model,
- * and the per-base profile. Built once from the config and never written afterwards,
- * so every worker may share one. The profile is seeded uniform from the params, at
- * one value per base of the longest reference so it serves every reference. */
+/* What the tally works from besides the read itself: the quality table and the model's
+ * rates. Built once from the config and never written afterwards, so every worker may
+ * share one. The rates are filled from the uniform rates, with ends equal at every base,
+ * at one value per base of the longest reference so they serve every reference. */
 typedef struct {
-    phred        quality;
-    phmm         model;
-    phmm_profile profile;  /* the per-base rates the marginal reads */
-    double      *rates;    /* owned storage behind the profile's arrays */
-    int          band;     /* the half-width every row of the marginal is given */
+    phred       quality;
+    phmm_rates  rates;    /* the rates the marginal reads */
+    double     *storage;  /* owned storage behind the arrays of rates */
+    int         band;     /* the half-width every row of the marginal is given */
 } tally_tables;
 
-/* Returns 0, or -1 when the profile cannot be allocated. cap is the longest
+/* Returns 0, or -1 when the arrays of rates cannot be allocated. cap is the longest
  * reference, in bases. */
 int  tally_tables_build(tally_tables *tables, const tally_config *config, size_t cap);
 void tally_tables_free(tally_tables *tables);

@@ -43,7 +43,7 @@ int hmm_main(int argc, char **argv)
     /* The file names the rates it changes, so what is read stands over the defaults the
      * spec filled in. */
     if (args.params_path &&
-        params_read(args.params_path, &args.pipeline.tally_config.params,
+        params_read(args.params_path, &args.pipeline.tally_config.uniform,
                     error, sizeof error) < 0) {
         fprintf(stderr, "%s: %s\n", spec.program, error);
         return 2;

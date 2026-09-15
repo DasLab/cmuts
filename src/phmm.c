@@ -68,8 +68,7 @@ typedef struct {
  * the rest and is the only writer, so every other function takes a const
  * context. */
 typedef struct {
-    const phmm            *model;
-    const phmm_profile    *profile;
+    const phmm_rates      *rates;
     const phred           *quality;
     const cm_bam_record   *read;
     const cm_fasta_record *ref;
@@ -87,18 +86,18 @@ typedef struct {
 /* The model                                                                 */
 /* ------------------------------------------------------------------------ */
 
-void phmm_build(phmm *model, const phmm_params *params)
+void phmm_rates_set_transitions(phmm_rates *rates, const phmm_uniform_rates *uniform)
 {
-    model->match_to_insertion     = 1.0 - params->extend_insertion;
-    model->match_to_deletion      = 1.0 - params->extend_deletion;
-    model->insertion_to_insertion = params->extend_insertion;
-    model->deletion_to_deletion   = params->extend_deletion;
+    rates->match_to_insertion     = 1.0 - uniform->extend_insertion;
+    rates->match_to_deletion      = 1.0 - uniform->extend_deletion;
+    rates->insertion_to_insertion = uniform->extend_insertion;
+    rates->deletion_to_deletion   = uniform->extend_deletion;
 }
 
-/* Returns a profile value at a 0-based base, clamped to the reference. A clamped read
+/* Returns a per-base rate at a 0-based base, clamped to the reference. A clamped read
  * serves a cell outside the reference, whose terms a zero emission clears, so the
  * value itself never matters. */
-static double profile_at(const double *values, size_t len, hts_pos_t b)
+static double rate_at(const double *values, size_t len, hts_pos_t b)
 {
     if (b < 0) {
         b = 0;
@@ -122,8 +121,8 @@ typedef struct {
 static decision decision_at(const context *ctx, hts_pos_t b)
 {
     size_t len            = ctx->ref->len;
-    double open_insertion = profile_at(ctx->profile->open_insertion, len, b);
-    double open_deletion  = profile_at(ctx->profile->open_deletion, len, b - 1);
+    double open_insertion = rate_at(ctx->rates->open_insertion, len, b);
+    double open_deletion  = rate_at(ctx->rates->open_deletion, len, b - 1);
 
     return (decision){
         .match_to_match     = 1.0 - open_insertion - open_deletion,
@@ -228,7 +227,7 @@ static cell_terms terms_at(const context *ctx, const row_terms *row,
         return row->neither;
     }
 
-    return terms_from(ctx->profile->modification[j - 1], theirs == row->ours,
+    return terms_from(ctx->rates->modification[j - 1], theirs == row->ours,
                       row->error);
 }
 
@@ -336,17 +335,20 @@ static bool within(hts_pos_t k, hts_pos_t width)
 /* Forward                                                                   */
 /* ------------------------------------------------------------------------ */
 
-/* Fills the first row of the forward pass and returns its total. The
- * alignment starts at each position of the row with equal chance, and never
- * in a deletion. */
+/* Fills the first row of the forward pass and returns its total. Cell k steps
+ * only to the pairing of reference base position_of(k), so it takes that base's
+ * value in ends. The alignment never begins in a deletion. The total rescales
+ * the row, so the values need not sum to one. */
 static double forward_first_row(const context *ctx)
 {
     band_cell *row   = row_of(ctx, 0);
     hts_pos_t  width = width_at(ctx, 0);
-    double     share = 1.0 / (double)width;
     double     total = 0.0;
 
     for (hts_pos_t k = 0; k < width; k++) {
+        double share = rate_at(ctx->rates->ends, ctx->ref->len,
+                               position_of(ctx, 0, k));
+
         row[k][STATE_MATCH]     = share;
         row[k][STATE_INSERTION] = 0.0;
         row[k][STATE_DELETION]  = 0.0;
@@ -372,17 +374,17 @@ typedef struct {
 
 static descent descent_into(const context *ctx, size_t i)
 {
-    const phmm *model = ctx->model;
-    double      scale = ctx->scratch->scale[i - 1];
+    const phmm_rates *rates = ctx->rates;
+    double            scale = ctx->scratch->scale[i - 1];
 
     return (descent){
         .above                  = read_row_of(ctx, i - 1),
         .width                  = width_at(ctx, i - 1),
         .shift                  = shift_between(ctx, i - 1, i),
         .scale                  = scale,
-        .match_to_insertion     = model->match_to_insertion * scale
+        .match_to_insertion     = rates->match_to_insertion * scale
                                 * UNINFORMATIVE,
-        .insertion_to_insertion = model->insertion_to_insertion * scale
+        .insertion_to_insertion = rates->insertion_to_insertion * scale
                                 * UNINFORMATIVE,
     };
 }
@@ -421,11 +423,11 @@ static double inserted_from(const descent *step, hts_pos_t k)
 }
 
 /* Returns a cell's deletion state, stepped from the cell to its left. */
-static double deleted_from(const phmm *model, double left_match,
+static double deleted_from(const phmm_rates *rates, double left_match,
                            double left_deletion)
 {
-    return model->match_to_deletion    * left_match
-         + model->deletion_to_deletion * left_deletion;
+    return rates->match_to_deletion    * left_match
+         + rates->deletion_to_deletion * left_deletion;
 }
 
 /* Returns whether row i can hold a deletion. */
@@ -444,22 +446,22 @@ static bool insertions_live(const context *ctx, size_t i)
  * for a row with a row above it. */
 static double forward_row(const context *ctx, size_t i)
 {
-    const phmm *model      = ctx->model;
-    descent     step       = descent_into(ctx, i);
-    band_cell  *row        = row_of(ctx, i);
-    cell_terms *terms      = terms_of(ctx, i);
-    row_terms   each       = row_terms_of(ctx, i);
-    hts_pos_t   width      = width_at(ctx, i);
-    bool        deletions  = deletions_live(ctx, i);
-    bool        insertions = insertions_live(ctx, i);
+    const phmm_rates *rates      = ctx->rates;
+    descent           step       = descent_into(ctx, i);
+    band_cell        *row        = row_of(ctx, i);
+    cell_terms       *terms      = terms_of(ctx, i);
+    row_terms         each       = row_terms_of(ctx, i);
+    hts_pos_t         width      = width_at(ctx, i);
+    bool              deletions  = deletions_live(ctx, i);
+    bool              insertions = insertions_live(ctx, i);
     /* The cell to the left, held in locals so each step of the deletion chain
      * does not wait on the preceding store. */
-    double      left_match    = 0.0;
-    double      left_deletion = 0.0;
+    double            left_match    = 0.0;
+    double            left_deletion = 0.0;
     /* One running sum per state keeps the addition chains short. */
-    double      total_paired   = 0.0;
-    double      total_inserted = 0.0;
-    double      total_deleted  = 0.0;
+    double            total_paired   = 0.0;
+    double            total_inserted = 0.0;
+    double            total_deleted  = 0.0;
 
     for (hts_pos_t k = 0; k < width; k++) {
         hts_pos_t j = position_of(ctx, i, k);
@@ -471,7 +473,7 @@ static double forward_row(const context *ctx, size_t i)
         paired   = paired_from(&step, &into, k, terms[k].emission);
         inserted = insertions ? inserted_from(&step, k) : 0.0;
         deleted  = deletions && k > 0
-                 ? deleted_from(model, left_match, left_deletion)
+                 ? deleted_from(rates, left_match, left_deletion)
                  : 0.0;
 
         row[k][STATE_MATCH]     = paired;
@@ -681,21 +683,21 @@ static double inserted_below(const ascent *below, hts_pos_t k)
 
 /* Forms a cell's three states from the transitions out of it. The steps into the
  * pairing below carry the decision at that pairing's base. */
-static void backward_cell(const phmm *model, const decision *below, bool insertions,
-                          double pairing, double inserted, double deleted,
-                          double *cell)
+static void backward_cell(const phmm_rates *rates, const decision *below,
+                          bool insertions, double pairing, double inserted,
+                          double deleted, double *cell)
 {
     cell[STATE_MATCH] = below->match_to_match     * pairing
-                      + model->match_to_insertion * inserted
-                      + model->match_to_deletion  * deleted;
+                      + rates->match_to_insertion * inserted
+                      + rates->match_to_deletion  * deleted;
 
     cell[STATE_INSERTION] = insertions
                           ? below->insertion_to_match     * pairing
-                          + model->insertion_to_insertion * inserted
+                          + rates->insertion_to_insertion * inserted
                           : 0.0;
 
     cell[STATE_DELETION] = below->deletion_to_match    * pairing
-                         + model->deletion_to_deletion * deleted;
+                         + rates->deletion_to_deletion * deleted;
 }
 
 /* Fills the last row of the backward pass and accumulates it. The alignment ends on
@@ -729,15 +731,15 @@ static void backward_last_row(const context *ctx)
  * with a row above and a row below. */
 static void backward_row(const context *ctx, size_t i)
 {
-    const phmm  *model      = ctx->model;
-    band_cell   *row        = backward_row_of(ctx, i);
-    ascent       below      = ascent_into(ctx, i);
-    accumulation acc        = accumulation_of(ctx, i);
-    hts_pos_t    width      = width_at(ctx, i);
-    bool         insertions = insertions_live(ctx, i);
+    const phmm_rates *rates      = ctx->rates;
+    band_cell        *row        = backward_row_of(ctx, i);
+    ascent            below      = ascent_into(ctx, i);
+    accumulation      acc        = accumulation_of(ctx, i);
+    hts_pos_t         width      = width_at(ctx, i);
+    bool              insertions = insertions_live(ctx, i);
     /* The cell to the right, held in a local so each step of the deletion
      * chain does not wait on the preceding store. */
-    double       right_deletion = 0.0;
+    double            right_deletion = 0.0;
 
     for (hts_pos_t k = width; k-- > 0; ) {
         decision into     = decision_at(ctx, position_of(ctx, i, k));
@@ -746,7 +748,7 @@ static void backward_row(const context *ctx, size_t i)
         double   deleted  = k + 1 < width ? right_deletion : 0.0;
         double   cell[N_STATES];
 
-        backward_cell(model, &into, insertions, pairing, inserted, deleted, cell);
+        backward_cell(rates, &into, insertions, pairing, inserted, deleted, cell);
 
         row[k][STATE_MATCH]     = cell[STATE_MATCH];
         row[k][STATE_INSERTION] = cell[STATE_INSERTION];
@@ -765,10 +767,10 @@ static void backward_row(const context *ctx, size_t i)
  * passes_agree to check. */
 static void backward_first_row(const context *ctx)
 {
-    const phmm *model = ctx->model;
-    band_cell  *row   = backward_row_of(ctx, 0);
-    ascent      below = ascent_into(ctx, 0);
-    hts_pos_t   width = width_at(ctx, 0);
+    const phmm_rates *rates = ctx->rates;
+    band_cell        *row   = backward_row_of(ctx, 0);
+    ascent            below = ascent_into(ctx, 0);
+    hts_pos_t         width = width_at(ctx, 0);
 
     for (hts_pos_t k = 0; k < width; k++) {
         decision into     = decision_at(ctx, position_of(ctx, 0, k));
@@ -776,7 +778,7 @@ static void backward_first_row(const context *ctx)
         double   inserted = inserted_below(&below, k);
 
         row[k][STATE_MATCH] = into.match_to_match       * pairing
-                            + model->match_to_insertion * inserted;
+                            + rates->match_to_insertion * inserted;
 
         /* Neither run reaches the row before the first placed base. */
         row[k][STATE_INSERTION] = 0.0;
@@ -1080,14 +1082,12 @@ void phmm_window_bounds(const phmm_window *window, size_t len,
     }
 }
 
-phmm_status phmm_run(const phmm *model, const phmm_profile *profile,
-                     const phred *quality, const cm_bam_record *read,
-                     const cm_fasta_record *ref, const int *half,
-                     phmm_scratch *scratch, phmm_window *out)
+phmm_status phmm_run(const phmm_rates *rates, const phred *quality,
+                     const cm_bam_record *read, const cm_fasta_record *ref,
+                     const int *half, phmm_scratch *scratch, phmm_window *out)
 {
     context ctx = {
-        .model   = model,
-        .profile = profile,
+        .rates   = rates,
         .quality = quality,
         .read    = read,
         .ref     = ref,

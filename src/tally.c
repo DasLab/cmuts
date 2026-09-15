@@ -13,6 +13,13 @@
 
 #include "filter.h"
 
+/* The arrays of phmm_rates, each one value per base. */
+#define PER_BASE_ARRAYS 4
+
+/* A value of ends equal at every base, which leaves every placement of a read's 5'-most
+ * paired base within its band equally likely. */
+#define UNIFORM_ENDS 1.0
+
 typedef struct {
     const cm_bam_record   *read;
     const cm_fasta_record *ref;
@@ -119,9 +126,8 @@ static phmm_status marginalize(const context *ctx, tally_scratch *scratch)
         return PHMM_NO_MEMORY;
     }
 
-    status = phmm_run(&ctx->tables->model, &ctx->tables->profile,
-                      &ctx->tables->quality, ctx->read, ctx->ref, half,
-                      scratch->phmm, &window);
+    status = phmm_run(&ctx->tables->rates, &ctx->tables->quality, ctx->read, ctx->ref,
+                      half, scratch->phmm, &window);
 
     if (status == PHMM_OK) {
         add_window(ctx, &window);
@@ -143,11 +149,11 @@ tally_config tally_defaults(void)
     return (tally_config){
         .band      = PHMM_DEFAULT_BAND,
         .min_phred = 0,
-        .params    = phmm_defaults(),
+        .uniform   = phmm_uniform_defaults(),
     };
 }
 
-/* Fills one profile array with a single rate. */
+/* Fills one array of rates with a single rate. */
 static void fill_uniform(double *values, size_t cap, double rate)
 {
     for (size_t i = 0; i < cap; i++) {
@@ -157,33 +163,35 @@ static void fill_uniform(double *values, size_t cap, double rate)
 
 int tally_tables_build(tally_tables *tables, const tally_config *config, size_t cap)
 {
-    const phmm_params *params = &config->params;
-    double            *rates  = malloc(3 * cap * sizeof *rates);
+    const phmm_uniform_rates *uniform = &config->uniform;
+    double                   *storage = malloc(PER_BASE_ARRAYS * cap * sizeof *storage);
 
-    if (!rates) {
+    if (!storage) {
         return -1;
     }
 
     phred_build(&tables->quality, config->min_phred);
-    phmm_build(&tables->model, params);
-    tables->band  = config->band;
-    tables->rates = rates;
+    phmm_rates_set_transitions(&tables->rates, uniform);
+    tables->band    = config->band;
+    tables->storage = storage;
 
-    tables->profile.modification   = rates;
-    tables->profile.open_insertion = rates + cap;
-    tables->profile.open_deletion  = rates + 2 * cap;
+    tables->rates.modification   = storage;
+    tables->rates.open_insertion = storage + cap;
+    tables->rates.open_deletion  = storage + 2 * cap;
+    tables->rates.ends           = storage + 3 * cap;
 
-    fill_uniform(rates, cap, params->modification);
-    fill_uniform(rates + cap, cap, params->open_insertion);
-    fill_uniform(rates + 2 * cap, cap, params->open_deletion);
+    fill_uniform(storage, cap, uniform->modification);
+    fill_uniform(storage + cap, cap, uniform->open_insertion);
+    fill_uniform(storage + 2 * cap, cap, uniform->open_deletion);
+    fill_uniform(storage + 3 * cap, cap, UNIFORM_ENDS);
 
     return 0;
 }
 
 void tally_tables_free(tally_tables *tables)
 {
-    free(tables->rates);
-    tables->rates = NULL;
+    free(tables->storage);
+    tables->storage = NULL;
 }
 
 tally_scratch *tally_scratch_create(void)

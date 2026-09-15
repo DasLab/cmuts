@@ -13,9 +13,9 @@
  * is refused, so a rate is never read from part of one. */
 #define PARAMS_LINE_MAX 256
 
-phmm_params phmm_defaults(void)
+phmm_uniform_rates phmm_uniform_defaults(void)
 {
-    return (phmm_params){
+    return (phmm_uniform_rates){
         .open_deletion    = 1e-3,
         .open_insertion   = 2e-4,
         .extend_deletion  = 0.35,
@@ -30,7 +30,7 @@ typedef struct {
     size_t      offset;
 } params_entry;
 
-#define ENTRY(key, field) { key, offsetof(phmm_params, field) }
+#define ENTRY(key, field) { key, offsetof(phmm_uniform_rates, field) }
 
 static const params_entry ENTRIES[] = {
     ENTRY("deletion-open",     open_deletion),
@@ -42,14 +42,14 @@ static const params_entry ENTRIES[] = {
 
 #define N_ENTRIES ((int)(sizeof ENTRIES / sizeof *ENTRIES))
 
-static double *field_of(phmm_params *params, const params_entry *entry)
+static double *field_of(phmm_uniform_rates *uniform, const params_entry *entry)
 {
-    return (double *)((char *)params + entry->offset);
+    return (double *)((char *)uniform + entry->offset);
 }
 
-static double value_of(const phmm_params *params, const params_entry *entry)
+static double value_of(const phmm_uniform_rates *uniform, const params_entry *entry)
 {
-    return *(const double *)((const char *)params + entry->offset);
+    return *(const double *)((const char *)uniform + entry->offset);
 }
 
 static const params_entry *entry_named(const char *name)
@@ -107,9 +107,10 @@ static char *content_of(char *line, size_t size)
     return skip_blanks(line);
 }
 
-/* Reads one rate into params. The line holds a name and a value separated by blanks. */
-static int read_entry(char *line, phmm_params *params, const char *path, int number,
-                      char *error, size_t error_len)
+/* Reads one rate into the uniform rates. The line holds a name and a value separated by
+ * blanks. */
+static int read_entry(char *line, phmm_uniform_rates *uniform, const char *path,
+                      int number, char *error, size_t error_len)
 {
     char  *name  = line;
     char  *value = line;
@@ -141,18 +142,18 @@ static int read_entry(char *line, phmm_params *params, const char *path, int num
         return fail(error, error_len, path, number, "the value is not a number");
     }
 
-    *field_of(params, entry) = parsed;
+    *field_of(uniform, entry) = parsed;
 
     return 0;
 }
 
 /* Returns whether every rate is a probability, and whether the two opening rates leave
  * anything for a pairing. */
-static int check(const phmm_params *params, const char *path, char *error,
+static int check(const phmm_uniform_rates *uniform, const char *path, char *error,
                  size_t error_len)
 {
     for (int i = 0; i < N_ENTRIES; i++) {
-        double rate = value_of(params, &ENTRIES[i]);
+        double rate = value_of(uniform, &ENTRIES[i]);
 
         if (!(rate >= 0.0 && rate <= 1.0)) {
             snprintf(error, error_len, "%s: %s is not between 0 and 1",
@@ -161,7 +162,7 @@ static int check(const phmm_params *params, const char *path, char *error,
         }
     }
 
-    if (params->open_deletion + params->open_insertion > 1.0) {
+    if (uniform->open_deletion + uniform->open_insertion > 1.0) {
         snprintf(error, error_len,
                  "%s: deletion-open and insertion-open sum above 1", path);
         return -1;
@@ -170,12 +171,13 @@ static int check(const phmm_params *params, const char *path, char *error,
     return 0;
 }
 
-int params_read(const char *path, phmm_params *params, char *error, size_t error_len)
+int params_read(const char *path, phmm_uniform_rates *uniform, char *error,
+                size_t error_len)
 {
-    char        line[PARAMS_LINE_MAX];
-    phmm_params read   = *params;
-    int         number = 0;
-    FILE       *file   = fopen(path, "r");
+    char               line[PARAMS_LINE_MAX];
+    phmm_uniform_rates read   = *uniform;
+    int                number = 0;
+    FILE              *file   = fopen(path, "r");
 
     if (!file) {
         /* Single-threaded, since this is reached before any thread is started.
@@ -212,7 +214,7 @@ int params_read(const char *path, phmm_params *params, char *error, size_t error
         return -1;
     }
 
-    *params = read;
+    *uniform = read;
 
     return 0;
 }
@@ -221,18 +223,18 @@ int params_read(const char *path, phmm_params *params, char *error, size_t error
 /* Writing                                                                   */
 /* ------------------------------------------------------------------------ */
 
-static void params_write(const phmm_params *params, FILE *out)
+static void params_write(const phmm_uniform_rates *uniform, FILE *out)
 {
     fprintf(out, "# The rates the pair HMM runs on, as --params reads them.\n");
 
     for (int i = 0; i < N_ENTRIES; i++) {
-        fprintf(out, "%-18s %g\n", ENTRIES[i].name, value_of(params, &ENTRIES[i]));
+        fprintf(out, "%-18s %g\n", ENTRIES[i].name, value_of(uniform, &ENTRIES[i]));
     }
 }
 
 void params_dump_defaults(FILE *out)
 {
-    phmm_params defaults = phmm_defaults();
+    phmm_uniform_rates defaults = phmm_uniform_defaults();
 
     params_write(&defaults, out);
 }
