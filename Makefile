@@ -139,6 +139,22 @@ endif
 
 all: $(BINS)
 
+# What a variant was last built with. Every object depends on it, so that a
+# build under other flags -- static archives in place of the libraries
+# pkg-config found, say -- recompiles rather than linking what the last one
+# left in the same directory.
+CONFIG      := $(BUILD)/.config
+CONFIG_TEXT := $(CC) $(CFLAGS) $(LIBS)
+
+# Rewritten only where it differs, so that a repeated build with the same flags
+# leaves the objects alone.
+$(CONFIG): FORCE
+	@mkdir -p $(@D)
+	@printf '%s\n' '$(CONFIG_TEXT)' | cmp -s - "$@" \
+	  || printf '%s\n' '$(CONFIG_TEXT)' > "$@"
+
+FORCE:
+
 # Objects first and the archive last, which is the order a linker resolves in.
 $(BUILD)/$(NAME): $(APP_OBJ) $(LIB)
 	$(CC) $^ -o $@ $(LIBS)
@@ -157,11 +173,11 @@ $(LIB): $(LIB_OBJ)
 
 # An app's own directory is on its include path, so a header beside its
 # source is private to it and one in include/ is shared.
-$(BUILD)/apps/%.o: apps/%.c
+$(BUILD)/apps/%.o: apps/%.c $(CONFIG)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -I$(<D) -c $< -o $@
 
-$(BUILD)/src/%.o: src/%.c
+$(BUILD)/src/%.o: src/%.c $(CONFIG)
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -227,6 +243,6 @@ lint: compile_commands.json
 clean:
 	rm -rf $(BUILD_ROOT) compile_commands.json
 
-.PHONY: all check clean docs install lint serve site uninstall
+.PHONY: all check clean docs FORCE install lint serve site uninstall
 
 -include $(DEP)
