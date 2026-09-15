@@ -9,7 +9,7 @@ Aligning raw sequencing data against a reference library.
 - The sequenced reads, either in FASTQ or unaligned BAM format
 - The FASTA library
 
-As well as both `minimap2` and `samtools` on the path, and `fastp` if processing paired-end input.
+As well as both `minimap2` and `samtools` on the path, and `vsearch` if processing paired-end input.
 
 ## Usage
 
@@ -58,7 +58,7 @@ The output header contains the MD5 checksum of each reference in the `M5` field 
 
 ## Merging
 
-Paired-end input is merged with `fastp` before alignment. A pair whose mates do not overlap cannot be merged and is discarded. `fastp` reports how many pairs it merged on standard error.
+Paired-end input is merged with `vsearch` before alignment. A pair whose mates do not overlap cannot be merged and is discarded. `vsearch` reports how many pairs it merged on standard error.
 
 ## Sorting
 

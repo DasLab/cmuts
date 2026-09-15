@@ -25,7 +25,7 @@ typedef struct {
 } mapping_config;
 
 /* Aligns the reads against the reference library and writes the sorted alignments to the
- * output file. minimap2 and samtools must be on PATH, and fastp as well when the reads
+ * output file. minimap2 and samtools must be on PATH, and vsearch as well when the reads
  * arrive as a pair of files.
  *
  * One process may run one alignment at a time, because the file that holds the alignments

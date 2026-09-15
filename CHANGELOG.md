@@ -49,7 +49,7 @@ cmuts v2 is a rewrite of cmuts. The pipeline is one binary. The counting runs on
 - `--strand` names the strands to keep, in place of `--no-reverse` and `--only-reverse`.
 - `-j` sets how many threads count reads, in place of `--threads`, which ran that many `MPI` processes.
 - `cmuts sub` clips a negative reactivity to zero unless `--keep-negative` is given, in place of `--clip-below` and `--clip-above`.
-- `cmuts align` uses `minimap2` instead of `bowtie2`, gaining presets `sr`, `map-ont`, `map-hifi`, `map-pb`, `map-iclr`, and `lr:hq`. It merges paired-end mates through fastp before alignment.
+- `cmuts align` uses `minimap2` instead of `bowtie2`, gaining presets `sr`, `map-ont`, `map-hifi`, `map-pb`, `map-iclr`, and `lr:hq`. It merges paired-end mates through `vsearch` before alignment.
 - `cmuts hmm` requires coordinate-sorted input and refuses paired reads. Merge the mates before alignment, as `cmuts align` does for paired-end input.
 - Several alignment files given to one run are read as one merged alignment, where v1 wrote one group per input file. Replicates merge the same way.
 - `cmuts sub`, `cmuts div`, and `cmuts norm` read and write whole HDF5 files, where v1's `--experiment` named datasets inside one counts file.

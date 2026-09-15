@@ -10,14 +10,14 @@ Each [release](https://github.com/DasLab/cmuts/releases) carries static `cmuts` 
 
 - [`minimap2`](https://github.com/lh3/minimap2)
 - [`samtools`](https://github.com/samtools/samtools)
-- [`fastp`](https://github.com/OpenGene/fastp) for paired-end input.
+- [`vsearch`](https://github.com/torognes/vsearch) for paired-end input.
 
 `cmuts plot` requires a Python 3 installation with the `h5py`, `numpy`, and `plotly` packages.
 
 ::::{tab} macOS
 
 ```sh
-brew install minimap2 samtools fastp
+brew install minimap2 samtools vsearch
 python3 -m pip install h5py numpy plotly
 ```
 
@@ -27,7 +27,7 @@ Install [Homebrew](https://brew.sh) first if you don't have it.
 ::::{tab} Debian & Ubuntu
 
 ```sh
-apt install minimap2 samtools fastp
+apt install minimap2 samtools vsearch
 python3 -m pip install h5py numpy plotly
 ```
 

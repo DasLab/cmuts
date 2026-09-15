@@ -1,6 +1,6 @@
 /* mapping.c -- the alignment run, from the reads to a sorted output file.
  *
- * The reads reach minimap2 directly, or through fastp when they arrive as a pair of
+ * The reads reach minimap2 directly, or through vsearch when they arrive as a pair of
  * files, or through this process when they arrive as a BAM file. The alignments that
  * minimap2 writes pass through this process on their way to samtools sort, which is where
  * the reference checksums and the read names are corrected.
@@ -37,8 +37,11 @@
  * ends it must together fit in 255 bytes. */
 #define NAME_LIMIT 254
 
-/* fastp accepts no more threads than this. */
-#define MERGE_THREADS_MAX 16
+/* The merger accepts no more threads than this. */
+#define MERGE_THREADS_MAX 1024
+
+/* The highest quality the merger may read and write. A SAM file holds no higher value. */
+#define MERGE_QUALITY_MAX "93"
 
 /* Room for the decimal form of a thread count. */
 #define THREADS_TEXT_MAX 16
@@ -100,7 +103,7 @@ static int fail_with_errno(const char *what, char *error, size_t error_len)
 static const char *const TOOLS[] = { "minimap2", "samtools" };
 
 /* The program that merges a pair of mates, which a run over one file does not need. */
-static const char MERGE_TOOL[] = "fastp";
+static const char MERGE_TOOL[] = "vsearch";
 
 static int check_tools(const mapping_config *cfg, char *error, size_t error_len)
 {
@@ -503,9 +506,12 @@ static void write_memory(char *out, size_t size, size_t mebibytes)
     snprintf(out, size, "%zuM", mebibytes);
 }
 
-/* fastp merges each pair of mates into one read, so that the region where the two mates
- * overlap counts one molecule once. cmuts hmm refuses an unmerged pair for that reason. A
- * pair that cannot be merged is discarded, and the reports are not kept. */
+/* Merges each pair of mates into one read, so that the overlap counts one molecule once.
+ * cmuts hmm refuses an unmerged pair for this reason. A pair whose mates do not overlap is
+ * discarded.
+ *
+ * A merged base carries a quality from both mates. cmuts hmm reads that quality as the
+ * chance the call is right. */
 static int spawn_merger(const mapping_config *cfg, int out_fd, pid_t *pid,
                         char *error, size_t error_len)
 {
@@ -515,12 +521,14 @@ static int spawn_merger(const mapping_config *cfg, int out_fd, pid_t *pid,
                   cfg->threads < MERGE_THREADS_MAX ? cfg->threads : MERGE_THREADS_MAX);
 
     const char *const argv[] = {
-        MERGE_TOOL, "--merge", "--stdout",
-        "--in1", cfg->reads_paths[0],
-        "--in2", cfg->reads_paths[1],
-        "--thread", threads,
-        "--json", "/dev/null",
-        "--html", "/dev/null",
+        MERGE_TOOL,
+        "--fastq_mergepairs", cfg->reads_paths[0],
+        "--reverse", cfg->reads_paths[1],
+        "--fastqout", "-",
+        "--fastq_allowmergestagger",
+        "--fastq_qmax", MERGE_QUALITY_MAX,
+        "--fastq_qmaxout", MERGE_QUALITY_MAX,
+        "--threads", threads,
         NULL,
     };
 
@@ -807,7 +815,7 @@ static void *unpack(void *given)
 
 /* Every child process of one run, and the thread that supplies the aligner's input. */
 typedef struct {
-    pid_t     merger;  /* fastp, or 0 when the reads are not a pair */
+    pid_t     merger;  /* vsearch, or 0 when the reads are not a pair */
     pid_t     aligner;
     pid_t     sorter;
     pthread_t thread;
@@ -826,7 +834,7 @@ static void close_if_open(int *fd)
 /* Starts the stage that supplies the aligner's input, and returns the file the aligner
  * reads.
  *
- * A pair of files is merged by fastp. A BAM file is unpacked by the thread above. A
+ * A pair of files is merged by vsearch. A BAM file is unpacked by the thread above. A
  * single FASTQ file is passed to the aligner by name, so no stage is started and its
  * standard input is unchanged. Nothing is left open where this fails. */
 static int start_source(const mapping_config *cfg, const reads_format *formats,

@@ -26,8 +26,8 @@ DATASET = "plain"
 PRESET = "sr"
 
 # How much of a read each mate holds when one read is written out as a pair.
-# Anything above half leaves the two mates overlapping, which fastp needs to
-# merge them.
+# Anything above half leaves the two mates overlapping, which the merger
+# requires.
 MATE_SHARE = 0.7
 
 pytestmark = pytest.mark.skipif(shutil.which("minimap2") is None,
@@ -174,8 +174,8 @@ def test_the_same_reads_align_alike_from_a_bam_and_from_a_fastq(
     assert samtools("view", from_bam) == samtools("view", aligned)
 
 
-@pytest.mark.skipif(shutil.which("fastp") is None,
-                    reason="fastp is required to merge a pair of mates")
+@pytest.mark.skipif(shutil.which("vsearch") is None,
+                    reason="vsearch is required to merge a pair of mates")
 def test_a_pair_of_mates_is_merged_and_aligned(alignable, tmp_path):
     fasta, reads = alignable
     first, second = split_into_mates(reads, tmp_path)
