@@ -15,11 +15,11 @@
 filter_config filter_defaults(void)
 {
     return (filter_config){
-        .min_mapq           = DEFAULT_MIN_MAPQ,
-        .strand             = FILTER_STRAND_FORWARD | FILTER_STRAND_REVERSE,
-        .min_length         = FILTER_LENGTH_UNBOUNDED,
-        .max_length         = FILTER_LENGTH_UNBOUNDED,
-        .drop_supplementary = false,
+        .min_mapq       = DEFAULT_MIN_MAPQ,
+        .strand         = FILTER_STRAND_FORWARD | FILTER_STRAND_REVERSE,
+        .alignment_type = FILTER_ALIGNMENT_PRIMARY | FILTER_ALIGNMENT_SUPPLEMENTARY,
+        .min_length     = FILTER_LENGTH_UNBOUNDED,
+        .max_length     = FILTER_LENGTH_UNBOUNDED,
     };
 }
 
@@ -90,13 +90,15 @@ bool filter_is_supplementary(const cm_bam_record *read)
     return (read->flag & BAM_FSUPPLEMENTARY) != 0;
 }
 
-/* Returns whether a further piece of a split read is kept. A piece covers reference the
- * rest of the read does not where the read is longer than the reference, and covers the
- * same reference again where the read holds more than one copy of it. The setting follows
- * from which of the two the library yields. */
-static bool supplementary_accepted(const filter_config *filter, const cm_bam_record *read)
+/* Returns whether the filter keeps this type of record. Supplementary records add
+ * coverage when reads are longer than the reference. When a read contains several
+ * copies of the reference, they cover the same positions more than once. */
+static bool alignment_accepted(const filter_config *filter, const cm_bam_record *read)
 {
-    return !filter->drop_supplementary || !filter_is_supplementary(read);
+    int own = filter_is_supplementary(read) ? FILTER_ALIGNMENT_SUPPLEMENTARY
+                                            : FILTER_ALIGNMENT_PRIMARY;
+
+    return (filter->alignment_type & own) != 0;
 }
 
 bool filter_accepts(const filter_config *filter, const cm_bam_record *read)
@@ -104,7 +106,7 @@ bool filter_accepts(const filter_config *filter, const cm_bam_record *read)
     return sequence_present(read) &&
            placement_present(read) &&
            !is_secondary(read) &&
-           supplementary_accepted(filter, read) &&
+           alignment_accepted(filter, read) &&
            mapping_quality_accepted(filter, read) &&
            strand_accepted(filter, read) &&
            length_accepted(filter, read);

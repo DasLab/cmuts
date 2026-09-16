@@ -35,6 +35,12 @@ static const cli_choice STRAND_CHOICES[] = {
     { NULL,      0,                     NULL },
 };
 
+static const cli_choice ALIGNMENT_CHOICES[] = {
+    { "primary",       FILTER_ALIGNMENT_PRIMARY,       NULL },
+    { "supplementary", FILTER_ALIGNMENT_SUPPLEMENTARY, NULL },
+    { NULL,            0,                              NULL },
+};
+
 static void dump_layout(FILE *out)
 {
     fmt_dump_layout(out, "cmuts hmm", &CMUTS_HMM_WRITES);
@@ -115,14 +121,6 @@ static const cli_option OPTIONS[] = {
         .maximum     = CLI_UNBOUNDED,
     },
     {
-        .group  = "Filtering",
-        .name   = "drop-supplementary",
-        .type   = OPT_FLAG,
-        .offset = offsetof(cli_args, pipeline.filter_config.drop_supplementary),
-        .help   = "reject all but the primary piece of a split read",
-        .label  = "Drop Supplementary Alignments",
-    },
-    {
         .group   = "Filtering",
         .name    = "strand",
         .key     = 's',
@@ -132,6 +130,16 @@ static const cli_option OPTIONS[] = {
         .help    = "reject alignments not on these strands",
         .label   = "Strands",
         .choices = STRAND_CHOICES,
+    },
+    {
+        .group   = "Filtering",
+        .name    = "alignment-type",
+        .type    = OPT_SET,
+        .offset  = offsetof(cli_args, pipeline.filter_config.alignment_type),
+        .metavar = "TYPES",
+        .help    = "reject alignments not of these types",
+        .label   = "Alignment Types",
+        .choices = ALIGNMENT_CHOICES,
     },
 
     {

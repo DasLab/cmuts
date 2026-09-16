@@ -322,7 +322,7 @@ RDPU_LINE = pc.sample_colorscale("RdPu", [0.8])[0]
 
 PROFILE_COLOR = "#c51b8a"
 
-# The color and dash of the line the coverage plot draws at the primary read count.
+# The coverage plot marks the primary read count with this line style.
 READS_LINE_COLOR = "black"
 READS_LINE_DASH = "dot"
 OVERLAY_COLORS = ["#c51b8a", "#2c7fb8", "#31a354", "#e6550d", "#756bb1", "#636363"]
@@ -564,8 +564,8 @@ def plot_difference(a, b):
 
 
 def plot_coverage(coverage, reads):
-    """Returns a coverage profile, with a dotted line at the number of primary
-    reads counted over the same references."""
+    """Returns a coverage profile. A dotted line marks the number of primary
+    reads over the references that the profile includes."""
     fig = line_figure(coverage, "Residue", "Coverage", axis_lines=True)
 
     if reads is not None and reads > 0:

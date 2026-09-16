@@ -94,8 +94,8 @@ Unmapped reads are rejected by nature of having no reference to compute mutation
 | `-q, --min-mapq N` | reject alignments below this mapping quality (0 to 254; default 20) |
 | `--min-length N` | reject reads shorter than this (default: no limit) |
 | `--max-length N` | reject reads longer than this (default: no limit) |
-| `--drop-supplementary` | reject all but the primary piece of a split read |
 | `-s, --strand STRANDS` | reject alignments not on these strands (forward, reverse; default forward,reverse) |
+| `--alignment-type TYPES` | reject alignments not of these types (primary, supplementary; default primary,supplementary) |
 
 ### Counting
 
