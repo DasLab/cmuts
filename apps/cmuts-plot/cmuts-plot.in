@@ -322,8 +322,9 @@ RDPU_LINE = pc.sample_colorscale("RdPu", [0.8])[0]
 
 PROFILE_COLOR = "#c51b8a"
 
-# The color of the line the coverage plot draws at the read count.
-READS_LINE_COLOR = "#9aa0a6"
+# The color and dash of the line the coverage plot draws at the primary read count.
+READS_LINE_COLOR = "black"
+READS_LINE_DASH = "dot"
 OVERLAY_COLORS = ["#c51b8a", "#2c7fb8", "#31a354", "#e6550d", "#756bb1", "#636363"]
 
 # Correlation heatmaps use a symmetric-log color scale around zero.
@@ -562,14 +563,13 @@ def plot_difference(a, b):
     return fig
 
 
-def plot_coverage(coverage, records):
-    """Returns the coverage of one reference, with a dashed line at the number
-    of alignment records counted there. A record places at most one base at each
-    position, so the coverage stays at or below that line."""
+def plot_coverage(coverage, reads):
+    """Returns a coverage profile, with a dotted line at the number of primary
+    reads counted over the same references."""
     fig = line_figure(coverage, "Residue", "Coverage", axis_lines=True)
 
-    if records is not None and records > 0:
-        fig.add_hline(y=records, line_dash="dash", line_width=1,
+    if reads is not None and reads > 0:
+        fig.add_hline(y=reads, line_dash=READS_LINE_DASH, line_width=1,
                       line_color=READS_LINE_COLOR)
 
     return fig
@@ -711,36 +711,19 @@ def render_heatmap(handle, ref, channels):
     return plot_reactivity_heatmap(reactivity)
 
 
-def counted_records(handle):
-    """Returns the alignment records counted at each reference, which are its
-    reads together with the further pieces of the reads split across it."""
-    primary = dataset(handle, PRIMARY_COUNTED)
-
-    if primary is None:
-        return None
-
-    supplementary = dataset(handle, SUPPLEMENTARY_COUNTED)
-    total = np.asarray(primary, dtype=float)
-
-    if supplementary is not None:
-        total = total + np.asarray(supplementary, dtype=float)
-
-    return total
-
-
 def render_coverage(handle, ref, channels):
     coverage = dataset(handle, COVERAGE)
-    records = counted_records(handle)
+    reads = dataset(handle, PRIMARY_COUNTED)
 
     if coverage is None:
         return None
 
     if ref is None:
-        return plot_coverage(coverage.mean(0),
-                             None if records is None else float(records.mean()))
+        return plot_coverage(coverage.sum(0),
+                             None if reads is None else float(reads.sum()))
 
     return plot_coverage(coverage[ref],
-                         None if records is None else float(records[ref]))
+                         None if reads is None else float(reads[ref]))
 
 
 def render_reads(handle, ref, channels):
