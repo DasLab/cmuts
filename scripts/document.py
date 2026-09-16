@@ -175,7 +175,7 @@ def note(option: dict) -> str:
     notes = []
 
     if option["choices"]:
-        notes.append(", ".join(option["choices"]))
+        notes.append(", ".join(accepted_choices(option)))
 
     if option["minimum"] is not None and option["maximum"] is not None:
         notes.append(f"{option['minimum']} to {option['maximum']}")
@@ -191,6 +191,14 @@ def note(option: dict) -> str:
         notes.append(f"default {option['default']}")
 
     return f" ({'; '.join(notes)})" if notes else ""
+
+
+def accepted_choices(option: dict) -> list:
+    """Returns every choice the option takes, with the name of the empty set last
+    when the option accepts it."""
+    none = [option["none_choice"]] if option["none_choice"] else []
+
+    return option["choices"] + none
 
 
 def condition(applies_when: dict) -> str:

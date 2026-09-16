@@ -18,14 +18,12 @@
 static const cli_choice VERIFY_CHOICES[] = {
     { "name",     REFSEQ_VERIFY_NAME,     NULL },
     { "checksum", REFSEQ_VERIFY_CHECKSUM, NULL },
-    { "none",     0,                      NULL },
     { NULL,       0,                      NULL },
 };
 
 static const cli_choice PAIRWISE_CHOICES[] = {
     { "correlation", PAIRS_CORRELATION, NULL },
     { "conditional", PAIRS_CONDITIONAL, NULL },
-    { "none",        0,                 NULL },
     { NULL,          0,                 NULL },
 };
 
@@ -75,13 +73,14 @@ static const cli_option OPTIONS[] = {
         .help   = "replace the output file if it already exists",
     },
     {
-        .group   = "Input and output",
-        .name    = "verify",
-        .type    = OPT_SET,
-        .offset  = offsetof(cli_args, pipeline.verify),
-        .metavar = "CHECKS",
-        .help    = "identity checks to make against the FASTA",
-        .choices = VERIFY_CHOICES,
+        .group        = "Input and output",
+        .name         = "verify",
+        .type         = OPT_SET,
+        .offset       = offsetof(cli_args, pipeline.verify),
+        .metavar      = "CHECKS",
+        .help         = "identity checks to make against the FASTA",
+        .choices      = VERIFY_CHOICES,
+        .accepts_none = true,
     },
 
     {
@@ -165,14 +164,16 @@ static const cli_option OPTIONS[] = {
         .maximum = PHRED_MAX,
     },
     {
-        .group   = "Counting",
-        .name    = "pairwise",
-        .type    = OPT_SET,
-        .offset  = offsetof(cli_args, pipeline.pairwise),
-        .metavar = "STATS",
-        .help    = "write these statistics of how often two positions are modified together",
-        .label   = "Pairwise Statistics",
-        .choices = PAIRWISE_CHOICES,
+        .group        = "Counting",
+        .name         = "pairwise",
+        .type         = OPT_SET,
+        .offset       = offsetof(cli_args, pipeline.pairwise),
+        .metavar      = "STATS",
+        .help         = "write these statistics of how often two positions are modified "
+                        "together",
+        .label        = "Pairwise Statistics",
+        .choices      = PAIRWISE_CHOICES,
+        .accepts_none = true,
     },
     {
         .group   = "Counting",

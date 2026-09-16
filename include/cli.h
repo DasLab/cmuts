@@ -18,6 +18,9 @@
  * destination can hold. */
 #define CLI_UNBOUNDED LONG_MAX
 
+/* An OPT_SET option that accepts the empty set takes this name for it. */
+#define CLI_NONE "none"
+
 /* The type of a row's destination. It must match the C type of the field at that offset,
  * the value being written through a pointer of exactly this type. */
 typedef enum {
@@ -27,9 +30,11 @@ typedef enum {
     OPT_INT,
     OPT_DOUBLE,  /* bounds are still written as whole numbers */
     OPT_ENUM,    /* one of a named set of values; stores an int */
-    OPT_SET,     /* any number of a named set of values; stores them OR'd together, so
-                    each choice must name a bit of its own. A choice of zero is the empty
-                    subset and cannot be combined with any other. */
+    /* An OPT_SET option takes one or more values from a named set, and stores them OR'd
+     * together. Each choice must therefore have a nonzero value with a bit of its own.
+     * An option that sets accepts_none also takes CLI_NONE, which stores zero. CLI_NONE
+     * cannot be combined with any other choice. */
+    OPT_SET,
 } cli_type;
 
 /* One accepted value of an OPT_ENUM or OPT_SET option. A choice list ends with a NULL
@@ -84,6 +89,7 @@ typedef struct {
     size_t            count_offset;
     size_t            capacity;
     const cli_choice *choices;  /* accepted values, for OPT_ENUM and OPT_SET */
+    bool              accepts_none;  /* An OPT_SET option takes CLI_NONE if this is true. */
     cli_condition     applies_when;  /* the condition this option applies under; empty
                                         where it applies always */
     cli_action        action;

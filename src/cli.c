@@ -160,6 +160,10 @@ static void print_choices(FILE *out, const cli_option *opt)
     for (const cli_choice *choice = opt->choices; choice->name; choice++) {
         fprintf(out, "%s%s", choice == opt->choices ? "" : "|", choice->name);
     }
+
+    if (opt->accepts_none) {
+        fprintf(out, "|%s", CLI_NONE);
+    }
 }
 
 /* Returns the choice named by the first len characters, or NULL where the option holds
@@ -210,32 +214,42 @@ static size_t next_name(const char *list, const char **rest)
     return comma ? (size_t)(comma - list) : strlen(list);
 }
 
-/* Parses every choice a comma-separated list names, OR'd together.
- *
- * The empty subset is a choice worth zero. Asking for it alongside another is a
- * contradiction and not a preference between the two, so it is refused. */
+/* Returns whether the first len characters name the empty set, for an option that
+ * accepts it. */
+static bool names_none(const cli_option *opt, const char *text, size_t len)
+{
+    return opt->accepts_none && strlen(CLI_NONE) == len
+           && strncmp(CLI_NONE, text, len) == 0;
+}
+
+/* Parses every choice in a comma-separated list, and writes them OR'd together to out.
+ * It refuses a list that holds CLI_NONE and another choice, because the two contradict
+ * each other. */
 static int parse_set(const cli_option *opt, const char *text, const char *program,
                      int *out)
 {
     int  chosen = 0;
-    bool empty  = false;
+    bool none   = false;
 
     for (const char *token = text; token; ) {
         const char *rest = NULL;
+        size_t      len  = next_name(token, &rest);
         int         choice;
 
-        if (parse_choice_n(opt, token, next_name(token, &rest), program, &choice) < 0) {
+        if (names_none(opt, token, len)) {
+            none = true;
+        } else if (parse_choice_n(opt, token, len, program, &choice) < 0) {
             return -1;
+        } else {
+            chosen |= choice;
         }
 
-        empty  |= choice == 0;
-        chosen |= choice;
-        token   = rest;
+        token = rest;
     }
 
-    if (empty && chosen != 0) {
-        fprintf(stderr, "%s: --%s: \"%s\" combines the empty choice with another\n",
-                program, opt->name, text);
+    if (none && chosen != 0) {
+        fprintf(stderr, "%s: --%s: \"%s\" combines %s with another choice\n",
+                program, opt->name, text, CLI_NONE);
         return -1;
     }
 
@@ -462,20 +476,23 @@ static void print_condition_choices(FILE *out, const cli_condition *cond)
 /* Help                                                                      */
 /* ------------------------------------------------------------------------ */
 
-/* Returns the names of every choice a set holds, comma separated, which is the spelling
- * the option itself takes. */
+/* Writes the names of every choice a set holds to out, comma separated, as the option
+ * itself takes them. It writes CLI_NONE for the empty set of an option that accepts it. */
 static void format_set(const cli_option *opt, int value, char *out, size_t size)
 {
     size_t used = 0;
 
     out[0] = '\0';
 
-    for (const cli_choice *choice = opt->choices; choice->name; choice++) {
-        bool held = choice->value ? (value & choice->value) == choice->value
-                                  : value == 0;
-        int  n;
+    if (value == 0 && opt->accepts_none) {
+        snprintf(out, size, "%s", CLI_NONE);
+        return;
+    }
 
-        if (!held) {
+    for (const cli_choice *choice = opt->choices; choice->name; choice++) {
+        int n;
+
+        if ((value & choice->value) != choice->value) {
             continue;
         }
 
@@ -821,6 +838,12 @@ static void print_json_choice_labels(FILE *out, const cli_option *opt)
     fputc('}', out);
 }
 
+/* Prints the name of the empty set, or null for an option that does not accept it. */
+static void print_json_none_choice(FILE *out, const cli_option *opt)
+{
+    print_json_string(out, opt->accepts_none ? CLI_NONE : NULL);
+}
+
 /* JSON has no spelling for a value that is not finite, so such a default is described as
  * having no default. */
 static void print_json_double(FILE *out, double value)
@@ -926,6 +949,7 @@ static void print_json_option(FILE *out, const cli_option *opt, const void *defa
     fputs(",\n      \"unset_label\": ", out); print_json_string(out, opt->unset_label);
     fputs(",\n      \"choices\": ", out);     print_json_choices(out, opt);
     fputs(",\n      \"choice_labels\": ", out); print_json_choice_labels(out, opt);
+    fputs(",\n      \"none_choice\": ", out); print_json_none_choice(out, opt);
     fputs(",\n      \"applies_when\": ", out); print_json_condition(out, &opt->applies_when);
     fputs(",\n      \"default\": ", out);     print_json_default(out, opt, defaults);
     fputs(",\n", out);                        print_json_bounds(out, opt);
