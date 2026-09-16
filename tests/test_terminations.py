@@ -17,7 +17,7 @@ import numpy as np
 
 from alignments import drop_adjacent_indels
 from filters import UNFILTERED
-from outputs import COUNTED, COVERAGE, TERMINATION_RATE, field_of
+from outputs import PRIMARY_COUNTED, COVERAGE, TERMINATION_RATE, field_of
 from programs import run_cmuts
 
 # How far a summed posterior may stand from the whole number of reads. Each
@@ -33,7 +33,7 @@ def test_terminations_at_band_zero_sum_to_the_reads_counted(data, falsifiable, t
     output = run_cmuts(pinned, tmp_path / "out.h5", band=0, min_depth=0, **UNFILTERED)
     rate = field_of(output, TERMINATION_RATE)
     coverage = field_of(output, COVERAGE)
-    counted = field_of(output, COUNTED)
+    counted = field_of(output, PRIMARY_COUNTED)
 
     falsifiable(np.any(np.asarray(counted) > 0))
 

@@ -91,17 +91,33 @@ const fmt_field FMT_FIELDS[FMT_N_FIELDS] = {
         .stored  = FMT_U64,
         .fill    = 0.0,
     },
-    [FMT_READS] = {
-        .name    = "reads/counted",
+    [FMT_PRIMARY_COUNTED] = {
+        .name    = "reads/primary/counted",
         .detail  = "The number of reads contributing to the rates.",
         .row     = shape_none,
         .per_ref = true,
         .stored  = FMT_U64,
         .fill    = 0.0,
     },
-    [FMT_REJECTED] = {
-        .name    = "reads/rejected",
+    [FMT_PRIMARY_REJECTED] = {
+        .name    = "reads/primary/rejected",
         .detail  = "The number of reads aligned to the reference but not contributing to the rates.",
+        .row     = shape_none,
+        .per_ref = true,
+        .stored  = FMT_U64,
+        .fill    = 0.0,
+    },
+    [FMT_SUPPLEMENTARY_COUNTED] = {
+        .name    = "reads/supplementary/counted",
+        .detail  = "The number of further pieces of split reads contributing to the rates.",
+        .row     = shape_none,
+        .per_ref = true,
+        .stored  = FMT_U64,
+        .fill    = 0.0,
+    },
+    [FMT_SUPPLEMENTARY_REJECTED] = {
+        .name    = "reads/supplementary/rejected",
+        .detail  = "The number of further pieces of split reads aligned to the reference but not contributing to the rates.",
         .row     = shape_none,
         .per_ref = true,
         .stored  = FMT_U64,

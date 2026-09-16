@@ -28,7 +28,7 @@ from inputs import (
 )
 from outputs import (
     ALL_FIELDS,
-    COUNTED,
+    PRIMARY_COUNTED,
     COVERAGE,
     ERROR_FIELDS,
     FIELDS,
@@ -459,14 +459,14 @@ def test_each_field_follows_its_rule_at_any_shape(program, build, tmp_path,
 
 @combiners
 def test_counts_stay_whole_and_exact(program, build, tmp_path):
-    inputs = [build({COUNTED: LARGE_COUNT}, unmapped=LARGE_COUNT),
-              build({COUNTED: 1}, unmapped=1)]
+    inputs = [build({PRIMARY_COUNTED: LARGE_COUNT}, unmapped=LARGE_COUNT),
+              build({PRIMARY_COUNTED: 1}, unmapped=1)]
 
     output = program.run(inputs, tmp_path / "out.h5")
 
-    assert np.all(field_of(output, COUNTED) == LARGE_COUNT + 1)
+    assert np.all(field_of(output, PRIMARY_COUNTED) == LARGE_COUNT + 1)
     assert field_of(output, UNMAPPED) == LARGE_COUNT + 1
-    assert field_of(output, COUNTED).dtype == np.dtype("u8")
+    assert field_of(output, PRIMARY_COUNTED).dtype == np.dtype("u8")
 
 
 @combiners

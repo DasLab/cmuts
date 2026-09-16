@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from inputs import CAP, N_REFS, random_fields, random_values
-from outputs import COUNTED, ERROR_FIELDS, RATE_FIELDS, UNMAPPED, field_of
+from outputs import PRIMARY_COUNTED, ERROR_FIELDS, RATE_FIELDS, UNMAPPED, field_of
 from programs import run_divide, run_subtract
 
 # The error rounds at every step of the division and the root, so it is compared
@@ -95,12 +95,12 @@ def test_an_uncertain_control_widens_the_error(build, tmp_path, rate, error):
 
 
 def test_a_control_is_counted_in_the_totals(build, divide):
-    treated = build({COUNTED: 3}, unmapped=11)
-    control = build({COUNTED: 5}, unmapped=13)
+    treated = build({PRIMARY_COUNTED: 3}, unmapped=11)
+    control = build({PRIMARY_COUNTED: 5}, unmapped=13)
 
     output = divide(treated, control)
 
-    assert np.all(field_of(output, COUNTED) == 8)
+    assert np.all(field_of(output, PRIMARY_COUNTED) == 8)
     assert field_of(output, UNMAPPED) == 24
 
 
@@ -178,13 +178,13 @@ def test_the_two_programs_add_the_errors_in_quadrature(build, tmp_path, rate, er
 
 
 def test_every_count_is_summed_over_all_three_inputs(build, tmp_path):
-    treated = build({COUNTED: 3}, unmapped=11)
-    untreated = build({COUNTED: 5}, unmapped=13)
-    control = build({COUNTED: 7}, unmapped=17)
+    treated = build({PRIMARY_COUNTED: 3}, unmapped=11)
+    untreated = build({PRIMARY_COUNTED: 5}, unmapped=13)
+    control = build({PRIMARY_COUNTED: 7}, unmapped=17)
 
     output = _normalized(tmp_path, treated, untreated, control)
 
-    assert np.all(field_of(output, COUNTED) == 15)
+    assert np.all(field_of(output, PRIMARY_COUNTED) == 15)
     assert field_of(output, UNMAPPED) == 41
 
 

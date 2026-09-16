@@ -87,11 +87,32 @@ The number of reads in which each base was present.
 The reference sequence: 0 for A, 1 for C, 2 for G, 3 for T, 4 for any other base, and -1 for every column past the reference's end.
 
 {.field}
-### `reads/counted`
+### `reads/primary/counted`
 
 **Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
 
 The number of reads contributing to the rates.
+
+{.field}
+### `reads/primary/rejected`
+
+**Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
+
+The number of reads aligned to the reference but not contributing to the rates.
+
+{.field}
+### `reads/supplementary/counted`
+
+**Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
+
+The number of further pieces of split reads contributing to the rates.
+
+{.field}
+### `reads/supplementary/rejected`
+
+**Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
+
+The number of further pieces of split reads aligned to the reference but not contributing to the rates.
 
 {.field}
 ### `reads/lengths`
@@ -99,13 +120,6 @@ The number of reads contributing to the rates.
 **Shape** `(n, 2l)` · **Type** `uint64` · **Fill** `0`
 
 The number of reads contributing to the rates, binned by length.
-
-{.field}
-### `reads/rejected`
-
-**Shape** `(n,)` · **Type** `uint64` · **Fill** `0`
-
-The number of reads aligned to the reference but not contributing to the rates.
 
 {.field}
 ### `reads/unmapped`

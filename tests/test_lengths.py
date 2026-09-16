@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from oracle import reference_lengths, rows_by_name, samtools_length_histogram
-from outputs import COUNTED, LENGTHS, field_of
+from outputs import PRIMARY_COUNTED, LENGTHS, field_of
 from programs import run_cmuts
 
 # Unfiltered, and above the mapping quality of most reads the generator
@@ -81,7 +81,7 @@ def test_a_read_longer_than_the_range_is_counted_only_by_the_total(data, falsifi
     # Cast to signed, so that a row holding more reads than were counted gives
     # a negative difference. The unsigned difference would wrap to the top of
     # the range.
-    counted = field_of(output, COUNTED).astype(np.int64)
+    counted = field_of(output, PRIMARY_COUNTED).astype(np.int64)
     written = field_of(output, LENGTHS).sum(axis=1).astype(np.int64)
 
     missing = counted - written

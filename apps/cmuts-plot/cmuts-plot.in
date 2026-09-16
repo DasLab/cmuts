@@ -53,9 +53,11 @@ except ImportError as error:
 
 COVERAGE = "coverage"
 SEQUENCE = "sequence"
-READS = "reads/counted"
+PRIMARY_COUNTED = "reads/primary/counted"
+PRIMARY_REJECTED = "reads/primary/rejected"
+SUPPLEMENTARY_COUNTED = "reads/supplementary/counted"
+SUPPLEMENTARY_REJECTED = "reads/supplementary/rejected"
 LENGTHS = "reads/lengths"
-REJECTED = "reads/rejected"
 UNMAPPED = "reads/unmapped"
 PAIRWISE_CORRELATION = "pairwise/correlation"
 PAIRWISE_CONDITIONAL = "pairwise/conditional"
@@ -559,14 +561,14 @@ def plot_difference(a, b):
     return fig
 
 
-def plot_coverage(coverage, reads):
-    """Returns the coverage of one reference, with a dashed line at the read
-    count. Coverage counts the bases every alignment places, so a read with two
-    alignments can raise it above that count."""
+def plot_coverage(coverage, records):
+    """Returns the coverage of one reference, with a dashed line at the number
+    of alignment records counted there. A record places at most one base at each
+    position, so the coverage stays at or below that line."""
     fig = line_figure(coverage, "Residue", "Coverage", axis_lines=True)
 
-    if reads is not None and reads > 0:
-        fig.add_hline(y=reads, line_dash="dash", line_width=1,
+    if records is not None and records > 0:
+        fig.add_hline(y=records, line_dash="dash", line_width=1,
                       line_color=READS_LINE_COLOR)
 
     return fig
@@ -708,23 +710,40 @@ def render_heatmap(handle, ref, channels):
     return plot_reactivity_heatmap(reactivity)
 
 
+def counted_records(handle):
+    """Returns the alignment records counted at each reference, which are its
+    reads together with the further pieces of the reads split across it."""
+    primary = dataset(handle, PRIMARY_COUNTED)
+
+    if primary is None:
+        return None
+
+    supplementary = dataset(handle, SUPPLEMENTARY_COUNTED)
+    total = np.asarray(primary, dtype=float)
+
+    if supplementary is not None:
+        total = total + np.asarray(supplementary, dtype=float)
+
+    return total
+
+
 def render_coverage(handle, ref, channels):
     coverage = dataset(handle, COVERAGE)
-    reads = dataset(handle, READS)
+    records = counted_records(handle)
 
     if coverage is None:
         return None
 
     if ref is None:
         return plot_coverage(coverage.mean(0),
-                             None if reads is None else float(reads.mean()))
+                             None if records is None else float(records.mean()))
 
     return plot_coverage(coverage[ref],
-                         None if reads is None else float(reads[ref]))
+                         None if records is None else float(records[ref]))
 
 
 def render_reads(handle, ref, channels):
-    reads = dataset(handle, READS)
+    reads = dataset(handle, PRIMARY_COUNTED)
 
     if ref is not None or reads is None:
         return None
@@ -733,7 +752,7 @@ def render_reads(handle, ref, channels):
 
 
 def render_reads_per_block(handle, ref, channels):
-    reads = dataset(handle, READS)
+    reads = dataset(handle, PRIMARY_COUNTED)
 
     if ref is not None or reads is None:
         return None
@@ -930,7 +949,7 @@ def counted_read_stats(handle, ref):
     """Returns the counted reads of the reference in view, or one row per
     reference where no reference is in view."""
     n_refs, _ = file_shape(handle)
-    reads = dataset(handle, READS)
+    reads = dataset(handle, PRIMARY_COUNTED)
 
     if reads is None:
         return []
@@ -951,7 +970,7 @@ def counted_read_stats(handle, ref):
 def rejected_read_stats(handle, ref):
     """Returns the rejected reads of the reference in view, or the total
     over the library where no reference is in view."""
-    rejected = dataset(handle, REJECTED)
+    rejected = dataset(handle, PRIMARY_REJECTED)
 
     if rejected is None:
         return []
@@ -973,9 +992,30 @@ def unmapped_read_stats(handle, ref):
     return [Stat("Unmapped reads", float(unmapped), "int", group="Reads")]
 
 
+def supplementary_read_stats(handle, ref):
+    """Returns the further pieces of split reads counted and rejected at the
+    reference in view, or their totals over the library where no reference is in
+    view."""
+    counted = dataset(handle, SUPPLEMENTARY_COUNTED)
+    rejected = dataset(handle, SUPPLEMENTARY_REJECTED)
+    stats = []
+
+    for name, values in (("Split pieces", counted), ("Rejected pieces", rejected)):
+        if values is None:
+            continue
+
+        values = np.asarray(values, dtype=float)
+        value = values.sum() if ref is None else values[ref]
+        stats.append(Stat(name, float(value), "int", group="Reads"))
+
+    return stats
+
+
 def read_stats(handle, ref):
-    """Returns the Reads group: the counted, rejected, and unmapped reads."""
+    """Returns the Reads group: the reads counted and rejected, the further
+    pieces of split reads, and the unmapped reads."""
     return (counted_read_stats(handle, ref) + rejected_read_stats(handle, ref)
+            + supplementary_read_stats(handle, ref)
             + unmapped_read_stats(handle, ref))
 
 

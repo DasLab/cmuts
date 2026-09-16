@@ -298,7 +298,8 @@ typedef struct {
     const failure_flag *failure;  /* shared; the loader only reads it */
 
     refctx *reference;  /* the one being filled, or NULL */
-    size_t  rejected;   /* its reads the filter turned away */
+    size_t  rejected_primary;        /* its reads the filter turned away */
+    size_t  rejected_supplementary;  /* its further pieces the filter turned away */
 
     void  **batch;      /* workitems bound for the workers */
     size_t  queued;
@@ -340,9 +341,9 @@ static void loader_dispatch(loader *l)
     l->queued = 0;
 }
 
-/* Releases the current reference: queued reads first, then its filtered count,
- * then the loader's own handle. The count must arrive before the handle is
- * dropped, or the reference could be written without it. */
+/* Releases the current reference: queued reads first, then its filtered counts,
+ * then the loader's own handle. The counts must arrive before the handle is
+ * dropped, or the reference could be written without them. */
 static void loader_leave_reference(loader *l)
 {
     refctx *ctx = l->reference;
@@ -353,12 +354,18 @@ static void loader_leave_reference(loader *l)
 
     loader_dispatch(l);
 
-    if (l->rejected) {
-        refctx_add_scalar(ctx, ACCUM_FILTERED, (double)l->rejected);
+    if (l->rejected_primary) {
+        refctx_add_scalar(ctx, ACCUM_PRIMARY_REJECTED, (double)l->rejected_primary);
     }
 
-    l->reference = NULL;
-    l->rejected  = 0;
+    if (l->rejected_supplementary) {
+        refctx_add_scalar(ctx, ACCUM_SUPPLEMENTARY_REJECTED,
+                          (double)l->rejected_supplementary);
+    }
+
+    l->reference              = NULL;
+    l->rejected_primary       = 0;
+    l->rejected_supplementary = 0;
 
     if (refctx_release(ctx, 1)) {
         pipeline_finish_reference(l->pipe, ctx);
@@ -527,10 +534,10 @@ static int loader_main(const pipeline *p, const failure_flag *f,
         }
 
         if (!filter_accepts(&p->filter_config, &rec)) {
-            /* The total is over reads, and a further piece of a split read is not a read
-             * of its own. */
-            if (!filter_is_supplementary(&rec)) {
-                l.rejected++;
+            if (filter_is_supplementary(&rec)) {
+                l.rejected_supplementary++;
+            } else {
+                l.rejected_primary++;
             }
             continue;
         }

@@ -17,8 +17,10 @@ DELETION_ERROR = "deletions/error"
 TERMINATION_RATE = "terminations/rate"
 TERMINATION_ERROR = "terminations/error"
 LENGTHS = "reads/lengths"
-COUNTED = "reads/counted"
-REJECTED = "reads/rejected"
+PRIMARY_COUNTED = "reads/primary/counted"
+PRIMARY_REJECTED = "reads/primary/rejected"
+SUPPLEMENTARY_COUNTED = "reads/supplementary/counted"
+SUPPLEMENTARY_REJECTED = "reads/supplementary/rejected"
 UNMAPPED = "reads/unmapped"
 NORM = "norm"
 SEQUENCE = "sequence"
@@ -57,8 +59,10 @@ FIELDS = (
     Field(TERMINATION_RATE, PER_BASE, "f4", np.nan, rate=True),
     Field(TERMINATION_ERROR, PER_BASE, "f4", np.nan, rate=True),
     Field(LENGTHS, PER_LENGTH, "u8", 0),
-    Field(COUNTED, SCALAR, "u8", 0),
-    Field(REJECTED, SCALAR, "u8", 0),
+    Field(PRIMARY_COUNTED, SCALAR, "u8", 0),
+    Field(PRIMARY_REJECTED, SCALAR, "u8", 0),
+    Field(SUPPLEMENTARY_COUNTED, SCALAR, "u8", 0),
+    Field(SUPPLEMENTARY_REJECTED, SCALAR, "u8", 0),
     Field(SEQUENCE, PER_BASE, "i1", -1, sequence=True),
 )
 
@@ -234,8 +238,8 @@ class Summary:
 def read_summary(path) -> Summary:
     """Reads the counts a run made over the reads it was given."""
     with h5py.File(path, "r") as output:
-        counted = output[COUNTED][:]
-        rejected = output[REJECTED][:]
+        counted = output[PRIMARY_COUNTED][:]
+        rejected = output[PRIMARY_REJECTED][:]
 
         return Summary(
             kept=int(np.nansum(counted, dtype=np.float64)),

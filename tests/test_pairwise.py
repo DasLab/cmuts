@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from alignments import NATIVE
-from outputs import ALL_FIELDS, COUNTED, arrays_agree, field_of
+from outputs import ALL_FIELDS, PRIMARY_COUNTED, arrays_agree, field_of
 
 from programs import run_cmuts, try_cmuts
 
@@ -176,7 +176,7 @@ def test_no_conditional_probability_lies_outside_the_range(output, falsifiable):
 def test_a_pair_is_covered_by_no_more_reads_than_were_counted(output, falsifiable):
     """The reads reaching two positions are among those the run counted at all."""
     coverage = field_of(output, COVERAGE)
-    counted = field_of(output, COUNTED)
+    counted = field_of(output, PRIMARY_COUNTED)
 
     falsifiable(counted.sum() > 0)
 

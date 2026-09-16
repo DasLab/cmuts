@@ -59,8 +59,10 @@ Unmapped reads are rejected by nature of having no reference to compute mutation
 | [`coverage`](format.md#coverage) | Estimated by the HMM. |
 | [`sequence`](format.md#sequence) | Tokenized from the FASTA. |
 | [`reads/lengths`](format.md#readslengths) | The read length reported in the alignment. |
-| [`reads/counted`](format.md#readscounted) | The number of reads the HMM successfully processed. |
-| [`reads/rejected`](format.md#readsrejected) | The number of reads rejected by a filter or by the HMM. |
+| [`reads/primary/counted`](format.md#readsprimarycounted) | The number of primary reads the HMM successfully processed. |
+| [`reads/primary/rejected`](format.md#readsprimaryrejected) | The number of primary reads rejected by a filter or by the HMM. |
+| [`reads/supplementary/counted`](format.md#readssupplementarycounted) | The number of supplementary reads the HMM successfully processed. |
+| [`reads/supplementary/rejected`](format.md#readssupplementaryrejected) | The number of supplementary reads rejected by a filter or by the HMM. |
 | [`reads/unmapped`](format.md#readsunmapped) | The number of unmapped reads in the alignment. |
 | [`pairwise/correlation`](format.md#pairwisecorrelation) | Estimated by the HMM. |
 | [`pairwise/conditional`](format.md#pairwiseconditional) | Estimated by the HMM. |

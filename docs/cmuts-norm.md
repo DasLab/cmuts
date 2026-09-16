@@ -50,8 +50,10 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 | [`coverage`](format.md#coverage) | Copied from the input. |
 | [`sequence`](format.md#sequence) | Copied from the input. |
 | [`reads/lengths`](format.md#readslengths) | Copied from the input. |
-| [`reads/counted`](format.md#readscounted) | Copied from the input. |
-| [`reads/rejected`](format.md#readsrejected) | Copied from the input. |
+| [`reads/primary/counted`](format.md#readsprimarycounted) | Copied from the input. |
+| [`reads/primary/rejected`](format.md#readsprimaryrejected) | Copied from the input. |
+| [`reads/supplementary/counted`](format.md#readssupplementarycounted) | Copied from the input. |
+| [`reads/supplementary/rejected`](format.md#readssupplementaryrejected) | Copied from the input. |
 | [`reads/unmapped`](format.md#readsunmapped) | Copied from the input. |
 <!-- END GENERATED cmuts-norm DATASETS -->
 

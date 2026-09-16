@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from outputs import (COUNTED, COVERAGE, ERROR_FIELDS, LENGTHS, RATE_FIELDS,
-                     RATE_OF, REJECTED, SEQUENCE, UNMAPPED)
+from outputs import (COVERAGE, ERROR_FIELDS, LENGTHS, PRIMARY_COUNTED,
+                     PRIMARY_REJECTED, RATE_FIELDS, RATE_OF, SEQUENCE,
+                     SUPPLEMENTARY_COUNTED, SUPPLEMENTARY_REJECTED, UNMAPPED)
 from outputs import field_of
 
 # Every rule takes the values of the field being formed and the rates of the
@@ -68,8 +69,10 @@ SUB_RULES = {
     **dict.fromkeys(RATE_FIELDS, _subtract),
     **dict.fromkeys(ERROR_FIELDS, _quadrature),
     LENGTHS: _add,
-    COUNTED: _add,
-    REJECTED: _add,
+    PRIMARY_COUNTED: _add,
+    PRIMARY_REJECTED: _add,
+    SUPPLEMENTARY_COUNTED: _add,
+    SUPPLEMENTARY_REJECTED: _add,
     UNMAPPED: _add,
     SEQUENCE: _same,
 }
@@ -79,8 +82,10 @@ DIV_RULES = {
     **dict.fromkeys(RATE_FIELDS, _ratio),
     **dict.fromkeys(ERROR_FIELDS, _ratio_error),
     LENGTHS: _add,
-    COUNTED: _add,
-    REJECTED: _add,
+    PRIMARY_COUNTED: _add,
+    PRIMARY_REJECTED: _add,
+    SUPPLEMENTARY_COUNTED: _add,
+    SUPPLEMENTARY_REJECTED: _add,
     UNMAPPED: _add,
     SEQUENCE: _same,
 }

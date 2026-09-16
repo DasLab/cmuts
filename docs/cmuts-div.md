@@ -40,8 +40,10 @@ If any dataset does not match the expected shape or the sequences do not match, 
 | [`coverage`](format.md#coverage) | Summed over the inputs. |
 | [`sequence`](format.md#sequence) | Copied from the inputs. |
 | [`reads/lengths`](format.md#readslengths) | Summed over the inputs. |
-| [`reads/counted`](format.md#readscounted) | Summed over the inputs. |
-| [`reads/rejected`](format.md#readsrejected) | Summed over the inputs. |
+| [`reads/primary/counted`](format.md#readsprimarycounted) | Summed over the inputs. |
+| [`reads/primary/rejected`](format.md#readsprimaryrejected) | Summed over the inputs. |
+| [`reads/supplementary/counted`](format.md#readssupplementarycounted) | Summed over the inputs. |
+| [`reads/supplementary/rejected`](format.md#readssupplementaryrejected) | Summed over the inputs. |
 | [`reads/unmapped`](format.md#readsunmapped) | Summed over the inputs. |
 <!-- END GENERATED cmuts-div DATASETS -->
 

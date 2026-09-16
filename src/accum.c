@@ -9,14 +9,16 @@
 #include <string.h>
 
 const accum_field ACCUM_FIELDS[ACCUM_N_FIELDS] = {
-    [ACCUM_COVERAGE]   = { shape_per_base },
-    [ACCUM_MISMATCHES] = { shape_per_base },
-    [ACCUM_INSERTIONS] = { shape_per_base },
-    [ACCUM_DELETIONS]  = { shape_per_base },
-    [ACCUM_ENDS]       = { shape_per_base },
-    [ACCUM_LENGTHS]    = { shape_per_length },
-    [ACCUM_READS]      = { shape_none },
-    [ACCUM_FILTERED]   = { shape_none },
+    [ACCUM_COVERAGE]               = { shape_per_base },
+    [ACCUM_MISMATCHES]             = { shape_per_base },
+    [ACCUM_INSERTIONS]             = { shape_per_base },
+    [ACCUM_DELETIONS]              = { shape_per_base },
+    [ACCUM_ENDS]                   = { shape_per_base },
+    [ACCUM_LENGTHS]                = { shape_per_length },
+    [ACCUM_PRIMARY_COUNTED]        = { shape_none },
+    [ACCUM_PRIMARY_REJECTED]       = { shape_none },
+    [ACCUM_SUPPLEMENTARY_COUNTED]  = { shape_none },
+    [ACCUM_SUPPLEMENTARY_REJECTED] = { shape_none },
 };
 
 /* Values one field occupies. With len == cap this is also its stride in the arena. */

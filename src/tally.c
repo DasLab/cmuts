@@ -221,6 +221,21 @@ void tally_scratch_destroy(tally_scratch *scratch)
     free(scratch);
 }
 
+/* Returns the accumulator that counts this record once it is tallied. A supplementary
+ * record places a piece of a read, and is counted apart from the read itself. */
+static accum_field_id counted_field(const cm_bam_record *read)
+{
+    return filter_is_supplementary(read) ? ACCUM_SUPPLEMENTARY_COUNTED
+                                         : ACCUM_PRIMARY_COUNTED;
+}
+
+/* Returns the accumulator that counts this record once it is turned away. */
+static accum_field_id rejected_field(const cm_bam_record *read)
+{
+    return filter_is_supplementary(read) ? ACCUM_SUPPLEMENTARY_REJECTED
+                                         : ACCUM_PRIMARY_REJECTED;
+}
+
 phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
                   const phmm_rates *rates, const tally_tables *tables,
                   tally_scratch *scratch, accum *target, pairs *target_pairs)
@@ -235,13 +250,11 @@ phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
     };
     phmm_status status = marginalize(&ctx, scratch);
 
-    /* A read the model gives no path is counted where a read a filter turned away is
+    /* A record the model gives no path is counted where a record a filter turned away is
      * counted, and adds no other value. No value has reached the target: the window is added
      * only on PHMM_OK, and the failure is seen before either count below. */
     if (status == PHMM_NO_PATH) {
-        if (!filter_is_supplementary(read)) {
-            *accum_data(target, ACCUM_FILTERED) += 1.0;
-        }
+        *accum_data(target, rejected_field(read)) += 1.0;
         return status;
     }
 
@@ -249,9 +262,7 @@ phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
         return status;
     }
 
-    if (!filter_is_supplementary(read)) {
-        *accum_data(target, ACCUM_READS) += 1.0;
-    }
+    *accum_data(target, counted_field(read)) += 1.0;
 
     add_length(&ctx);
 

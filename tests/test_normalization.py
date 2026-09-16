@@ -27,7 +27,7 @@ from inputs import (
 from normalization import OUTLIER, UBR, VALUE, expected, norm, pool
 from outputs import (
     ALL_FIELDS,
-    COUNTED,
+    PRIMARY_COUNTED,
     COVERAGE,
     ERROR_FIELDS,
     NORM,
@@ -299,13 +299,13 @@ def test_inputs_of_different_shapes_share_a_norm(build, normalize):
 
 
 def test_each_output_matches_the_input_it_was_paired_with(build, normalize):
-    first = build(covered(every_rate(0.2) | {COUNTED: 3}), unmapped=11)
-    second = build(covered(every_rate(0.8) | {COUNTED: 5}), unmapped=13)
+    first = build(covered(every_rate(0.2) | {PRIMARY_COUNTED: 3}), unmapped=11)
+    second = build(covered(every_rate(0.8) | {PRIMARY_COUNTED: 5}), unmapped=13)
 
     outputs = normalize(first, second)
 
-    assert np.all(field_of(outputs[0], COUNTED) == 3)
-    assert np.all(field_of(outputs[1], COUNTED) == 5)
+    assert np.all(field_of(outputs[0], PRIMARY_COUNTED) == 3)
+    assert np.all(field_of(outputs[1], PRIMARY_COUNTED) == 5)
     assert field_of(outputs[0], UNMAPPED) == 11
     assert field_of(outputs[1], UNMAPPED) == 13
 

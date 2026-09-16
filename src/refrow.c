@@ -112,8 +112,14 @@ static const double *values(refrow *r, fmt_field_id id, const char *seq, const a
     switch (id) {
         case FMT_COVERAGE:   return accum_const_data(acc, ACCUM_COVERAGE);
         case FMT_LENGTHS:    return accum_const_data(acc, ACCUM_LENGTHS);
-        case FMT_READS:      return accum_const_data(acc, ACCUM_READS);
-        case FMT_REJECTED:   return accum_const_data(acc, ACCUM_FILTERED);
+        case FMT_PRIMARY_COUNTED:
+            return accum_const_data(acc, ACCUM_PRIMARY_COUNTED);
+        case FMT_PRIMARY_REJECTED:
+            return accum_const_data(acc, ACCUM_PRIMARY_REJECTED);
+        case FMT_SUPPLEMENTARY_COUNTED:
+            return accum_const_data(acc, ACCUM_SUPPLEMENTARY_COUNTED);
+        case FMT_SUPPLEMENTARY_REJECTED:
+            return accum_const_data(acc, ACCUM_SUPPLEMENTARY_REJECTED);
         case FMT_SEQUENCE:
         case FMT_NORM:
         case FMT_UNMAPPED:
