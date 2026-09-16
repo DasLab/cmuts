@@ -92,8 +92,10 @@ def execute_into(path, command):
 
 def reported_version(program) -> str:
     """Returns the version a program prints for --version, which it gives after
-    its own name."""
-    return execute([*program, "--version"]).stdout.split()[-1]
+    its own name, with a v in front of it."""
+    printed = execute([*program, "--version"]).stdout.split()[-1]
+
+    return printed.removeprefix("v")
 
 
 def samtools(*arguments) -> str:

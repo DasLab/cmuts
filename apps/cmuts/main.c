@@ -44,7 +44,7 @@ static const subcommand SUBCOMMANDS[] = {
 
 static void usage(FILE *out)
 {
-    fprintf(out, "%s %s -- Fast, multithreaded pair-HMM counting of MaP-seq mutations.\n\n",
+    fprintf(out, "%s v%s -- Fast, multithreaded pair-HMM counting of MaP-seq mutations.\n\n",
             PROGRAM, CMUTS_VERSION);
     fprintf(out, "usage: %s SUBCOMMAND [ARGS]\n\nSubcommands:\n", PROGRAM);
 
@@ -85,7 +85,7 @@ int main(int argc, char **argv)
     }
 
     if (strcmp(name, "-V") == 0 || strcmp(name, "--version") == 0) {
-        printf("%s %s\n", PROGRAM, CMUTS_VERSION);
+        printf("%s v%s\n", PROGRAM, CMUTS_VERSION);
         return 0;
     }
 
