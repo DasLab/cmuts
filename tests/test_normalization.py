@@ -1,7 +1,8 @@
-"""Dividing the rates by one norm taken from the rates themselves.
+"""Dividing the rates by one norm.
 
-The norm is pooled over the aggregate rate, one less the product of the
-pooled channels' no-event rates, and divides every rate and error alike.
+The ubr and outlier schemes pool that norm over the aggregate rate, one less
+the product of the pooled channels' no-event rates, and the value scheme is
+given it on the command line. The norm divides every rate and error alike.
 The result depends only on the values in the input files, so the inputs are
 written by hand and not counted from an alignment. inputs.py builds them
 and outputs.py describes the layout the programs share. The contracts this
@@ -23,7 +24,7 @@ from inputs import (
     not_hdf5,
     random_fields,
 )
-from normalization import OUTLIER, UBR, expected, norm, pool
+from normalization import OUTLIER, UBR, VALUE, expected, norm, pool
 from outputs import (
     ALL_FIELDS,
     COUNTED,
@@ -236,6 +237,23 @@ def test_a_position_missing_an_unpooled_channel_still_reaches_the_pool(build, no
 
     assert pool([rates]).size == left.size
     assert recorded(output) == pytest.approx(aggregate(0.5), rel=TOLERANCE)
+
+
+# ---------------------------------------------------------------------------
+# The value scheme
+# ---------------------------------------------------------------------------
+
+
+def test_the_value_scheme_divides_by_the_value_it_is_given(build, normalize):
+    rates = build(covered(random_fields(seed=7)))
+
+    output, = normalize(rates, norm=VALUE, value="2.5")
+
+    assert recorded(output) == pytest.approx(2.5, rel=TOLERANCE)
+
+    for name in NORMALIZED:
+        assert np.allclose(field_of(output, name), expected(rates, name, 2.5),
+                           rtol=TOLERANCE, equal_nan=True), name
 
 
 # ---------------------------------------------------------------------------

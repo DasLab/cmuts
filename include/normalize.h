@@ -10,10 +10,12 @@
 
 #include "format.h"
 
-/* How the norm is taken from the pooled rates. */
+/* Where the norm comes from. Every scheme but NORM_VALUE computes it from the pooled
+ * rates. */
 typedef enum {
     NORM_UBR,
     NORM_OUTLIER,
+    NORM_VALUE,
 } norm_scheme;
 
 typedef struct {
@@ -22,14 +24,14 @@ typedef struct {
     size_t             n_files;
 
     norm_scheme scheme;
+    double      value;         /* the norm itself, under NORM_VALUE */
     double      min_coverage;  /* the coverage a position needs to join the pool */
 
     bool overwrite;
 } normalize_config;
 
-/* Divides every input by one norm pooled over all of them, writing each to its own
- * output. program is recorded in each as what produced it. Returns 0, or -1 with a
- * description in error. */
+/* Divides every input by one norm, writing each to its own output. program is recorded
+ * in each as what produced it. Returns 0, or -1 with a description in error. */
 int normalize_run(const normalize_config *cfg, const char *program,
                   const fmt_manifest *writes, char *error,
                   size_t error_len);

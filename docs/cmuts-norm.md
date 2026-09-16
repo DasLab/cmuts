@@ -27,9 +27,9 @@ This is only suggested if the two experiments had significantly different condit
 
 ## Normalization Schemes
 
-All normalization schemes compute the norm using the aggregated mismatch, insertion, and deletion rates. Only the positions whose coverage exceeds `--min-coverage` contribute to it.
+All normalization schemes except `value` compute the norm using the aggregated mismatch, insertion, and deletion rates. Only the positions whose coverage exceeds `--min-coverage` contribute to it.
 
-The default `ubr` scheme computes the norm as the 90th percentile of the aggregate rate. The `outlier` scheme drops the highest 2% of the aggregate rate as outliers and averages what lies between there and the highest 10%.
+The default `ubr` scheme computes the norm as the 90th percentile of the aggregate rate. The `outlier` scheme drops the highest 2% of the aggregate rate as outliers and averages what lies between there and the highest 10%. The `value` scheme uses the norm provided in `--value`.
 
 A norm that comes out as zero, negative, or undefined is not applied and is recorded as NaN.
 
@@ -46,7 +46,7 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 | [`deletions/error`](format.md#deletionserror) | Divided by the norm. |
 | [`terminations/rate`](format.md#terminationsrate) | Divided by the norm. |
 | [`terminations/error`](format.md#terminationserror) | Divided by the norm. |
-| [`norm`](format.md#norm) | Estimated per the specified scheme, over the aggregate of whichever mismatch, insertion and deletion rates the input holds. |
+| [`norm`](format.md#norm) | Estimated from the input per the specified scheme. |
 | [`coverage`](format.md#coverage) | Copied from the input. |
 | [`sequence`](format.md#sequence) | Copied from the input. |
 | [`reads/lengths`](format.md#readslengths) | Copied from the input. |
@@ -75,7 +75,8 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 
 | Option | Description |
 | --- | --- |
-| `--norm SCHEME` | how the norm is computed from the rates (ubr, outlier; default ubr) |
+| `--norm SCHEME` | where the norm comes from (ubr, outlier, value; default ubr) |
+| `--value NORM` | divide by this norm, in place of computing one (with `--norm value`; default 1) |
 | `--min-coverage N` | coverage a position needs before its rate sets the norm (with `--norm ubr` or `--norm outlier`; default 500) |
 
 ### Information

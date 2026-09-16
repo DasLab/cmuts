@@ -28,7 +28,7 @@ static const fmt_field_id ANY_OF[] = {
 static const fmt_written WRITTEN[] = {
     FMT_CHANNELS(CHANNEL)
     { .id = FMT_NORM,
-      .how = "Estimated per the specified scheme, over the aggregate of whichever mismatch, insertion and deletion rates the input holds.",
+      .how = "Estimated from the input per the specified scheme.",
       .depends = FMT_DEPENDS(FMT_COVERAGE),
       .required = true },
     { .id = FMT_COVERAGE,  .how = COPIED, .depends = FMT_DEPENDS(FMT_COVERAGE) },

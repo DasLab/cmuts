@@ -1,7 +1,8 @@
 """Tools for computing what cmuts norm should divide by, and what dividing by
 it leaves.
 
-Both schemes pool the aggregate rate of every input and return one number.
+The ubr and outlier schemes pool the aggregate rate of every input and return
+one number. The value scheme is given its norm, so nothing here computes it.
 The aggregate of a position is one less the product of the pooled channels'
 no-event rates, computed in float32. The norm is computed over the pool in
 float64, as the program does, so a caller should allow a tolerance.
@@ -18,6 +19,7 @@ from outputs import (COVERAGE, ERROR_FIELDS, POOLED_RATE_FIELDS, RATE_FIELDS,
 
 UBR = "ubr"
 OUTLIER = "outlier"
+VALUE = "value"
 
 # The rate the ubr norm sits at, as a percentile of the pool.
 UBR_PERCENTILE = 90

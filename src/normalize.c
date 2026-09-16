@@ -1,12 +1,12 @@
-/* normalize.c -- one norm, pooled over every input, divided out of each.
+/* normalize.c -- one norm, divided out of every input.
  *
- * Done in two passes. The first reads the rates every input holds and pools the values
- * the scheme draws on; the second re-reads each input and writes it out divided by the
- * norm.
+ * A scheme that computes the norm from the rates runs in two passes. The first reads the
+ * rates every input holds and pools the values the scheme draws on. The second re-reads
+ * each input and writes it out divided by the norm. The value scheme is given its norm on
+ * the command line, so it makes the second pass alone.
  *
- * The pool holds the aggregate rate of whichever pooled channels an input carries: one
- * less the product of their no-event rates. The one norm then divides every channel
- * alike.
+ * The pool holds the aggregate rate of the pooled channels an input has: one less the
+ * product of their no-event rates. The one norm then divides every channel alike.
  *
  * Author: Hamish M. Blair <hmblair@stanford.edu>
  */
@@ -24,7 +24,7 @@
 #include "h5writer.h"
 #include "progress.h"
 
-/* The rate the ubr norm sits at, as a fraction of the way up the pool. */
+/* How far up the pool the ubr norm is taken, as a fraction. */
 #define UBR_PERCENTILE 0.90
 
 /* The band the outlier norm averages, as fractions of the pool counted from the highest
@@ -46,7 +46,7 @@ static const fmt_channel POOLED[] = {
 
 #define N_POOLED (sizeof POOLED / sizeof *POOLED)
 
-/* The rates the scheme draws on, gathered from every input. */
+/* The rates the scheme uses, gathered from every input. */
 typedef struct {
     float *value;
     size_t count;
@@ -115,7 +115,7 @@ static void place_pivot(float *value, ptrdiff_t low, ptrdiff_t high)
  * value after it no less.
  *
  * Values equal to the pivot are gathered in the same pass and then dropped from the
- * search, which is what holds a pool of many repeated rates to a linear cost. */
+ * search, which keeps the cost linear for a pool of many repeated rates. */
 static void select_nth(float *value, size_t n, size_t k)
 {
     ptrdiff_t low  = 0;
@@ -167,8 +167,8 @@ static float smallest(const float *value, size_t n)
     return least;
 }
 
-/* Returns the value a fraction of the way up the pool, interpolating between the two order
- * statistics it falls between. Reorders the pool. */
+/* Returns the value a fraction of the way up the pool, interpolating between the two
+ * order statistics on either side of it. Reorders the pool. */
 static double percentile(float *value, size_t n, double fraction)
 {
     double position = fraction * (double)(n - 1);
@@ -192,7 +192,8 @@ static double percentile(float *value, size_t n, double fraction)
 /* The schemes                                                               */
 /* ------------------------------------------------------------------------ */
 
-/* Both schemes reorder the pool, each reading the order statistics it needs out of it. */
+/* The ubr and outlier schemes reorder the pool, each reading the order statistics it
+ * needs out of it. */
 
 /* Returns the rank a fraction of the way down from the highest value, counting from zero
  * and never reaching the highest value itself. */
@@ -208,8 +209,8 @@ static double ubr_norm(rate_pool *p)
     return p->count ? percentile(p->value, p->count, UBR_PERCENTILE) : 1.0;
 }
 
-/* Averages the band between the two fractions, which drops the highest rates as outliers
- * and takes the norm from what sits just below them. */
+/* Averages the band between the two fractions. This drops the highest rates as outliers
+ * and computes the norm from the rates just below them. */
 static double outlier_norm(rate_pool *p)
 {
     size_t lowest, highest, first, last;
@@ -236,17 +237,28 @@ static double outlier_norm(rate_pool *p)
     return total / (double)((last - first) + 1);
 }
 
-/* Gives the norm the pooled rates come to, or NaN where they support none. A norm is a
- * divisor, so one that is not above zero is no norm at all. */
+/* Returns the norm the ubr or outlier scheme computes from the pool. */
 static double pooled_norm(const normalize_config *cfg, rate_pool *p)
 {
-    double norm = cfg->scheme == NORM_UBR ? ubr_norm(p) : outlier_norm(p);
+    return cfg->scheme == NORM_UBR ? ubr_norm(p) : outlier_norm(p);
+}
 
+/* Returns the norm, or NaN where the number given cannot be one. A norm is a divisor, so
+ * it must be above zero. */
+static double usable_norm(double norm)
+{
     return (isnan(norm) || norm <= 0.0) ? (double)NAN : norm;
 }
 
-/* Gives what the rates are divided by. Where there is no norm they are left as they
- * are, which is dividing by one. */
+/* Whether the run computes the norm. The value scheme is given its norm, so it reads no
+ * rates. */
+static bool computes_norm(const normalize_config *cfg)
+{
+    return cfg->scheme != NORM_VALUE;
+}
+
+/* Returns the number the rates are divided by. Where there is no norm, the rates are
+ * divided by one and do not change. */
 static double divisor(double norm)
 {
     return isnan(norm) ? 1.0 : norm;
@@ -263,8 +275,8 @@ static void normalize_f32(float *row, size_t n, double norm)
     }
 }
 
-/* Whether the norm divides this field. Every rate and every error takes it; every count
- * is left as it stands. */
+/* Whether the norm divides this field. The norm divides every rate and every error.
+ * Every count is left as it is. */
 static bool is_normalized(fmt_field_id id)
 {
     return fmt_is_channel(id);
@@ -305,7 +317,7 @@ static void pooled_rates_of(pooled_rates *held, const h5reader *in)
     }
 }
 
-/* Gives each named rate a row of its own. Returns -1 where a row cannot be allocated. */
+/* Allocates a row for each named rate. Returns -1 where a row cannot be allocated. */
 static int pooled_rates_alloc(pooled_rates *held, size_t values)
 {
     for (size_t c = 0; c < held->n; c++) {
@@ -326,8 +338,8 @@ static void pooled_rates_free(pooled_rates *held)
     }
 }
 
-/* Gives the rate of an event of any kind: one less the product of the no-event rates.
- * NaN in any rate carries through, so a position holds an aggregate only where every
+/* Returns the rate of an event of any kind: one less the product of the no-event rates.
+ * NaN in any rate makes the result NaN, so a position has an aggregate only where every
  * rate is present. */
 static float aggregate_rate(const pooled_rates *held, size_t i)
 {
@@ -414,8 +426,8 @@ done:
     return status;
 }
 
-/* Reads every input in turn, so a file that cannot be read fails before any output is
- * created. */
+/* Reads every input in turn, so a run with a file it cannot read stops before any output
+ * is created. */
 static int gather(const normalize_config *cfg, const fmt_manifest *writes, rate_pool *p,
                   progress *bar, char *error, size_t error_len)
 {
@@ -463,7 +475,7 @@ typedef struct {
     fmt_request             requests[FMT_N_FIELDS]; /* derived from the manifest */
     size_t                  n_requests;
     double                  norm;
-    bool                    writes[FMT_N_FIELDS];   /* what this run leaves behind */
+    bool                    writes[FMT_N_FIELDS];   /* the fields this run writes */
 
     h5reader   *in;
     h5writer   *out;
@@ -545,7 +557,7 @@ static int transfer_file(const transfer *t, char *error, size_t error_len)
     return 0;
 }
 
-/* Clears from writes every field that depends on one the input does not carry. What
+/* Clears from writes every field that depends on one the input does not have. What
  * remains is read, copied and written alike. */
 static void drop_absent_fields(transfer *t)
 {
@@ -617,8 +629,8 @@ static int write_output(const normalize_config *cfg, size_t which, const char *p
 
     fmt_selection(writes, t.writes);
 
-    /* Asked again here rather than carried over from check_outputs, so that a file
-     * appearing at the path since then is seen. */
+    /* Checked again here rather than reused from check_outputs, so that a file created
+     * at the path since then is found. */
     if (h5writer_may_replace(t.out_path, cfg->overwrite, &may_replace, error,
                              error_len) < 0) {
         return -1;
@@ -637,8 +649,8 @@ static int write_output(const normalize_config *cfg, size_t which, const char *p
 /* ------------------------------------------------------------------------ */
 
 /* Refuses every output path the run could not write, before the first is created, so that
- * a bad path late in the list costs none of the earlier ones. Whether each may be replaced
- * is settled again at the create itself. */
+ * a bad path late in the list does not waste the earlier outputs. Whether each may be
+ * replaced is checked again when the file is created. */
 static int check_outputs(const normalize_config *cfg, char *error, size_t error_len)
 {
     for (size_t i = 0; i < cfg->n_files; i++) {
@@ -653,42 +665,78 @@ static int check_outputs(const normalize_config *cfg, char *error, size_t error_
     return 0;
 }
 
+/* How many passes over the inputs a run makes. */
+static uint64_t passes(const normalize_config *cfg)
+{
+    return computes_norm(cfg) ? 2 : 1;
+}
+
+/* How many units of progress the run counts before it writes the outputs. */
+static uint64_t units_before_writing(const normalize_config *cfg)
+{
+    return (passes(cfg) - 1) * (uint64_t)cfg->n_files;
+}
+
 static int write_outputs(const normalize_config *cfg, const char *program,
                          const fmt_manifest *writes, double norm,
                          progress *bar, char *error, size_t error_len)
 {
+    uint64_t done = units_before_writing(cfg);
+
     for (size_t i = 0; i < cfg->n_files; i++) {
         if (write_output(cfg, i, program, writes, norm, error, error_len) < 0) {
             return -1;
         }
 
-        progress_follow(bar, cfg->n_files + i + 1);
+        progress_follow(bar, done + i + 1);
     }
 
     return 0;
+}
+
+/* Writes the norm every input is divided by to norm. The value scheme reads that norm
+ * from the command line. Every other scheme computes it from the rates, which is the
+ * first pass. Returns 0, or -1 with a description in error. */
+static int norm_of(const normalize_config *cfg, const fmt_manifest *writes, progress *bar,
+                   double *norm, char *error, size_t error_len)
+{
+    rate_pool p = { 0 };
+    int       status;
+
+    if (!computes_norm(cfg)) {
+        *norm = usable_norm(cfg->value);
+        return 0;
+    }
+
+    status = gather(cfg, writes, &p, bar, error, error_len);
+
+    if (status == 0) {
+        *norm = usable_norm(pooled_norm(cfg, &p));
+    }
+
+    rate_pool_free(&p);
+    return status;
 }
 
 int normalize_run(const normalize_config *cfg, const char *program,
                   const fmt_manifest *writes, char *error,
                   size_t error_len)
 {
-    rate_pool p      = { 0 };
     int       status = -1;
+    double    norm   = 0.0;
     progress *bar;
 
     if (check_outputs(cfg, error, error_len) < 0) {
         return -1;
     }
 
-    /* One unit per input per pass: every input is read for the pool, then written. */
-    bar = progress_start(2 * (uint64_t)cfg->n_files);
+    /* One unit per input per pass. */
+    bar = progress_start(passes(cfg) * (uint64_t)cfg->n_files);
 
-    if (gather(cfg, writes, &p, bar, error, error_len) == 0) {
-        status = write_outputs(cfg, program, writes, pooled_norm(cfg, &p),
-                               bar, error, error_len);
+    if (norm_of(cfg, writes, bar, &norm, error, error_len) == 0) {
+        status = write_outputs(cfg, program, writes, norm, bar, error, error_len);
     }
 
     progress_finish(bar);
-    rate_pool_free(&p);
     return status;
 }

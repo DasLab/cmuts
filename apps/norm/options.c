@@ -13,9 +13,14 @@
 /* The coverage a position needs before its rate joins the pool. */
 #define DEFAULT_MIN_COVERAGE 500
 
+/* The norm the value scheme uses where the command line gives none. Dividing by one
+ * leaves every rate as it is. */
+#define DEFAULT_VALUE 1.0
+
 static const cli_choice SCHEME_CHOICES[] = {
     { "ubr",     NORM_UBR,     NULL },
     { "outlier", NORM_OUTLIER, NULL },
+    { "value",   NORM_VALUE,   NULL },
     { NULL,      0,            NULL },
 };
 
@@ -52,9 +57,21 @@ static const cli_option OPTIONS[] = {
         .type    = OPT_ENUM,
         .offset  = offsetof(norm_args, scheme),
         .metavar = "SCHEME",
-        .help    = "how the norm is computed from the rates",
+        .help    = "where the norm comes from",
         .label   = "Normalization Scheme",
         .choices = SCHEME_CHOICES,
+    },
+    {
+        .group        = "Normalization",
+        .name         = "value",
+        .type         = OPT_DOUBLE,
+        .offset       = offsetof(norm_args, normalize.value),
+        .metavar      = "NORM",
+        .help         = "divide by this norm, in place of computing one",
+        .label        = "Norm",
+        .minimum      = 0,
+        .maximum      = CLI_UNBOUNDED,
+        .applies_when = { .option = "norm", .choices = "value" },
     },
     {
         .group   = "Normalization",
@@ -120,6 +137,7 @@ norm_args norm_defaults(void)
 {
     return (norm_args){
         .normalize = {
+            .value        = DEFAULT_VALUE,
             .min_coverage = DEFAULT_MIN_COVERAGE,
         },
         .scheme = NORM_UBR,
