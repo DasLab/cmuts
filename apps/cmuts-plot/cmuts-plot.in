@@ -913,6 +913,13 @@ def render_figure(conditions, spec):
 # Summary statistics
 # ===========================================================================
 
+# The boxes the read tiles are laid out in.
+PRIMARY_GROUP = "Primary Reads"
+SUPPLEMENTARY_GROUP = "Supplementary Reads"
+
+# The thresholds the library view reports the SNR against.
+SNR_THRESHOLDS = (1, 10)
+
 
 @dataclass(frozen=True)
 class Stat:
@@ -945,78 +952,60 @@ def library_stats(handle, ref):
     return rows
 
 
-def counted_read_stats(handle, ref):
-    """Returns the counted reads of the reference in view, or one row per
-    reference where no reference is in view."""
-    n_refs, _ = file_shape(handle)
-    reads = dataset(handle, PRIMARY_COUNTED)
-
-    if reads is None:
-        return []
-
-    reads = np.asarray(reads, dtype=float)
+def count_stats(values, name, group, ref, n_refs):
+    """Returns the tiles for one count: its value at the reference in view, or
+    its total, mean and median over the library where no reference is in
+    view."""
+    values = np.asarray(values, dtype=float)
 
     if ref is not None or n_refs == 1:
-        return [Stat("Reads", float(reads[ref or 0]), "int", group="Reads")]
+        return [Stat(name, float(values[ref or 0]), "int", group=group)]
 
     return [
-        Stat("Total reads", float(reads.sum()), "int", group="Reads"),
-        Stat("Mean reads", float(reads.mean()), "float", group="Reads"),
-        Stat("Median reads", float(np.median(reads)), "int", group="Reads"),
-        Stat("Dropout fraction", float((reads == 0).mean()), "float", group="Reads"),
+        Stat(f"{name} (Total)", float(values.sum()), "int", group=group),
+        Stat(f"{name} (Mean)", float(values.mean()), "float", group=group),
+        Stat(f"{name} (Median)", float(np.median(values)), "int", group=group),
     ]
 
 
-def rejected_read_stats(handle, ref):
-    """Returns the rejected reads of the reference in view, or the total
+def kind_read_stats(handle, ref, counted, rejected, group):
+    """Returns the tiles of one kind of alignment record: the records counted at
+    the reference in view and the records rejected there, or their statistics
     over the library where no reference is in view."""
-    rejected = dataset(handle, PRIMARY_REJECTED)
+    n_refs, _ = file_shape(handle)
+    stats = []
 
-    if rejected is None:
-        return []
+    for name, field in (("Counted", counted), ("Rejected", rejected)):
+        values = dataset(handle, field)
 
-    rejected = np.asarray(rejected, dtype=float)
-    value = rejected.sum() if ref is None else rejected[ref]
+        if values is None:
+            continue
 
-    return [Stat("Rejected reads", float(value), "int", group="Reads")]
+        stats += count_stats(values, name, group, ref, n_refs)
+
+    return stats
 
 
 def unmapped_read_stats(handle, ref):
-    """Returns the unmapped reads of the whole file, where no reference is
-    in view."""
+    """Returns the reads the aligner placed on no reference, which the library
+    view alone shows because they belong to no reference."""
     unmapped = dataset(handle, UNMAPPED)
 
     if ref is not None or unmapped is None:
         return []
 
-    return [Stat("Unmapped reads", float(unmapped), "int", group="Reads")]
-
-
-def supplementary_read_stats(handle, ref):
-    """Returns the further pieces of split reads counted and rejected at the
-    reference in view, or their totals over the library where no reference is in
-    view."""
-    counted = dataset(handle, SUPPLEMENTARY_COUNTED)
-    rejected = dataset(handle, SUPPLEMENTARY_REJECTED)
-    stats = []
-
-    for name, values in (("Split pieces", counted), ("Rejected pieces", rejected)):
-        if values is None:
-            continue
-
-        values = np.asarray(values, dtype=float)
-        value = values.sum() if ref is None else values[ref]
-        stats.append(Stat(name, float(value), "int", group="Reads"))
-
-    return stats
+    return [Stat("Unmapped", float(unmapped), "int", group=PRIMARY_GROUP)]
 
 
 def read_stats(handle, ref):
-    """Returns the Reads group: the reads counted and rejected, the further
-    pieces of split reads, and the unmapped reads."""
-    return (counted_read_stats(handle, ref) + rejected_read_stats(handle, ref)
-            + supplementary_read_stats(handle, ref)
-            + unmapped_read_stats(handle, ref))
+    """Returns the two read groups: the primary reads counted, rejected and
+    unmapped, and the supplementary reads counted and rejected."""
+    primary = kind_read_stats(handle, ref, PRIMARY_COUNTED, PRIMARY_REJECTED,
+                              PRIMARY_GROUP)
+    supplementary = kind_read_stats(handle, ref, SUPPLEMENTARY_COUNTED,
+                                    SUPPLEMENTARY_REJECTED, SUPPLEMENTARY_GROUP)
+
+    return primary + unmapped_read_stats(handle, ref) + supplementary
 
 
 def reactivity_stats(handle, channels, ref):
@@ -1039,7 +1028,9 @@ def reactivity_stats(handle, channels, ref):
     ]
 
     if ref is None and n_refs > 1:
-        rows.append(Stat("SNR > 1", mean_of(finite > 1), "float", group="SNR"))
+        rows += [Stat(f"SNR > {threshold}", mean_of(finite > threshold), "float",
+                      group="SNR")
+                 for threshold in SNR_THRESHOLDS]
 
     return rows
 
