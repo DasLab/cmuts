@@ -31,6 +31,7 @@
 #define INVOCATION_MAX   64  /* both forms of an option, and its placeholder */
 #define CEILING_MAX      32  /* an option's largest value, written out */
 #define SET_LIST_MAX     64  /* the choices a set holds, comma separated */
+#define CHOICE_NAME_MAX  32  /* one choice of an enum or a set */
 
 /* The note giving an option's default. Its longest form wraps a full set list,
  * so it is sized from that. */
@@ -85,6 +86,17 @@ static const cli_option *option_by_key(const cli_spec *spec, char key)
 {
     for (size_t i = 0; i < spec->n_options; i++) {
         if (spec->options[i].key == key) {
+            return &spec->options[i];
+        }
+    }
+
+    return NULL;
+}
+
+static const cli_option *option_by_name(const cli_spec *spec, const char *name)
+{
+    for (size_t i = 0; i < spec->n_options; i++) {
+        if (strcmp(spec->options[i].name, name) == 0) {
             return &spec->options[i];
         }
     }
@@ -150,16 +162,28 @@ static void print_choices(FILE *out, const cli_option *opt)
     }
 }
 
-/* Takes the choice named by the first len characters, so that a word within a longer
- * string is matched without a copy of it. */
+/* Returns the choice named by the first len characters, or NULL where the option holds
+ * no such choice. The length is given so that a word within a longer string is matched
+ * without a copy of it. */
+static const cli_choice *choice_named(const cli_option *opt, const char *text, size_t len)
+{
+    for (const cli_choice *choice = opt->choices; choice && choice->name; choice++) {
+        if (strncmp(choice->name, text, len) == 0 && choice->name[len] == '\0') {
+            return choice;
+        }
+    }
+
+    return NULL;
+}
+
 static int parse_choice_n(const cli_option *opt, const char *text, size_t len,
                           const char *program, int *out)
 {
-    for (const cli_choice *choice = opt->choices; choice->name; choice++) {
-        if (strncmp(choice->name, text, len) == 0 && choice->name[len] == '\0') {
-            *out = choice->value;
-            return 0;
-        }
+    const cli_choice *choice = choice_named(opt, text, len);
+
+    if (choice) {
+        *out = choice->value;
+        return 0;
     }
 
     fprintf(stderr, "%s: --%s: \"%.*s\" is not one of ", program, opt->name, (int)len,
@@ -176,6 +200,16 @@ static int parse_choice(const cli_option *opt, const char *text, const char *pro
     return parse_choice_n(opt, text, strlen(text), program, out);
 }
 
+/* Returns the length of the first name in a comma-separated list. Writes the text after
+ * that comma to rest, which is NULL at the last name. */
+static size_t next_name(const char *list, const char **rest)
+{
+    const char *comma = strchr(list, ',');
+
+    *rest = comma ? comma + 1 : NULL;
+    return comma ? (size_t)(comma - list) : strlen(list);
+}
+
 /* Parses every choice a comma-separated list names, OR'd together.
  *
  * The empty subset is a choice worth zero. Asking for it alongside another is a
@@ -187,17 +221,16 @@ static int parse_set(const cli_option *opt, const char *text, const char *progra
     bool empty  = false;
 
     for (const char *token = text; token; ) {
-        const char *comma = strchr(token, ',');
-        size_t      len   = comma ? (size_t)(comma - token) : strlen(token);
+        const char *rest = NULL;
         int         choice;
 
-        if (parse_choice_n(opt, token, len, program, &choice) < 0) {
+        if (parse_choice_n(opt, token, next_name(token, &rest), program, &choice) < 0) {
             return -1;
         }
 
         empty  |= choice == 0;
         chosen |= choice;
-        token   = comma ? comma + 1 : NULL;
+        token   = rest;
     }
 
     if (empty && chosen != 0) {
@@ -385,6 +418,47 @@ static int assign(const cli_option *opt, void *args, const char *value,
 }
 
 /* ------------------------------------------------------------------------ */
+/* Conditions                                                                */
+/* ------------------------------------------------------------------------ */
+
+/* Returns the value of an enum option in the parsed arguments. */
+static int chosen_value(const cli_option *opt, const void *args)
+{
+    const char *field = (const char *)args + opt->offset;
+
+    return *(const int *)field;
+}
+
+/* Whether a comma-separated list of choice names includes the choice with this value. */
+static bool choice_listed(const cli_option *opt, const char *list, int value)
+{
+    for (const char *name = list; name; ) {
+        const char       *rest   = NULL;
+        const cli_choice *choice = choice_named(opt, name, next_name(name, &rest));
+
+        if (choice && choice->value == value) {
+            return true;
+        }
+
+        name = rest;
+    }
+
+    return false;
+}
+
+/* Prints the choices a condition names, separated by the word "or". */
+static void print_condition_choices(FILE *out, const cli_condition *cond)
+{
+    for (const char *name = cond->choices; name; ) {
+        const char *rest = NULL;
+        size_t      len  = next_name(name, &rest);
+
+        fprintf(out, "%s%.*s", name == cond->choices ? "" : " or ", (int)len, name);
+        name = rest;
+    }
+}
+
+/* ------------------------------------------------------------------------ */
 /* Help                                                                      */
 /* ------------------------------------------------------------------------ */
 
@@ -516,6 +590,12 @@ static void print_option(FILE *out, const cli_option *opt, const void *defaults,
     if (opt->choices) {
         fputs(" (", out);
         print_choices(out, opt);
+        fputc(')', out);
+    }
+
+    if (opt->applies_when.option) {
+        fprintf(out, " (with --%s ", opt->applies_when.option);
+        print_condition_choices(out, &opt->applies_when);
         fputc(')', out);
     }
 
@@ -796,6 +876,37 @@ static void print_json_bounds(FILE *out, const cli_option *opt)
     }
 }
 
+/* Prints the condition an option applies under, as the option it names and the choices
+ * that option must be set to. Prints null where the option applies always. */
+static void print_json_condition(FILE *out, const cli_condition *cond)
+{
+    if (!cond->option) {
+        fputs("null", out);
+        return;
+    }
+
+    fputs("{\"option\": ", out);
+    print_json_string(out, cond->option);
+    fputs(", \"choices\": [", out);
+
+    for (const char *name = cond->choices; name; ) {
+        const char *rest = NULL;
+        size_t      len  = next_name(name, &rest);
+        char        held[CHOICE_NAME_MAX];
+
+        snprintf(held, sizeof held, "%.*s", (int)len, name);
+
+        if (name != cond->choices) {
+            fputs(", ", out);
+        }
+
+        print_json_string(out, held);
+        name = rest;
+    }
+
+    fputs("]}", out);
+}
+
 static void print_json_option(FILE *out, const cli_option *opt, const void *defaults,
                               bool last)
 {
@@ -815,6 +926,7 @@ static void print_json_option(FILE *out, const cli_option *opt, const void *defa
     fputs(",\n      \"unset_label\": ", out); print_json_string(out, opt->unset_label);
     fputs(",\n      \"choices\": ", out);     print_json_choices(out, opt);
     fputs(",\n      \"choice_labels\": ", out); print_json_choice_labels(out, opt);
+    fputs(",\n      \"applies_when\": ", out); print_json_condition(out, &opt->applies_when);
     fputs(",\n      \"default\": ", out);     print_json_default(out, opt, defaults);
     fputs(",\n", out);                        print_json_bounds(out, opt);
     fprintf(out, "    }%s\n", last ? "" : ",");
@@ -865,6 +977,52 @@ static cli_status check_required_options(const cli_spec *spec, const bool *seen)
 
         fprintf(stderr, "%s: missing required option --%s (%s)\n",
                 spec->program, spec->options[i].name, spec->options[i].help);
+        return CLI_ERROR;
+    }
+
+    return CLI_OK;
+}
+
+/* Refuses an option that is given when its condition is not met. A setting that does
+ * nothing is reported instead of ignored.
+ *
+ * A condition must name an option the program accepts, and that option must take one
+ * choice from a set, since the condition names the choices it must be set to. A condition
+ * that does neither is a fault in the table, and is reported as one. */
+static cli_status check_conditions(const cli_spec *spec, const void *args,
+                                   const bool *seen)
+{
+    for (size_t i = 0; i < spec->n_options; i++) {
+        const cli_option *opt = &spec->options[i];
+        const cli_option *governs;
+
+        if (!opt->applies_when.option || !seen[i]) {
+            continue;
+        }
+
+        governs = option_by_name(spec, opt->applies_when.option);
+
+        if (!governs) {
+            fprintf(stderr, "%s: --%s names --%s, which is not an option\n",
+                    spec->program, opt->name, opt->applies_when.option);
+            return CLI_ERROR;
+        }
+
+        if (governs->type != OPT_ENUM) {
+            fprintf(stderr, "%s: --%s names --%s, which does not take one choice from a "
+                            "set\n", spec->program, opt->name, governs->name);
+            return CLI_ERROR;
+        }
+
+        if (choice_listed(governs, opt->applies_when.choices,
+                          chosen_value(governs, args))) {
+            continue;
+        }
+
+        fprintf(stderr, "%s: --%s applies only with --%s ", spec->program, opt->name,
+                governs->name);
+        print_condition_choices(stderr, &opt->applies_when);
+        fputc('\n', stderr);
         return CLI_ERROR;
     }
 
@@ -1016,6 +1174,10 @@ cli_status cli_parse(const cli_spec *spec, int argc, char **argv, void *args)
     }
 
     if (check_required_options(spec, seen) != CLI_OK) {
+        goto done;
+    }
+
+    if (check_conditions(spec, args, seen) != CLI_OK) {
         goto done;
     }
 

@@ -180,6 +180,9 @@ def note(option: dict) -> str:
     if option["minimum"] is not None and option["maximum"] is not None:
         notes.append(f"{option['minimum']} to {option['maximum']}")
 
+    if option["applies_when"]:
+        notes.append(condition(option["applies_when"]))
+
     if option["required"]:
         notes.append("required")
     elif option["unset_label"]:
@@ -188,6 +191,14 @@ def note(option: dict) -> str:
         notes.append(f"default {option['default']}")
 
     return f" ({'; '.join(notes)})" if notes else ""
+
+
+def condition(applies_when: dict) -> str:
+    """Names the option and the choices one option applies under."""
+    option = applies_when["option"]
+    spoken = [f"`--{option} {choice}`" for choice in applies_when["choices"]]
+
+    return f"with {' or '.join(spoken)}"
 
 
 def option_rows(options: list) -> list:

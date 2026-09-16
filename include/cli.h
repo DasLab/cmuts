@@ -51,6 +51,14 @@ typedef enum {
     CLI_PRINT,
 } cli_action;
 
+/* One option applies only when another option is set to one of these choices. An option
+ * given outside them is refused, so a setting that does nothing is reported. The option
+ * named must be an OPT_ENUM. */
+typedef struct {
+    const char *option;   /* long name of the option that governs this one */
+    const char *choices;  /* the choices it must be set to, comma separated */
+} cli_condition;
+
 typedef struct {
     const char       *group;    /* heading this option appears under */
     const char       *name;     /* long form */
@@ -76,6 +84,8 @@ typedef struct {
     size_t            count_offset;
     size_t            capacity;
     const cli_choice *choices;  /* accepted values, for OPT_ENUM and OPT_SET */
+    cli_condition     applies_when;  /* the condition this option applies under; empty
+                                        where it applies always */
     cli_action        action;
     void            (*print)(FILE *out);  /* what CLI_PRINT calls */
 } cli_option;

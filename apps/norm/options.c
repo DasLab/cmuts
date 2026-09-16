@@ -66,6 +66,7 @@ static const cli_option OPTIONS[] = {
         .label   = "Minimum Coverage",
         .minimum = 0,
         .maximum = CLI_UNBOUNDED,
+        .applies_when = { .option = "norm", .choices = "ubr,outlier" },
     },
 
     {
