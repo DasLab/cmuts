@@ -10,7 +10,7 @@
 #include <stddef.h>
 #include <stdio.h>
 
-/* The coverage a position needs before its rate joins the ubr pool. */
+/* The coverage a position needs before its rate joins the pool. */
 #define DEFAULT_MIN_COVERAGE 500
 
 static const cli_choice SCHEME_CHOICES[] = {
@@ -62,7 +62,7 @@ static const cli_option OPTIONS[] = {
         .type    = OPT_DOUBLE,
         .offset  = offsetof(norm_args, normalize.min_coverage),
         .metavar = "N",
-        .help    = "coverage a position needs before its rate sets the norm (ubr only)",
+        .help    = "coverage a position needs before its rate sets the norm",
         .label   = "Minimum Coverage",
         .minimum = 0,
         .maximum = CLI_UNBOUNDED,

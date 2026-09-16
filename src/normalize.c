@@ -340,15 +340,11 @@ static float aggregate_rate(const pooled_rates *held, size_t i)
     return 1.0F - none;
 }
 
-/* Whether a position's rate joins the pool. ubr takes only the positions whose coverage
- * clears the floor; outlier takes every rate there is. */
+/* Whether a position's rate joins the pool. A rate computed from few reads is
+ * unreliable. A position whose coverage does not clear the floor sets no norm. */
 static bool joins_pool(const normalize_config *cfg, float rate, float coverage)
 {
-    if (!isfinite(rate)) {
-        return false;
-    }
-
-    return cfg->scheme != NORM_UBR || (double)coverage > cfg->min_coverage;
+    return isfinite(rate) && (double)coverage > cfg->min_coverage;
 }
 
 static int gather_reference(const normalize_config *cfg, rate_pool *p,

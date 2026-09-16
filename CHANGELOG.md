@@ -35,7 +35,7 @@ cmuts v2 is a rewrite of cmuts. The pipeline is one binary. The counting runs on
 - `--params` reads the pair-HMM rates from a file, and `--dump-params` writes the defaults in the same form.
 - `--drop-supplementary` discards the further pieces of a split read.
 - `--verify` checks the FASTA against the alignment header.
-- `--min-coverage` sets the coverage a position needs before its rate sets the `ubr` normalization factor.
+- `--min-coverage` sets the coverage a position needs before its rate sets the normalization factor.
 - The `reads` datasets hold the number of reads counted and rejected at each reference, and the lengths of the counted reads. They also hold the number of reads in the alignment that map to no reference.
 
 ### Changed

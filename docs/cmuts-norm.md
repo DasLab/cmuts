@@ -27,9 +27,9 @@ This is only suggested if the two experiments had significantly different condit
 
 ## Normalization Schemes
 
-All normalization schemes compute the norm using the aggregated mismatch, insertion, and deletion rates.
+All normalization schemes compute the norm using the aggregated mismatch, insertion, and deletion rates. Only the positions whose coverage exceeds `--min-coverage` contribute to it.
 
-`--norm ubr` (the default) takes the 90th percentile of the aggregate rate, counting only positions whose coverage exceeds `--min-coverage`. `--norm outlier` drops the highest 2% of the aggregate rate as outliers and averages what lies between there and the highest 10%; it reads no coverage, so `--min-coverage` does not apply to it.
+The default `ubr` scheme computes the norm as the 90th percentile of the aggregate rate. The `outlier` scheme drops the highest 2% of the aggregate rate as outliers and averages what lies between there and the highest 10%.
 
 A norm that comes out as zero, negative, or undefined is not applied and is recorded as NaN.
 
@@ -76,7 +76,7 @@ A norm that comes out as zero, negative, or undefined is not applied and is reco
 | Option | Description |
 | --- | --- |
 | `--norm SCHEME` | how the norm is computed from the rates (ubr, outlier; default ubr) |
-| `--min-coverage N` | coverage a position needs before its rate sets the norm (ubr only) (default 500) |
+| `--min-coverage N` | coverage a position needs before its rate sets the norm (default 500) |
 
 ### Information
 

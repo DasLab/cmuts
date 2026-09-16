@@ -27,7 +27,7 @@ UBR_PERCENTILE = 90
 OUTLIER_HIGHEST = 0.02
 OUTLIER_LOWEST = 0.10
 
-# The coverage a position needs before its rate joins the ubr pool.
+# The coverage a position needs before its rate joins the pool.
 MIN_COVERAGE = 500
 
 
@@ -48,14 +48,11 @@ def _aggregate(inputs):
     return np.float32(1.0) - none
 
 
-def pool(scheme, inputs, min_coverage=MIN_COVERAGE):
-    """The values the norm is taken from. ubr keeps only the positions whose
-    coverage clears the floor; outlier keeps every aggregate there is."""
+def pool(inputs, min_coverage=MIN_COVERAGE):
+    """Gives the values the norm comes from, which are the aggregates of the
+    positions whose coverage clears the floor."""
     rates = _aggregate(inputs)
-    keep = np.isfinite(rates)
-
-    if scheme == UBR:
-        keep &= _pooled(COVERAGE, inputs) > min_coverage
+    keep = np.isfinite(rates) & (_pooled(COVERAGE, inputs) > min_coverage)
 
     return rates[keep]
 
@@ -87,7 +84,7 @@ def _outlier_norm(values) -> float:
 def norm(scheme, inputs, min_coverage=MIN_COVERAGE) -> float:
     """What cmuts norm should divide every input by. Where the pool supports no
     norm, the value is one and the rates are left as they are."""
-    values = pool(scheme, inputs, min_coverage)
+    values = pool(inputs, min_coverage)
     found = _ubr_norm(values) if scheme == UBR else _outlier_norm(values)
 
     return 1.0 if math.isnan(found) or found <= 0 else found

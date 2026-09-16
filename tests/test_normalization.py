@@ -8,7 +8,7 @@ and outputs.py describes the layout the programs share. The contracts this
 program shares with the other readers of outputs are in test_io.py.
 
 random_fields gives coverage in [0, 1), which no position clears the default
-floor with, so every test of the ubr norm sets the coverage it wants.
+floor with, so every test that needs a pool sets the coverage it wants.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ from programs import CMUTS_NORM, attempt, run_normalize, try_normalize
 TOLERANCE = 1e-6
 
 # Well above the default floor, so every position of an input built with it
-# reaches the ubr pool.
+# reaches the pool.
 COVERED = 1000.0
 
 # The fields the norm divides.
@@ -169,7 +169,8 @@ def test_counts_and_coverage_are_left_alone(build, normalize):
 # ---------------------------------------------------------------------------
 
 
-def test_a_position_below_the_floor_does_not_reach_the_pool(build, normalize):
+@pytest.mark.parametrize("scheme", [UBR, OUTLIER])
+def test_a_position_below_the_floor_does_not_reach_the_pool(build, normalize, scheme):
     """The floor admits one row and excludes the other, so the norm is the
     admitted row's aggregate alone."""
     coverage = np.full((N_REFS, CAP), np.float32(1.0))
@@ -178,15 +179,16 @@ def test_a_position_below_the_floor_does_not_reach_the_pool(build, normalize):
     rates = np.full((N_REFS, CAP), np.float32(0.8), dtype=np.float32)
     rates[0, :] = 0.2
 
-    output, = normalize(build({COVERAGE: coverage} | every_rate(rates)))
+    output, = normalize(build({COVERAGE: coverage} | every_rate(rates)), norm=scheme)
 
     assert recorded(output) == pytest.approx(aggregate(0.2), rel=TOLERANCE)
 
 
-def test_no_position_clearing_the_floor_leaves_the_rates_alone(build, normalize):
+@pytest.mark.parametrize("scheme", [UBR, OUTLIER])
+def test_no_position_clearing_the_floor_leaves_the_rates_alone(build, normalize, scheme):
     rates = build(random_fields(seed=4))
 
-    output, = normalize(rates)
+    output, = normalize(rates, norm=scheme)
 
     assert recorded(output) == 1.0
 
@@ -194,28 +196,18 @@ def test_no_position_clearing_the_floor_leaves_the_rates_alone(build, normalize)
         assert np.array_equal(field_of(output, name), field_of(rates, name)), name
 
 
-def test_lowering_the_floor_admits_more_of_the_pool(build, tmp_path):
+@pytest.mark.parametrize("scheme", [UBR, OUTLIER])
+def test_lowering_the_floor_admits_more_of_the_pool(build, tmp_path, scheme):
     rates = build(random_fields(seed=5))
 
-    strict = run_normalize([rates], [tmp_path / "strict.h5"])
-    loose = run_normalize([rates], [tmp_path / "loose.h5"], min_coverage="0")
-
-    assert recorded(strict[0]) == 1.0
-    assert recorded(loose[0]) == pytest.approx(norm(UBR, [rates], min_coverage=0),
-                                               rel=TOLERANCE)
-    assert recorded(loose[0]) != 1.0
-
-
-def test_the_outlier_scheme_ignores_the_floor(build, tmp_path):
-    """Only ubr consults the coverage, so lowering the floor cannot move an
-    outlier norm."""
-    rates = build(random_fields(seed=6))
-
-    strict = run_normalize([rates], [tmp_path / "strict.h5"], norm=OUTLIER)
-    loose = run_normalize([rates], [tmp_path / "loose.h5"], norm=OUTLIER,
+    strict = run_normalize([rates], [tmp_path / "strict.h5"], norm=scheme)
+    loose = run_normalize([rates], [tmp_path / "loose.h5"], norm=scheme,
                           min_coverage="0")
 
-    assert recorded(strict[0]) == recorded(loose[0])
+    assert recorded(strict[0]) == 1.0
+    assert recorded(loose[0]) == pytest.approx(norm(scheme, [rates], min_coverage=0),
+                                               rel=TOLERANCE)
+    assert recorded(loose[0]) != 1.0
 
 
 @pytest.mark.parametrize("channel", POOLED_RATE_FIELDS)
@@ -227,7 +219,7 @@ def test_a_position_missing_any_pooled_channel_does_not_reach_the_pool(build, no
     rates = build(covered(every_rate(0.5) | {channel: left}))
     output, = normalize(rates)
 
-    assert pool(UBR, [rates]).size < left.size
+    assert pool([rates]).size < left.size
     assert recorded(output) == pytest.approx(norm(UBR, [rates]), rel=TOLERANCE)
 
 
@@ -242,7 +234,7 @@ def test_a_position_missing_an_unpooled_channel_still_reaches_the_pool(build, no
     rates = build(covered(every_rate(0.5) | {channel: left}))
     output, = normalize(rates)
 
-    assert pool(UBR, [rates]).size == left.size
+    assert pool([rates]).size == left.size
     assert recorded(output) == pytest.approx(aggregate(0.5), rel=TOLERANCE)
 
 

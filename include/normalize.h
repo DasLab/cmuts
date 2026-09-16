@@ -22,7 +22,7 @@ typedef struct {
     size_t             n_files;
 
     norm_scheme scheme;
-    double      min_coverage;  /* the coverage a position needs to join the ubr pool */
+    double      min_coverage;  /* the coverage a position needs to join the pool */
 
     bool overwrite;
 } normalize_config;
