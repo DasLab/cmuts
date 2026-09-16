@@ -191,25 +191,60 @@ static int add_name(khash_t(name_set) *names, const char *name)
     return 0;
 }
 
-/* Reads each record until one repeats a name that an earlier record gave. */
-static int find_repeated_name(cm_fasta_reader *reader, khash_t(name_set) *names,
-                              const char *fasta_path, char *error, size_t error_len)
+/* This enum gives the result of checking one FASTA record. */
+typedef enum {
+    RECORD_OK,             /* the record can be aligned against */
+    RECORD_NO_SEQUENCE,    /* the record holds no bases */
+    RECORD_REPEATED_NAME,  /* an earlier record has the same name */
+    RECORD_NO_MEMORY,      /* the name could not be added to the set of names seen */
+} record_status;
+
+/* Checks one record, and adds its name to the set of names seen. */
+static record_status check_record(khash_t(name_set) *names, const cm_fasta_record *record)
+{
+    if (record->len == 0) {
+        return RECORD_NO_SEQUENCE;
+    }
+
+    switch (add_name(names, record->name)) {
+        case 0:  return RECORD_OK;
+        case 1:  return RECORD_REPEATED_NAME;
+        default: return RECORD_NO_MEMORY;
+    }
+}
+
+/* Writes the error message for a record that failed its check. */
+static int report_record_status(record_status status, const char *fasta_path,
+                                const char *name, char *error, size_t error_len)
+{
+    switch (status) {
+        case RECORD_NO_SEQUENCE:
+            snprintf(error, error_len, "%s: the reference \"%s\" has no sequence",
+                     fasta_path, name);
+            return -1;
+        case RECORD_REPEATED_NAME:
+            snprintf(error, error_len,
+                     "%s: the reference name \"%s\" appears more than once",
+                     fasta_path, name);
+            return -1;
+        default:
+            return fail_plainly("out of memory", error, error_len);
+    }
+}
+
+/* Reads each record until one fails its check, and reports that record. */
+static int find_refused_record(cm_fasta_reader *reader, khash_t(name_set) *names,
+                               const char *fasta_path, char *error, size_t error_len)
 {
     cm_fasta_record record;
-    int             repeated = 0;
+    record_status   status = RECORD_OK;
 
-    while (repeated == 0 && cm_fasta_next(reader, &record) == CM_ITER_OK) {
-        repeated = add_name(names, record.name);
+    while (status == RECORD_OK && cm_fasta_next(reader, &record) == CM_ITER_OK) {
+        status = check_record(names, &record);
     }
 
-    if (repeated < 0) {
-        return fail_plainly("out of memory", error, error_len);
-    }
-
-    if (repeated > 0) {
-        snprintf(error, error_len, "%s: the reference name \"%s\" appears more than once",
-                 fasta_path, record.name);
-        return -1;
+    if (status != RECORD_OK) {
+        return report_record_status(status, fasta_path, record.name, error, error_len);
     }
 
     if (cm_fasta_error(reader)) {
@@ -219,9 +254,10 @@ static int find_repeated_name(cm_fasta_reader *reader, khash_t(name_set) *names,
     return 0;
 }
 
-/* minimap2 accepts two references with the same name. The header it then writes names
- * both, and htslib refuses to read that header, so the repeated name is refused here. */
-static int check_unique_names(const mapping_config *cfg, char *error, size_t error_len)
+/* minimap2 accepts a reference with no sequence, and two references with the same name.
+ * In both cases it writes a header that htslib refuses to read. This function refuses
+ * both before minimap2 runs, so the error names the reference. */
+static int check_reference_records(const mapping_config *cfg, char *error, size_t error_len)
 {
     const char        *why    = NULL;
     cm_fasta_reader   *reader = cm_fasta_open(cfg->fasta_path, &why);
@@ -239,7 +275,7 @@ static int check_unique_names(const mapping_config *cfg, char *error, size_t err
         return fail_plainly("out of memory", error, error_len);
     }
 
-    status = find_repeated_name(reader, names, cfg->fasta_path, error, error_len);
+    status = find_refused_record(reader, names, cfg->fasta_path, error, error_len);
 
     free_names(names);
     cm_fasta_close(reader);
@@ -993,7 +1029,7 @@ int mapping_run(const mapping_config *cfg, char *error, size_t error_len)
 
     if (check_tools(cfg, error, error_len) < 0
         || check_reference(cfg, error, error_len) < 0
-        || check_unique_names(cfg, error, error_len) < 0
+        || check_reference_records(cfg, error, error_len) < 0
         || classify_reads(cfg, formats, error, error_len) < 0
         || check_pair(cfg, formats, error, error_len) < 0
         || check_single_bam(cfg, formats, error, error_len) < 0
