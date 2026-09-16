@@ -33,7 +33,7 @@ cmuts v2 is a rewrite of cmuts. The pipeline is one binary. The counting runs on
 - `cmuts align` may read an unaligned BAM in place of a FASTQ.
 - `--pairwise` names the statistics to write, either `correlation` or `conditional`. v1 wrote raw joint counts for `cmuts normalize` to process.
 - `--params` reads the pair-HMM rates from a file, and `--dump-params` writes the defaults in the same form.
-- `--alignment-type` restricts to primary or supplementary alignments.
+- `--alignment-type` allows filtering primary or supplementary alignments, with the latter rejected by default.
 - `--verify` checks the FASTA against the alignment header.
 - `--min-coverage` sets the coverage a position needs before its rate sets the normalization factor.
 - `--norm value` divides by the number `--value` gives, in place of computing one from the rates. It applies the normalization factor of one run to another.

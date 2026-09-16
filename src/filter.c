@@ -17,7 +17,7 @@ filter_config filter_defaults(void)
     return (filter_config){
         .min_mapq       = DEFAULT_MIN_MAPQ,
         .strand         = FILTER_STRAND_FORWARD | FILTER_STRAND_REVERSE,
-        .alignment_type = FILTER_ALIGNMENT_PRIMARY | FILTER_ALIGNMENT_SUPPLEMENTARY,
+        .alignment_type = FILTER_ALIGNMENT_PRIMARY,
         .min_length     = FILTER_LENGTH_UNBOUNDED,
         .max_length     = FILTER_LENGTH_UNBOUNDED,
     };
