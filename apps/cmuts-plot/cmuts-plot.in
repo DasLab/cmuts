@@ -114,7 +114,8 @@ class Condition:
 
 
 def dataset(handle, name):
-    """One dataset as an array, or None where the file lacks it."""
+    """Returns one dataset as an array, or None if the file does not have
+    it."""
     if name not in handle:
         return None
 
@@ -122,15 +123,15 @@ def dataset(handle, name):
 
 
 def file_shape(handle):
-    """The reference count and row width, from the coverage dataset every
-    output holds."""
+    """Returns the reference count and the row width, taken from the
+    coverage dataset that every output has."""
     n_refs, cap = handle[COVERAGE].shape
     return int(n_refs), int(cap)
 
 
 def check_conditions(conditions):
-    """Refuses an input that is not a cmuts output: one that does not open or
-    that lacks the coverage dataset every output holds."""
+    """Refuses an input that is not a cmuts output. Such a file either does
+    not open, or has no coverage dataset."""
     for condition in conditions:
         try:
             with h5py.File(condition.path, "r") as handle:
@@ -142,7 +143,7 @@ def check_conditions(conditions):
 
 
 def condition_refs(conditions):
-    """Each condition's reference count, in order."""
+    """Returns the reference count of each condition, in order."""
     counts = []
 
     for condition in conditions:
@@ -153,8 +154,8 @@ def condition_refs(conditions):
 
 
 def decode_sequence(handle, ref):
-    """One reference's bases, trimmed of padding, or None where the file
-    carries no sequence."""
+    """Returns one reference's bases without the padding, or None if the
+    file has no sequence."""
     tokens = dataset(handle, SEQUENCE)
 
     if tokens is None:
@@ -172,8 +173,8 @@ def decode_sequence(handle, ref):
 
 
 def summed_rate(rates):
-    """The sum of the rates of the channels given. NaN in any channel carries
-    through."""
+    """Returns the sum of the rates of the given channels. The sum is NaN
+    wherever any channel is NaN."""
     total = np.zeros_like(rates[0], dtype=np.float32)
 
     for rate in rates:
@@ -183,7 +184,8 @@ def summed_rate(rates):
 
 
 def summed_error(errors):
-    """The error of the sum: the channels' errors added in quadrature."""
+    """Returns the error of the sum, which adds the errors of the channels
+    in quadrature."""
     total = np.zeros_like(errors[0], dtype=np.float32)
 
     for error in errors:
@@ -193,9 +195,9 @@ def summed_error(errors):
 
 
 def reactivity_of(handle, channels, ref=None):
-    """The summed rate and error over the selected channels, for one
-    reference or for every reference at once. None where the file lacks a
-    selected rate; a missing error counts as zero."""
+    """Returns the summed rate and error over the selected channels, for one
+    reference or for every reference at once. Returns None if the file
+    has none of the selected rates. A missing error counts as zero."""
     rows = slice(None) if ref is None else ref
     rates, errors = [], []
 
@@ -217,7 +219,7 @@ def reactivity_of(handle, channels, ref=None):
 
 
 def mean_of(values):
-    """The mean as a float, or NaN where there is nothing to average."""
+    """Returns the mean as a float, or NaN if there is nothing to average."""
     values = np.asarray(values, dtype=float)
 
     if values.size == 0:
@@ -227,8 +229,9 @@ def mean_of(values):
 
 
 def snr_of(reactivity, error):
-    """Per-base SNR: reactivity over error, zero where the error is zero and
-    NaN where the reactivity is."""
+    """Returns the signal-to-noise ratio at each base, which is the
+    reactivity over the error. The result is zero where the error is
+    zero, and NaN where the reactivity is NaN."""
     r = np.asarray(reactivity, dtype=float)
     e = np.asarray(error, dtype=float)
     out = np.zeros_like(r)
@@ -239,18 +242,9 @@ def snr_of(reactivity, error):
     return out
 
 
-def coverage_fraction(coverage, mean_reads):
-    """Per-position coverage as a fraction of the mean read depth."""
-    coverage = np.asarray(coverage)
-
-    if mean_reads <= 0:
-        return np.zeros_like(coverage)
-
-    return coverage / mean_reads
-
-
 def read_log_depth(reads):
-    """log10 read depth per reference; a zero-read reference maps to -1."""
+    """Returns the log10 read depth of each reference. A reference with no
+    reads maps to -1."""
     reads = np.asarray(reads, dtype=float)
 
     with np.errstate(divide="ignore"):
@@ -258,8 +252,9 @@ def read_log_depth(reads):
 
 
 def read_histogram(reads, bins=100):
-    """Histogram of log10 read depth: centers, counts, and the counts rescaled
-    to [0, 1] for per-bar coloring."""
+    """Returns a histogram of the log10 read depth: the bin centers, the
+    counts, and the counts rescaled to [0, 1] so that each bar can be
+    colored."""
     counts, edges = np.histogram(read_log_depth(reads), bins=bins)
     centers = (edges[:-1] + edges[1:]) / 2
     low, high = float(counts.min()), float(counts.max())
@@ -271,8 +266,8 @@ def read_histogram(reads, bins=100):
 
 
 def reads_per_block(reads, nblocks=100):
-    """Mean reads per reference over nblocks equal blocks in file order, so a
-    spatial trend across the library stays visible."""
+    """Returns the mean reads per reference over nblocks equal blocks, in
+    file order, so that a trend across the library stays visible."""
     reads = np.asarray(reads, dtype=float)
     nblocks = max(min(nblocks, reads.shape[0]), 1)
     block = max(reads.shape[0] // nblocks, 1)
@@ -282,8 +277,9 @@ def reads_per_block(reads, nblocks=100):
 
 
 def length_distribution(lengths):
-    """The read-length counts trimmed to the longest length seen. Bin i holds
-    length i + 1; a 2-D input is summed over references first."""
+    """Returns the read-length counts, trimmed to the longest length seen.
+    Bin i holds length i + 1. A two-dimensional input is summed over
+    references first."""
     counts = np.asarray(lengths, dtype=float)
 
     if counts.ndim == 2:
@@ -299,7 +295,8 @@ def length_distribution(lengths):
 
 
 def symlog(values, linthresh):
-    """Symmetric log: sign(x) * log10(1 + |x| / linthresh)."""
+    """Returns the symmetric log of the values, which is sign(x) * log10(1 +
+    |x| / linthresh)."""
     values = np.asarray(values)
 
     return np.sign(values) * np.log10(1.0 + np.abs(values) / linthresh)
@@ -321,6 +318,9 @@ RDPU_FILL = pc.sample_colorscale("RdPu", [0.3])[0]
 RDPU_LINE = pc.sample_colorscale("RdPu", [0.8])[0]
 
 PROFILE_COLOR = "#c51b8a"
+
+# The color of the line the coverage plot draws at the read count.
+READS_LINE_COLOR = "#9aa0a6"
 OVERLAY_COLORS = ["#c51b8a", "#2c7fb8", "#31a354", "#e6550d", "#756bb1", "#636363"]
 
 # Correlation heatmaps use a symmetric-log color scale around zero.
@@ -358,8 +358,9 @@ def base_layout(title, xlabel="", ylabel=""):
 
 
 def line_layout(xlabel, ylabel):
-    """Layout for the reactivity line plots: a left spine with outside ticks,
-    the zero baseline as the only horizontal line, and a boxed legend."""
+    """Returns the layout of the reactivity line plots. It has a left spine
+    with outside ticks, the zero baseline as its only horizontal line,
+    and a boxed legend."""
     grid = "rgba(0,0,0,0.08)"
     ink = "#444"
 
@@ -404,7 +405,7 @@ def line_layout(xlabel, ylabel):
 
 
 def colorbar(title, **extra):
-    """An outlined colorbar with outside ticks and a rotated title."""
+    """Returns an outlined colorbar with outside ticks and a rotated title."""
     bar = {
         "title": {"text": title, "side": "right", "font": {"size": LABEL_SIZE}},
         "outlinecolor": "black",
@@ -426,8 +427,8 @@ def colorbar(title, **extra):
 
 
 def line_figure(data, xlabel, ylabel, x=None, yrange=None, axis_lines=False):
-    """A single fill-to-zero line plot, the shape the coverage and length
-    plots share."""
+    """Returns a single line plot filled to zero, which is the shape the
+    coverage and length plots share."""
     data = np.asarray(data)
 
     if x is None:
@@ -459,9 +460,9 @@ def line_figure(data, xlabel, ylabel, x=None, yrange=None, axis_lines=False):
 
 
 def profile_traces(reactivity, error, name, color, show_band_legend=False):
-    """A reactivity line and its standard-error band. The band is one closed
-    polygon per contiguous run of defined points, so it breaks at NaN gaps
-    instead of filling straight across them."""
+    """Returns a reactivity line and its standard-error band. The band is
+    one closed polygon per run of defined points, so it breaks at NaN
+    gaps instead of filling straight across them."""
     react = np.asarray(reactivity, dtype=float)
     n = react.shape[0]
     x = np.arange(n)
@@ -507,7 +508,8 @@ def profile_traces(reactivity, error, name, color, show_band_legend=False):
 
 
 def plot_profile(reactivity, error):
-    """One reference's reactivity: a line with its standard-error band."""
+    """Returns one reference's reactivity as a line with its standard-error
+    band."""
     fig = go.Figure()
 
     for trace in profile_traces(reactivity, error, "Reactivity", PROFILE_COLOR, True):
@@ -520,8 +522,8 @@ def plot_profile(reactivity, error):
 
 
 def plot_overlay(series):
-    """Several reactivity profiles overlaid. Each series holds reactivity, an
-    optional error, and its legend label."""
+    """Returns several reactivity profiles drawn over each other. Each
+    series has a reactivity, an optional error, and its legend label."""
     fig = go.Figure()
 
     for i, s in enumerate(series):
@@ -536,8 +538,8 @@ def plot_overlay(series):
 
 
 def plot_difference(a, b):
-    """The difference a - b of two profiles, with the errors propagated in
-    quadrature."""
+    """Returns the difference a - b of two profiles, with the errors
+    propagated in quadrature."""
     ra = np.asarray(a["reactivity"], dtype=float)
     rb = np.asarray(b["reactivity"], dtype=float)
     n = min(ra.shape[0], rb.shape[0])
@@ -557,9 +559,17 @@ def plot_difference(a, b):
     return fig
 
 
-def plot_coverage(coverage, mean_reads):
-    return line_figure(coverage_fraction(coverage, mean_reads), "Residue",
-                       "Fraction of reads", yrange=[0, 1.05], axis_lines=True)
+def plot_coverage(coverage, reads):
+    """Returns the coverage of one reference, with a dashed line at the read
+    count. Coverage counts the bases every alignment places, so a read with two
+    alignments can raise it above that count."""
+    fig = line_figure(coverage, "Residue", "Coverage", axis_lines=True)
+
+    if reads is not None and reads > 0:
+        fig.add_hline(y=reads, line_dash="dash", line_width=1,
+                      line_color=READS_LINE_COLOR)
+
+    return fig
 
 
 def plot_read_hist(reads):
@@ -584,9 +594,10 @@ def plot_lengths(lengths):
 
 
 def plot_reactivity_heatmap(reactivity, num=250):
-    """Every reference's reactivity as a (reference x position) heatmap,
-    clipped to the first num references so it stays bounded. NaN positions
-    are colored grey through a sentinel just below zero."""
+    """Returns every reference's reactivity as a heatmap of reference
+    against position, clipped to the first num references so that it
+    stays bounded. A NaN position is colored grey through a sentinel just
+    below zero."""
     sentinel = -0.01
     data = np.asarray(reactivity)[:num].copy()
     data[np.isnan(data)] = sentinel
@@ -610,9 +621,9 @@ def plot_reactivity_heatmap(reactivity, num=250):
 
 
 def matrix_heatmap(z, colorscale, zmin, zmax, bar):
-    """An L x L matrix as a square, reversed-y heatmap. scaleanchor keeps the
-    cells square inside the wider card, so the full-height colorbar matches
-    the plot exactly."""
+    """Returns an L x L matrix as a square heatmap with the y axis reversed.
+    scaleanchor keeps the cells square inside the wider card, so the
+    full-height colorbar matches the plot exactly."""
     fig = go.Figure(
         go.Heatmap(z=z, colorscale=colorscale, zmin=zmin, zmax=zmax, colorbar=bar)
     )
@@ -662,9 +673,10 @@ def plot_pairwise_coverage(values):
 
 @dataclass(frozen=True)
 class Plot:
-    """One report figure. render(handle, ref, channels) gives the figure for
-    one reference (ref an index) or the aggregate (ref None), and None where
-    the file lacks the data or the plot has no such view."""
+    """One report figure. render(handle, ref, channels) returns the figure
+    for one reference, where ref is an index, or for the aggregate, where
+    ref is None. It returns None if the file lacks the data, or if the
+    plot has no such view."""
 
     key: str
     label: str
@@ -700,13 +712,15 @@ def render_coverage(handle, ref, channels):
     coverage = dataset(handle, COVERAGE)
     reads = dataset(handle, READS)
 
-    if coverage is None or reads is None:
+    if coverage is None:
         return None
 
     if ref is None:
-        return plot_coverage(coverage.mean(0), float(reads.mean()))
+        return plot_coverage(coverage.mean(0),
+                             None if reads is None else float(reads.mean()))
 
-    return plot_coverage(coverage[ref], float(reads[ref]))
+    return plot_coverage(coverage[ref],
+                         None if reads is None else float(reads[ref]))
 
 
 def render_reads(handle, ref, channels):
@@ -740,8 +754,8 @@ def render_lengths(handle, ref, channels):
 
 
 def render_pairwise(name, build):
-    """A builder for one of the pairwise matrices, which exist per reference
-    only and only when the run asked for them."""
+    """Returns a builder for one of the pairwise matrices. These exist per
+    reference, and only where the run asked for them."""
     def render(handle, ref, channels):
         if ref is None or name not in handle:
             return None
@@ -784,7 +798,8 @@ DIFFERENCE = "difference"
 
 
 def parse_ref(value):
-    """A reference selector to an index, or None for the aggregate view."""
+    """Returns the index a reference selector names, or None for the
+    aggregate view."""
     if value is None or value == "" or value == AGGREGATE_REF:
         return None
 
@@ -792,7 +807,7 @@ def parse_ref(value):
 
 
 def parse_channels(value):
-    """The checked channels, in canonical order."""
+    """Returns the checked channels, in canonical order."""
     if value is None:
         value = list(DEFAULT_CHANNELS)
 
@@ -800,8 +815,8 @@ def parse_channels(value):
 
 
 def parse_channel_map(value, conditions):
-    """Every condition's checked channels, keyed by label. A condition the
-    request omits falls back to the default channels."""
+    """Returns the checked channels of every condition, keyed by label. A
+    condition the request leaves out falls back to the default channels."""
     value = value or {}
 
     return {c.label: parse_channels(value.get(c.label)) for c in conditions}
@@ -820,10 +835,10 @@ def condition_path(conditions, label):
 
 
 def series_of(conditions, spec):
-    """One overlay or difference series: the selected condition's summed
-    reactivity at one reference, over the channels that condition carries,
-    with its legend label. None where the reference lies past this
-    condition's library."""
+    """Returns one overlay or difference series, which is the summed
+    reactivity of the selected condition at one reference, over the
+    channels of that condition, with its legend label. Returns None if
+    the reference lies past the library of this condition."""
     ref = int(spec.get("ref", 0) or 0)
     channels = parse_channels(spec.get("channels"))
 
@@ -840,10 +855,11 @@ def series_of(conditions, spec):
 
 
 def render_figure(conditions, spec):
-    """Build the requested figure, or None where the kind is unknown or the
-    data is absent. spec carries kind and the coordinates: cond, ref and
-    channels for a card figure, series for an overlay, a and b for a
-    difference. Each series carries the channels of its own condition."""
+    """Returns the requested figure, or None if the kind is unknown or the
+    data is absent. spec gives the kind and the coordinates: cond, ref
+    and channels for a card figure, series for an overlay, and a and b
+    for a difference. Each series names the channels of its own
+    condition."""
     kind = spec["kind"]
 
     if kind == OVERLAY:
@@ -892,9 +908,9 @@ class Stat:
 
 
 def library_stats(handle, ref):
-    """The Library group: the reference count on the aggregate view, and the
-    length of the reference in view, from its sequence. A single-reference
-    condition has both on the one view."""
+    """Returns the Library group: the reference count on the aggregate view,
+    and the length of the reference in view, read from its sequence. A
+    condition with one reference has both on the one view."""
     n_refs, _ = file_shape(handle)
     rows = []
 
@@ -911,8 +927,8 @@ def library_stats(handle, ref):
 
 
 def counted_read_stats(handle, ref):
-    """Gives the counted reads of the reference in view, or the library-wide
-    rows where no reference is in view."""
+    """Returns the counted reads of the reference in view, or one row per
+    reference where no reference is in view."""
     n_refs, _ = file_shape(handle)
     reads = dataset(handle, READS)
 
@@ -933,8 +949,8 @@ def counted_read_stats(handle, ref):
 
 
 def rejected_read_stats(handle, ref):
-    """Gives the rejected reads of the reference in view, or the library-wide
-    total where no reference is in view."""
+    """Returns the rejected reads of the reference in view, or the total
+    over the library where no reference is in view."""
     rejected = dataset(handle, REJECTED)
 
     if rejected is None:
@@ -947,8 +963,8 @@ def rejected_read_stats(handle, ref):
 
 
 def unmapped_read_stats(handle, ref):
-    """Gives the unmapped reads of the whole file where no reference is in
-    view."""
+    """Returns the unmapped reads of the whole file, where no reference is
+    in view."""
     unmapped = dataset(handle, UNMAPPED)
 
     if ref is not None or unmapped is None:
@@ -958,13 +974,14 @@ def unmapped_read_stats(handle, ref):
 
 
 def read_stats(handle, ref):
-    """Gives the Reads group: the counted, rejected, and unmapped reads."""
+    """Returns the Reads group: the counted, rejected, and unmapped reads."""
     return (counted_read_stats(handle, ref) + rejected_read_stats(handle, ref)
             + unmapped_read_stats(handle, ref))
 
 
 def reactivity_stats(handle, channels, ref):
-    """The Reactivity and SNR groups, over the sum of the selected channels."""
+    """Returns the Reactivity and SNR groups, over the sum of the selected
+    channels."""
     n_refs, _ = file_shape(handle)
     reactivity, error = reactivity_of(handle, channels, ref)
 
@@ -1004,8 +1021,9 @@ def escape(text):
 
 
 def fmt_stat(stat):
-    """One tile's value: an em dash where it is not finite, and scientific
-    notation where the fixed precision would round it to zero."""
+    """Returns one tile's value as text. It gives an em dash where the value
+    is not finite, and scientific notation where the fixed precision
+    would round it to zero."""
     if not np.isfinite(stat.value):
         return "—"
     if stat.fmt == "int":
@@ -1017,7 +1035,8 @@ def fmt_stat(stat):
 
 
 def grouped_stats_html(stats):
-    """Tiles laid out as labeled group boxes, in order of first appearance."""
+    """Returns the tiles as labeled group boxes, in order of first
+    appearance."""
     groups = {}
 
     for stat in stats:
@@ -1041,8 +1060,8 @@ def active(label, default):
 
 
 def cond_toggle_html(labels):
-    """The chip row selecting the condition the whole page is shown for; the
-    first condition starts active."""
+    """Returns the chip row that selects the condition the whole page shows.
+    The first condition starts active."""
     buttons = "".join(
         f'<button type="button" class="cond-btn{active(c, labels[0])}" '
         f'data-cond="{escape(c)}">{escape(c)}</button>'
@@ -1053,8 +1072,8 @@ def cond_toggle_html(labels):
 
 
 def condition_block_html(condition, channels, ref):
-    """One condition's grouped stats, or a note where the selected reference
-    lies past this condition's library."""
+    """Returns one condition's grouped stats, or a note where the selected
+    reference lies past the library of that condition."""
     with h5py.File(condition.path, "r") as handle:
         if ref is not None and ref >= file_shape(handle)[0]:
             return f'<p class="stat-note">No reference {ref + 1}.</p>'
@@ -1063,10 +1082,10 @@ def condition_block_html(condition, channels, ref):
 
 
 def stats_conditions_html(conditions, channel_map, ref):
-    """One block per condition, each over that condition's channels, with the
-    chip row at the top of the page showing one of them. This is also the body
-    the /stats endpoint returns, so the client can refetch it when the checked
-    channels or the reference change."""
+    """Returns one block per condition, each over the channels of that
+    condition, with the chip row at the top showing one of them. The
+    /stats endpoint returns this same body, so the client can fetch it
+    again when the checked channels or the reference change."""
     first = conditions[0].label
     blocks = ""
 
@@ -1079,7 +1098,7 @@ def stats_conditions_html(conditions, channel_map, ref):
 
 
 def channel_presets_html():
-    """Gives one chip per named channel set."""
+    """Returns one chip per named channel set."""
     buttons = "".join(
         f'<button type="button" class="preset-btn" '
         f'data-preset="{",".join(channels)}">{escape(name)}</button>'
@@ -1090,9 +1109,9 @@ def channel_presets_html():
 
 
 def channel_toggle_html():
-    """Gives one checkbox per channel, then the chips selecting a named set of
-    them. The boxes hold the channels of the condition the page shows, and the
-    default channels start checked."""
+    """Returns one checkbox per channel, then the chips that select a named
+    set of them. The boxes show the channels of the condition the page
+    shows, and the default channels start checked."""
     boxes = "".join(
         f'<label class="channel"><input type="checkbox" data-channel="{c}"'
         f'{" checked" if c in DEFAULT_CHANNELS else ""}>'
@@ -1106,8 +1125,8 @@ def channel_toggle_html():
 
 
 def plot_card(plot, first_label, ref, extra_class=""):
-    """A collapsible figure card: an empty placeholder the client fetches
-    into, starting on the condition the chips start on."""
+    """Returns a collapsible figure card. It starts as an empty placeholder
+    that the client fetches into, on the condition the chips start on."""
     cls = "plot-details wide" if plot.aspect == "wide" else "plot-details"
     inner_cls = ("plot " + extra_class).strip()
     div = (f'<div class="figure {plot.aspect}">'
@@ -1165,7 +1184,8 @@ def per_sequence_section(conditions, channel_map, n_refs):
 
 
 def comparison_sections():
-    """The multi-plot and difference shells; the client wires their rows."""
+    """Returns the shells of the multi-plot and of the difference plot. The
+    client wires their rows."""
     return [
         section(
             "Multi-plot",
@@ -1182,9 +1202,9 @@ def comparison_sections():
 
 
 def manifest_of(conditions, refs):
-    """The compact JSON the client reads: the condition labels, each one's
-    reference count, the channel vocabulary, and the channels every condition
-    starts with."""
+    """Returns the compact JSON the client reads: the condition labels, the
+    reference count of each one, the channel vocabulary, and the channels
+    every condition starts with."""
     return {
         "conditions": [c.label for c in conditions],
         "refs": refs,
@@ -1221,13 +1241,14 @@ def document(body, embed, n_conditions):
 
 
 def control_row_html(label, control):
-    """One labeled row of the top bar."""
+    """Returns one labeled row of the top bar."""
     return f'<span class="control-label">{label}</span>{control}'
 
 
 def controls_html(labels):
-    """The top bar: the condition chips, then the channels of the condition
-    they select. A single-condition report shows the channels alone."""
+    """Returns the top bar: the condition chips, then the channels of the
+    condition they select. A report with one condition shows the channels
+    alone."""
     rows = ""
 
     if len(labels) > 1:
@@ -1239,10 +1260,10 @@ def controls_html(labels):
 
 
 def build_shell(conditions):
-    """The whole page: the top bar, the stats, the figure cards, and the
-    comparison sections, with every figure fetched by the client. The
-    single-reference layout applies only when every condition holds one
-    reference; the dropdown otherwise reaches the largest library."""
+    """Returns the whole page: the top bar, the stats, the figure cards, and
+    the comparison sections, with every figure fetched by the client. The
+    single-reference layout applies only where every condition has one
+    reference. Otherwise the dropdown reaches the largest library."""
     channel_map = default_channel_map(conditions)
     refs = condition_refs(conditions)
     n_refs = max(refs)
@@ -1975,8 +1996,8 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(200, "text/html; charset=utf-8", body.encode())
 
     def sequence(self, query):
-        """One condition's bases at one reference, so the strip always shows
-        the sequence of the selected chip."""
+        """Returns one condition's bases at one reference, so that the strip
+        always shows the sequence of the selected chip."""
         try:
             spec = self.spec_of(query)
             path = condition_path(self.server.conditions, spec["cond"])
@@ -2038,8 +2059,8 @@ def stem_of(path):
 
 
 def pair_labels(files, labels):
-    """One Condition per file. A --label applies to the file in the same
-    position; a file without one is labeled by its stem."""
+    """Returns one Condition per file. A --label applies to the file in the
+    same position, and a file without one is labeled by its stem."""
     if len(labels) > len(files):
         raise SystemExit(f"cmuts-plot: {len(labels)} labels given for {len(files)} files")
 
