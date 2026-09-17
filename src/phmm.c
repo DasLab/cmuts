@@ -36,6 +36,30 @@ typedef struct {
 /* Forward times backward sums to one on the first row within this tolerance. */
 #define NORMALIZATION_TOLERANCE 1e-6
 
+/* The three arms of the decision at the pairing of base b, which the matrix takes on
+ * the edges into that pairing: continue to the next pairing, open the insertion
+ * counted at b, or open the deletion counted at base b - 1. */
+typedef struct {
+    double match_to_match;
+    double insertion_to_match;
+    double deletion_to_match;
+} decision;
+
+/* What a column's base is to every row: one of the named bases, an ambiguity code, or
+ * absent past either end of the reference. The values below NUC_COUNT are the bases as
+ * nuc names them, so that a code indexes a table of comparisons directly. */
+#define COLUMN_ABSENT NUC_COUNT
+#define COLUMN_KINDS  (NUC_COUNT + 1)
+
+/* The decision at the base's pairing, its modification rate, and what its base is. An
+ * absent base takes the rate of the nearest base, so that a row crossing the end of the
+ * reference sees one rate throughout. */
+struct phmm_column {
+    decision decision;
+    double   modification;
+    uint8_t  code;
+};
+
 /* Where one row of the band lies: the reference prefix length its first cell stands
  * for, and its cell count. */
 typedef struct {
@@ -90,7 +114,8 @@ typedef struct {
  * the rest and is the only writer, so every other function takes a const
  * context. */
 typedef struct {
-    const phmm_rates      *rates;
+    const phmm_model      *model;
+    const phmm_rates      *rates;   /* the model's */
     const phred           *quality;
     const cm_bam_record   *read;
     const cm_fasta_record *ref;
@@ -116,10 +141,8 @@ void phmm_rates_set_transitions(phmm_rates *rates, const phmm_uniform_rates *uni
     rates->deletion_to_deletion   = uniform->extend_deletion;
 }
 
-/* Returns a per-base rate at a 0-based base, clamped to the reference. A clamped read
- * serves a cell outside the reference, whose terms a zero emission clears, so the
- * value itself never matters. */
-static double rate_at(const double *values, size_t len, hts_pos_t b)
+/* Returns a 0-based base clamped to a reference of len bases. */
+static hts_pos_t clamp_base(size_t len, hts_pos_t b)
 {
     if (b < 0) {
         b = 0;
@@ -128,23 +151,21 @@ static double rate_at(const double *values, size_t len, hts_pos_t b)
         b = (hts_pos_t)len - 1;
     }
 
-    return values[b];
+    return b;
 }
 
-/* The three arms of the decision at the pairing of base b, which the matrix takes on
- * the edges into that pairing: continue to the next pairing, open the insertion
- * counted at b, or open the deletion counted at base b - 1. */
-typedef struct {
-    double match_to_match;
-    double insertion_to_match;
-    double deletion_to_match;
-} decision;
-
-static decision decision_at(const context *ctx, hts_pos_t b)
+/* Returns a per-base rate at a 0-based base, clamped to the reference. A clamped read
+ * serves a cell outside the reference, whose terms a zero emission clears, so the
+ * value itself never matters. */
+static double rate_at(const double *values, size_t len, hts_pos_t b)
 {
-    size_t len            = ctx->ref->len;
-    double open_insertion = rate_at(ctx->rates->open_insertion, len, b);
-    double open_deletion  = rate_at(ctx->rates->open_deletion, len, b - 1);
+    return values[clamp_base(len, b)];
+}
+
+static decision decision_at(const phmm_rates *rates, size_t len, hts_pos_t b)
+{
+    double open_insertion = rate_at(rates->open_insertion, len, b);
+    double open_deletion  = rate_at(rates->open_deletion, len, b - 1);
 
     return (decision){
         .match_to_match     = 1.0 - open_insertion - open_deletion,
@@ -220,36 +241,42 @@ static void quality_terms_keep(quality_terms *terms, double modification, double
     terms->modification = modification;
 }
 
-/* The parts of one row's comparisons that do not vary along the row: the row's base,
- * whether it names one, its chance of being misread, and the slot its quality keeps
- * its comparisons in. The modification rate varies per reference base, so the slot is
- * refilled where a cell reads a rate other than the one it holds. */
+/* The comparisons of one row's base against each kind of column. An absent base has no
+ * comparison, so its emission is zero. An ambiguous base on either side is a real base
+ * of unknown identity and takes the uninformative emission. The comparisons against
+ * named bases depend on the modification rate, which varies per reference base, so
+ * they are drawn from the row's quality slot for one rate at a time and kept while the
+ * cells along the row read that rate. */
 typedef struct {
-    cell_terms     neither;
+    cell_terms     by_code[COLUMN_KINDS];
+    double         kept;      /* the modification rate the named comparisons hold for;
+                                 NaN before any is kept */
     double         error;
-    quality_terms *quality;
+    quality_terms *quality;   /* the slot of the row's base quality */
     nuc            ours;
-    bool           named;
 } row_terms;
 
 static row_terms row_terms_of(const context *ctx, size_t i)
 {
-    int32_t query   = ctx->span.begin + (int32_t)i - 1;
-    int     quality = quality_at(ctx, query);
-    nuc     ours    = nuc_from_read(ctx->read->seq, query);
-
-    return (row_terms){
-        .neither = { .emission = UNINFORMATIVE, .modification = 0.0 },
+    int32_t   query   = ctx->span.begin + (int32_t)i - 1;
+    int       quality = quality_at(ctx, query);
+    row_terms row     = {
+        .kept    = (double)NAN,
         .error   = error_of(ctx, quality),
         .quality = &ctx->scratch->by_quality[quality],
-        .ours    = ours,
-        .named   = nuc_is_base(ours),
+        .ours    = nuc_from_read(ctx->read->seq, query),
     };
+
+    row.by_code[COLUMN_ABSENT] = (cell_terms){ .emission = 0.0, .modification = 0.0 };
+    row.by_code[NUC_N]         = (cell_terms){ .emission = UNINFORMATIVE,
+                                               .modification = 0.0 };
+
+    return row;
 }
 
-/* Returns the comparison of the row's base with a named base under one modification
- * rate, from the row's quality slot. */
-static cell_terms compared(const row_terms *row, bool agree, double modification)
+/* Forms the row's comparisons against the named bases for one modification rate,
+ * drawing on the row's quality slot and refilling it where it holds another rate. */
+static void row_terms_keep(row_terms *row, double modification)
 {
     quality_terms *quality = row->quality;
 
@@ -257,29 +284,23 @@ static cell_terms compared(const row_terms *row, bool agree, double modification
         quality_terms_keep(quality, modification, row->error);
     }
 
-    return agree ? quality->agree : quality->disagree;
+    for (nuc theirs = NUC_A; theirs < NUC_COUNT; theirs++) {
+        row->by_code[theirs] = !nuc_is_base(row->ours) ? row->by_code[NUC_N]
+                             : theirs == row->ours     ? quality->agree
+                                                       : quality->disagree;
+    }
+
+    row->kept = modification;
 }
 
-/* Returns the comparison for the cell at reference prefix length j, which
- * pairs the row's base with reference base j - 1. A position past either end
- * of the reference has no base, so its emission is zero. An ambiguous base is
- * a real base of unknown identity and takes the uninformative emission. */
-static cell_terms terms_at(const context *ctx, const row_terms *row,
-                           hts_pos_t j)
+/* Returns the comparison of the row's base with the base of one column. */
+static cell_terms terms_at(row_terms *row, const phmm_column *col)
 {
-    nuc theirs;
-
-    if (j < 1 || (size_t)j > ctx->ref->len) {
-        return (cell_terms){ .emission = 0.0, .modification = 0.0 };
+    if (col->modification != row->kept) {
+        row_terms_keep(row, col->modification);
     }
 
-    theirs = nuc_from_char(ctx->ref->seq[j - 1]);
-
-    if (!nuc_is_base(theirs) || !row->named) {
-        return row->neither;
-    }
-
-    return compared(row, theirs == row->ours, ctx->rates->modification[j - 1]);
+    return row->by_code[col->code];
 }
 
 /* ------------------------------------------------------------------------ */
@@ -410,6 +431,21 @@ static bool within(hts_pos_t k, hts_pos_t width)
     return k >= 0 && k < width;
 }
 
+/* Returns the model's column of reference base b, which the columns cover from
+ * -(margin + 1) to len + margin. */
+static const phmm_column *column_of(const phmm_model *model, hts_pos_t b)
+{
+    return model->columns + (b + model->margin + 1);
+}
+
+/* Returns the columns of a row, such that cell k pairs column k and steps into the
+ * pairing of column k + 1. prepare guarantees that every base a row's cells pair or step
+ * into has a column. */
+static const phmm_column *columns_of(const context *ctx, size_t i)
+{
+    return column_of(ctx->model, origin_of(ctx, i) - 1);
+}
+
 /* ------------------------------------------------------------------------ */
 /* Forward                                                                   */
 /* ------------------------------------------------------------------------ */
@@ -537,6 +573,7 @@ static double forward_row(const context *ctx, size_t i, double scale)
     descent           step       = descent_into(ctx, i, scale);
     band_cell        *row        = row_of(ctx, i);
     cell_terms       *terms      = terms_of(ctx, i);
+    const phmm_column *cols      = columns_of(ctx, i);
     row_terms         each       = row_terms_of(ctx, i);
     hts_pos_t         width      = width_at(ctx, i);
     bool              deletions  = deletions_live(ctx, i);
@@ -551,13 +588,12 @@ static double forward_row(const context *ctx, size_t i, double scale)
     double            total_deleted  = 0.0;
 
     for (hts_pos_t k = 0; k < width; k++) {
-        hts_pos_t j = position_of(ctx, i, k);
-        decision  into = decision_at(ctx, j - 1);  /* the base the cell pairs */
-        double    paired, inserted, deleted;
+        const phmm_column *col = &cols[k];  /* the base the cell pairs */
+        double             paired, inserted, deleted;
 
-        terms[k] = terms_at(ctx, &each, j);
+        terms[k] = terms_at(&each, col);
 
-        paired   = paired_from(&step, &into, k, terms[k].emission);
+        paired   = paired_from(&step, &col->decision, k, terms[k].emission);
         inserted = insertions ? inserted_from(&step, k) : 0.0;
         deleted  = deletions && k > 0
                  ? deleted_from(&step, left_match, left_deletion)
@@ -819,23 +855,24 @@ static void backward_cell(const ascent *step, const decision *below,
  * run can be open. */
 static void backward_last_row(const context *ctx)
 {
-    size_t       i   = ctx->rows - 1;
-    band_cell   *row = backward_row_of(ctx, i);
-    accumulation acc = accumulation_of(ctx, i);
-    double       cell[N_STATES] = {
+    size_t             i    = ctx->rows - 1;
+    band_cell         *row  = backward_row_of(ctx, i);
+    const phmm_column *cols = columns_of(ctx, i);
+    accumulation       acc  = accumulation_of(ctx, i);
+    double             cell[N_STATES] = {
         [STATE_MATCH]     = 1.0,
         [STATE_INSERTION] = 0.0,
         [STATE_DELETION]  = 0.0,
     };
 
     for (hts_pos_t k = width_at(ctx, i); k-- > 0; ) {
-        decision below = decision_at(ctx, position_of(ctx, i, k));
+        const decision *below = &cols[k + 1].decision;
 
         row[k][STATE_MATCH]     = cell[STATE_MATCH];
         row[k][STATE_INSERTION] = cell[STATE_INSERTION];
         row[k][STATE_DELETION]  = cell[STATE_DELETION];
 
-        accumulate_cell(&acc, k, &below, cell, 0.0);
+        accumulate_cell(&acc, k, below, cell, 0.0);
     }
 
     accumulate_end(&acc);
@@ -845,29 +882,30 @@ static void backward_last_row(const context *ctx)
  * with a row above and a row below. */
 static void backward_row(const context *ctx, size_t i)
 {
-    band_cell        *row        = backward_row_of(ctx, i);
-    ascent            below      = ascent_into(ctx, i);
-    accumulation      acc        = accumulation_of(ctx, i);
-    hts_pos_t         width      = width_at(ctx, i);
-    bool              insertions = insertions_live(ctx, i);
+    band_cell         *row        = backward_row_of(ctx, i);
+    ascent             below      = ascent_into(ctx, i);
+    const phmm_column *cols       = columns_of(ctx, i);
+    accumulation       acc        = accumulation_of(ctx, i);
+    hts_pos_t          width      = width_at(ctx, i);
+    bool               insertions = insertions_live(ctx, i);
     /* The cell to the right, held in a local so each step of the deletion
      * chain does not wait on the preceding store. */
     double            right_deletion = 0.0;
 
     for (hts_pos_t k = width; k-- > 0; ) {
-        decision into     = decision_at(ctx, position_of(ctx, i, k));
-        double   pairing  = pairing_below(&below, k);
-        double   inserted = inserted_below(&below, k);
-        double   deleted  = k + 1 < width ? right_deletion : 0.0;
-        double   cell[N_STATES];
+        const decision *into     = &cols[k + 1].decision;
+        double          pairing  = pairing_below(&below, k);
+        double          inserted = inserted_below(&below, k);
+        double          deleted  = k + 1 < width ? right_deletion : 0.0;
+        double          cell[N_STATES];
 
-        backward_cell(&below, &into, insertions, pairing, inserted, deleted, cell);
+        backward_cell(&below, into, insertions, pairing, inserted, deleted, cell);
 
         row[k][STATE_MATCH]     = cell[STATE_MATCH];
         row[k][STATE_INSERTION] = cell[STATE_INSERTION];
         row[k][STATE_DELETION]  = cell[STATE_DELETION];
 
-        accumulate_cell(&acc, k, &into, cell, pairing);
+        accumulate_cell(&acc, k, into, cell, pairing);
 
         right_deletion = cell[STATE_DELETION];
     }
@@ -880,16 +918,17 @@ static void backward_row(const context *ctx, size_t i)
  * passes_agree to check. */
 static void backward_first_row(const context *ctx)
 {
-    band_cell        *row   = backward_row_of(ctx, 0);
-    ascent            below = ascent_into(ctx, 0);
-    hts_pos_t         width = width_at(ctx, 0);
+    band_cell         *row   = backward_row_of(ctx, 0);
+    ascent             below = ascent_into(ctx, 0);
+    const phmm_column *cols  = columns_of(ctx, 0);
+    hts_pos_t          width = width_at(ctx, 0);
 
     for (hts_pos_t k = 0; k < width; k++) {
-        decision into     = decision_at(ctx, position_of(ctx, 0, k));
-        double   pairing  = pairing_below(&below, k);
-        double   inserted = inserted_below(&below, k);
+        const decision *into     = &cols[k + 1].decision;
+        double          pairing  = pairing_below(&below, k);
+        double          inserted = inserted_below(&below, k);
 
-        row[k][STATE_MATCH] = into.match_to_match      * pairing
+        row[k][STATE_MATCH] = into->match_to_match     * pairing
                             + below.match_to_insertion * inserted;
 
         /* Neither run reaches the row before the first placed base. */
@@ -944,6 +983,66 @@ static phmm_status backward(const context *ctx)
     backward_first_row(ctx);
 
     return passes_agree(ctx);
+}
+
+/* ------------------------------------------------------------------------ */
+/* The model                                                                 */
+/* ------------------------------------------------------------------------ */
+
+/* Returns the column of reference base b of a reference of len bases. */
+static phmm_column column_at(const phmm_rates *rates, const cm_fasta_record *ref,
+                             hts_pos_t b)
+{
+    size_t    len     = ref->len;
+    bool      present = b >= 0 && (size_t)b < len;
+    hts_pos_t nearest = clamp_base(len, b);
+
+    return (phmm_column){
+        .decision     = decision_at(rates, len, b),
+        .modification = rates->modification[nearest],
+        .code         = present ? (uint8_t)nuc_from_char(ref->seq[nearest])
+                                : COLUMN_ABSENT,
+    };
+}
+
+/* Returns the columns a reference of len bases needs with the given margin. */
+static size_t columns_needed(size_t len, int margin)
+{
+    return len + 2 * (size_t)margin + 2;
+}
+
+int phmm_model_prepare(phmm_model *model, const phmm_rates *rates,
+                       const cm_fasta_record *ref, int margin)
+{
+    size_t needed = columns_needed(ref->len, margin);
+
+    if (needed > model->cap) {
+        phmm_column *columns = realloc(model->columns, needed * sizeof *columns);
+
+        if (!columns) {
+            return -1;
+        }
+
+        model->columns = columns;
+        model->cap     = needed;
+    }
+
+    model->rates  = rates;
+    model->len    = ref->len;
+    model->margin = margin;
+
+    for (size_t t = 0; t < needed; t++) {
+        model->columns[t] = column_at(rates, ref, (hts_pos_t)t - margin - 1);
+    }
+
+    return 0;
+}
+
+void phmm_model_free(phmm_model *model)
+{
+    free(model->columns);
+    model->columns = NULL;
+    model->cap     = 0;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1131,12 +1230,23 @@ static void clear_window(const context *ctx)
     memset(scratch->window, 0, len * sizeof *scratch->window);
 }
 
-static bool prepare(context *ctx)
+/* Returns whether every base the read's rows reach has a column in the model. */
+static bool covered(const context *ctx)
+{
+    const phmm_model *model = ctx->model;
+    hts_pos_t         first = ctx->window.origin;
+    hts_pos_t         last  = first + (hts_pos_t)ctx->window.len;
+
+    return first >= -(model->margin + 1)
+        && last <= (hts_pos_t)columns_needed(model->len, model->margin) - model->margin - 1;
+}
+
+static phmm_status prepare(context *ctx)
 {
     const cm_bam_record *read = ctx->read;
 
     if (grow_rows(ctx->scratch, (size_t)read->l_qseq + 1) < 0) {
-        return false;
+        return PHMM_NO_MEMORY;
     }
 
     ctx->span = aln_places(read, ctx->scratch->places);
@@ -1144,17 +1254,21 @@ static bool prepare(context *ctx)
 
     lay_out_rows(ctx);
 
+    if (!covered(ctx)) {
+        return PHMM_NO_PATH;
+    }
+
     if (grow_band(ctx->scratch, ctx->rows, (size_t)ctx->widest) < 0) {
-        return false;
+        return PHMM_NO_MEMORY;
     }
 
     if (grow_window(ctx->scratch, ctx->window.len) < 0) {
-        return false;
+        return PHMM_NO_MEMORY;
     }
 
     clear_window(ctx);
 
-    return true;
+    return PHMM_OK;
 }
 
 void phmm_window_bounds(const phmm_window *window, size_t len,
@@ -1174,12 +1288,13 @@ void phmm_window_bounds(const phmm_window *window, size_t len,
     }
 }
 
-phmm_status phmm_run(const phmm_rates *rates, const phred *quality,
+phmm_status phmm_run(const phmm_model *model, const phred *quality,
                      const cm_bam_record *read, const cm_fasta_record *ref,
                      const int *half, phmm_scratch *scratch, phmm_window *out)
 {
     context ctx = {
-        .rates   = rates,
+        .model   = model,
+        .rates   = model->rates,
         .quality = quality,
         .read    = read,
         .ref     = ref,
@@ -1188,8 +1303,10 @@ phmm_status phmm_run(const phmm_rates *rates, const phred *quality,
     };
     phmm_status status;
 
-    if (!prepare(&ctx)) {
-        return PHMM_NO_MEMORY;
+    status = prepare(&ctx);
+
+    if (status != PHMM_OK) {
+        return status;
     }
 
     status = forward(&ctx);

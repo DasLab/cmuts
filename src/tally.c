@@ -20,7 +20,7 @@
 typedef struct {
     const cm_bam_record   *read;
     const cm_fasta_record *ref;
-    const phmm_rates      *rates;
+    const phmm_model      *model;
     const tally_tables    *tables;
     accum                 *target;
     pairs                 *target_pairs;   /* NULL where no pairs are counted */
@@ -125,7 +125,7 @@ static phmm_status marginalize(const context *ctx, tally_scratch *scratch)
         return PHMM_NO_MEMORY;
     }
 
-    status = phmm_run(ctx->rates, &ctx->tables->quality, ctx->read, ctx->ref, half,
+    status = phmm_run(ctx->model, &ctx->tables->quality, ctx->read, ctx->ref, half,
                       scratch->phmm, &window);
 
     if (status == PHMM_OK) {
@@ -238,13 +238,13 @@ static accum_field_id rejected_field(const cm_bam_record *read)
 }
 
 phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
-                  const phmm_rates *rates, const tally_tables *tables,
+                  const phmm_model *model, const tally_tables *tables,
                   tally_scratch *scratch, accum *target, pairs *target_pairs)
 {
     context ctx = {
         .read         = read,
         .ref          = ref,
-        .rates        = rates,
+        .model        = model,
         .tables       = tables,
         .target       = target,
         .target_pairs = target_pairs,

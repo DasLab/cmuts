@@ -91,6 +91,7 @@ static void free_buffers(refctx *ctx)
 {
     pairs_free(&ctx->pr);
     accum_free(&ctx->acc);
+    phmm_model_free(&ctx->model);
     free(ctx->rate_storage);
     free(ctx->seq);
     ctx->rate_storage = NULL;
@@ -111,6 +112,7 @@ static int build_context(refctx *ctx, size_t ref_cap, bool pairwise)
 {
     ctx->seq          = malloc(ref_cap + 1);
     ctx->rate_storage = malloc(PHMM_RATE_ARRAYS * ref_cap * sizeof *ctx->rate_storage);
+    ctx->model        = (phmm_model){ 0 };
 
     if (!ctx->seq || !ctx->rate_storage || accum_alloc(&ctx->acc, ref_cap) < 0
         || (pairwise && pairs_alloc(&ctx->pr, ref_cap) < 0)) {

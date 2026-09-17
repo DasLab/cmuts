@@ -30,6 +30,8 @@ typedef struct refctx {
     phmm_rates      rates;          /* filled by the loader before any read is queued,
                                        and only read after */
     double         *rate_storage;   /* owned; PHMM_RATE_ARRAYS values per base */
+    phmm_model      model;          /* prepared from rates and seq by the loader, as
+                                       rates is */
     accum           acc;
     bool            accumulated;  /* whether any read reached it; guarded by lock */
     pairs           pr;    /* co-modification; held only under --pairwise */

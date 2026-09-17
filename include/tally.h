@@ -48,8 +48,9 @@ tally_scratch *tally_scratch_create(void);
 void           tally_scratch_destroy(tally_scratch *scratch);
 
 /* Adds one read's contribution to target, which is never cleared here. PHMM_NO_PATH
- * adds one to the rejected count and no other value; any other failure ends the run. target_pairs takes the read's co-modification, and is NULL for a run counting
- * none. rates are the rates of ref. */
+ * adds one to the rejected count and no other value; any other failure ends the run.
+ * target_pairs takes the read's co-modification, and is NULL for a run counting none.
+ * model is prepared for ref with a margin of at least the band. */
 phmm_status tally(const cm_bam_record *read, const cm_fasta_record *ref,
-                  const phmm_rates *rates, const tally_tables *tables,
+                  const phmm_model *model, const tally_tables *tables,
                   tally_scratch *scratch, accum *target, pairs *target_pairs);

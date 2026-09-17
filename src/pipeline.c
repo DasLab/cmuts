@@ -176,7 +176,7 @@ static const workitem *item_at(void *const *slots, size_t i)
 
 /* Counts every read of a run into the worker's own shadow. */
 static void worker_count_run(worker *w, void **slots, size_t n,
-                             const cm_fasta_record *ref, const phmm_rates *rates)
+                             const cm_fasta_record *ref, const phmm_model *model)
 {
     for (size_t i = 0; i < n; i++) {
         const workitem *item = item_at(slots, i);
@@ -184,7 +184,7 @@ static void worker_count_run(worker *w, void **slots, size_t n,
         phmm_status     status;
 
         cm_bam_record_view(item->rec, &read);
-        status = tally(&read, ref, rates, &w->pipe->tally_tables, w->scratch,
+        status = tally(&read, ref, model, &w->pipe->tally_tables, w->scratch,
                        &w->shadow,
                        w->shadow_pairs.cells ? &w->shadow_pairs : NULL);
 
@@ -213,7 +213,7 @@ static void worker_process_run(worker *w, void **slots, size_t n)
     /* Once a worker has failed the run is released without being counted, since the
      * output will never be written. */
     if (failure_seen(w->failure) == PHMM_OK) {
-        worker_count_run(w, slots, n, &ref, &ctx->rates);
+        worker_count_run(w, slots, n, &ref, &ctx->model);
     }
 
     /* The whole run's carriers go back at once. No thread reads them afterwards:
@@ -379,13 +379,23 @@ static refctx *pipeline_open_reference(const pipeline *p, int32_t tid)
         return NULL;
     }
 
-    refctx *ctx = ctxpool_take(p->contexts);
+    refctx         *ctx = ctxpool_take(p->contexts);
+    cm_fasta_record ref;
+
     if (!ctx) {
         return NULL;
     }
 
     refctx_open(ctx, tid, cm_bam_stream_refname(p->bam, tid), seq);
     tally_rates_fill(&ctx->rates, ctx->rate_storage, ctx->len, &p->tally_tables);
+
+    /* The margin is the band, which is what every row of the marginal is given. */
+    refctx_sequence(ctx, &ref);
+    if (phmm_model_prepare(&ctx->model, &ctx->rates, &ref, p->tally_tables.band) < 0) {
+        ctxpool_give(p->contexts, ctx);
+        return NULL;
+    }
+
     h5writer_expect(p->out, tid);
     return ctx;
 }
