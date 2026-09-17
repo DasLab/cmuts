@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.0.0] - 2026-09-14
+## [2.0.0] - 2026-09-16
 
 cmuts v2 is a rewrite of cmuts. The pipeline is one binary. The counting runs on a pair HMM, and each output file holds finished rates rather than raw counts.
 
@@ -41,7 +41,7 @@ cmuts v2 is a rewrite of cmuts. The pipeline is one binary. The counting runs on
 
 ### Changed
 
-- Each kind of difference has its own rate and error: `mismatches`, `insertions`, and `deletions`. v1 wrote one `reactivity` dataset.
+- Each kind of difference has its own rate and error: `mismatches`, `insertions`, `deletions`, and `terminations`. v1 wrote one `reactivity` dataset.
 - The insertion and deletion rates divide by the reads that cover the position and continue past it. v1 divided by the coverage.
 - Each base's PHRED score weights its contribution. `--min-phred` marks a base below it as carrying no information, where v1 rejected the base.
 - `--min-mapq` defaults to 20, where v1 defaulted to 10.
@@ -62,7 +62,6 @@ cmuts v2 is a rewrite of cmuts. The pipeline is one binary. The counting runs on
 ### Removed
 
 - The `raw`, `sm-dms`, and `sm-shape` normalization schemes, and `--per-experiment-norm` and `--per-reference-norm`. `cmuts norm` offers `ubr` and `outlier`, and takes one factor over every input given to a run.
-- Termination (RT stop) counting.
 - The deletion-spreading modes `--uniform-spread`, `--no-spread`, and `--disable-ambiguous`, and `--collapse`.
 - The counting toggles `--no-mismatches`, `--no-insertions`, and `--no-deletions`.
 - The PHRED filters `--quality-window`, `--no-match-filter`, `--no-insertion-filter`, and `--no-deletion-filter`.

@@ -174,6 +174,6 @@ with h5py.File("output.h5") as f:
 # Reading datasets
 
 with h5py.File("output.h5") as f:
-    reactivity = f["reactivity"][:]
-    reads = f["reads/counted"][:]
+    mismatches = f["mismatches/rate"][:]
+    reads = f["reads/primary/counted"][:]
 ```
