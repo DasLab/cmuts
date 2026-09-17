@@ -80,14 +80,18 @@ void pairs_add(pairs *dst, const pairs *src, size_t len)
 /* Returns the events of every kind a window holds at one position. */
 static double events_at(const phmm_window *window, size_t a)
 {
-    return window->mismatches[a] + window->insertions[a] + window->deletions[a];
+    const phmm_position *at = &window->at[a];
+
+    return at->mismatches + at->insertions + at->deletions;
 }
 
 /* Returns what a window's events at one position are counted against: the coverage,
  * plus the events that pair no base there. */
 static double span_at(const phmm_window *window, size_t a)
 {
-    return window->coverage[a] + window->insertions[a] + window->deletions[a];
+    const phmm_position *at = &window->at[a];
+
+    return at->coverage + at->insertions + at->deletions;
 }
 
 void pairs_count(pairs *p, size_t len, const phmm_window *window)
@@ -101,7 +105,7 @@ void pairs_count(pairs *p, size_t len, const phmm_window *window)
         size_t i  = (size_t)(window->origin + (hts_pos_t)a);
         double ei = span_at(window, a);
         double mi = events_at(window, a);
-        double ci = window->coverage[a];
+        double ci = window->at[a].coverage;
 
         for (size_t b = a; b < to; b++) {
             size_t  j  = (size_t)(window->origin + (hts_pos_t)b);
@@ -113,7 +117,7 @@ void pairs_count(pairs *p, size_t len, const phmm_window *window)
             at[PAIR_LEFT]    += mi * ej;
             at[PAIR_RIGHT]   += ei * mj;
             at[PAIR_BOTH]    += mi * mj;
-            at[PAIR_COVERED] += ci * window->coverage[b];
+            at[PAIR_COVERED] += ci * window->at[b].coverage;
         }
     }
 }

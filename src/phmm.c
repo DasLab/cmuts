@@ -70,16 +70,12 @@ struct phmm_scratch {
     cell_terms *terms;     /* one per cell of it */
     /* Two rows suffice: only the current row and the one below it are read. */
     band_cell *backward;
-    double    *coverage;   /* the window returned to the caller */
-    double    *mismatches;
-    double    *insertions;
-    double    *deletions;
-    double    *ends;
+    phmm_position *window; /* the values returned to the caller, one per position */
     quality_terms by_quality[QUALITY_SLOTS];  /* the comparisons of each quality */
     size_t     rows;         /* rows places, bands and factor are sized for */
     size_t     matrix_rows;  /* rows the forward matrix is sized for */
     size_t     widest;       /* cells a row of it holds */
-    size_t     window;       /* positions the last five are sized for */
+    size_t     window_len;   /* positions window is sized for */
 };
 
 /* A stretch of the reference: where it begins and how far it runs. */
@@ -653,33 +649,14 @@ static phmm_status forward(const context *ctx)
 /* Accumulating a row into the window                                        */
 /* ------------------------------------------------------------------------ */
 
-/* The window fields, each advanced to where the row's first cell enters
- * the window, so a cell addresses its positions by its own index with no
- * bounds check. window_of guarantees that every position a row can address
- * lies inside the window. The band is not clamped, so a row near either end
- * of the reference addresses positions outside it; those take only zero
- * contributions. */
-typedef struct {
-    double *coverage;
-    double *mismatches;
-    double *insertions;
-    double *deletions;
-    double *ends;
-} landing;
-
-static landing landing_of(const context *ctx, size_t i)
+/* Returns the window advanced to where the row's first cell enters it, so a cell
+ * addresses its positions by its own index with no bounds check. lay_out_rows
+ * guarantees that every position a row can address lies inside the window. The band is
+ * not clamped, so a row near either end of the reference addresses positions outside
+ * it; those take only zero contributions. */
+static phmm_position *landing_of(const context *ctx, size_t i)
 {
-    phmm_scratch *scratch = ctx->scratch;
-    size_t        at      = (size_t)(origin_of(ctx, i) - 1
-                                   - ctx->window.origin);
-
-    return (landing){
-        .coverage   = scratch->coverage + at,
-        .mismatches = scratch->mismatches + at,
-        .insertions = scratch->insertions + at,
-        .deletions  = scratch->deletions + at,
-        .ends       = scratch->ends + at,
-    };
+    return ctx->scratch->window + (size_t)(origin_of(ctx, i) - 1 - ctx->window.origin);
 }
 
 /* The state of one row's accumulation into the window. Cells are accumulated
@@ -689,10 +666,10 @@ static landing landing_of(const context *ctx, size_t i)
 typedef struct {
     scaled_row        front;
     const cell_terms *terms;
-    landing           at;
-    /* Where the row's pairings are also the read's 5'-most, which no decision
-     * follows; every other row leaves this NULL. */
-    double           *ends;
+    phmm_position    *at;
+    /* Whether the row's pairings are also the read's 5'-most, which no decision
+     * follows. */
+    bool              ends;
     /* The pending contribution to the position the next cell completes. */
     double            coverage;
     double            mismatches;
@@ -701,14 +678,12 @@ typedef struct {
 
 static accumulation accumulation_of(const context *ctx, size_t i)
 {
-    landing at = landing_of(ctx, i);
-
     return (accumulation){
         .front = scaled_row_of(ctx, i),
         .terms = terms_of(ctx, i),
-        .at    = at,
+        .at    = landing_of(ctx, i),
         /* Row 1 pairs the read's 5'-most placed base. */
-        .ends  = i == 1 ? at.ends : NULL,
+        .ends  = i == 1,
     };
 }
 
@@ -717,18 +692,19 @@ static accumulation accumulation_of(const context *ctx, size_t i)
 static void accumulate_cell(accumulation *acc, hts_pos_t k, const decision *below,
                             const double *back, double pairing)
 {
-    double matched  = forward_at(&acc->front, k, STATE_MATCH);
-    double skipped  = forward_at(&acc->front, k, STATE_DELETION);
-    double carried  = forward_at(&acc->front, k, STATE_INSERTION);
-    double paired   = matched * back[STATE_MATCH];
-    double deleted  = below->deletion_to_match * skipped * pairing;
-    double inserted = below->insertion_to_match * carried * pairing;
+    phmm_position *next     = &acc->at[k + 1];  /* the position this cell completes */
+    double         matched  = forward_at(&acc->front, k, STATE_MATCH);
+    double         skipped  = forward_at(&acc->front, k, STATE_DELETION);
+    double         carried  = forward_at(&acc->front, k, STATE_INSERTION);
+    double         paired   = matched * back[STATE_MATCH];
+    double         deleted  = below->deletion_to_match * skipped * pairing;
+    double         inserted = below->insertion_to_match * carried * pairing;
 
     /* Accumulated from the previous call, except the insertion. */
-    acc->at.coverage[k + 1]   += acc->coverage;
-    acc->at.mismatches[k + 1] += acc->mismatches;
-    acc->at.deletions[k + 1]  += acc->deletions;
-    acc->at.insertions[k + 1] += inserted;
+    next->coverage   += acc->coverage;
+    next->mismatches += acc->mismatches;
+    next->deletions  += acc->deletions;
+    next->insertions += inserted;
 
     /* Read by the next call. */
     acc->coverage   = paired;
@@ -737,7 +713,7 @@ static void accumulate_cell(accumulation *acc, hts_pos_t k, const decision *belo
 
     /* Written at the index the pending values of this cell land at. */
     if (acc->ends) {
-        acc->ends[k] += paired;
+        acc->at[k].ends += paired;
     }
 }
 
@@ -745,9 +721,9 @@ static void accumulate_cell(accumulation *acc, hts_pos_t k, const decision *belo
  * the row's last open position. */
 static void accumulate_end(const accumulation *acc)
 {
-    acc->at.coverage[0]   += acc->coverage;
-    acc->at.mismatches[0] += acc->mismatches;
-    acc->at.deletions[0]  += acc->deletions;
+    acc->at[0].coverage   += acc->coverage;
+    acc->at[0].mismatches += acc->mismatches;
+    acc->at[0].deletions  += acc->deletions;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1005,11 +981,7 @@ void phmm_scratch_destroy(phmm_scratch *scratch)
     free(scratch->terms);
     free(scratch->factor);
     free(scratch->backward);
-    free(scratch->coverage);
-    free(scratch->mismatches);
-    free(scratch->insertions);
-    free(scratch->deletions);
-    free(scratch->ends);
+    free(scratch->window);
     free(scratch);
 }
 
@@ -1090,45 +1062,23 @@ static int grow_band(phmm_scratch *scratch, size_t rows, size_t widest)
     return 0;
 }
 
-static int grow_window(phmm_scratch *scratch, size_t window)
+/* Grows the window, which holds one record per position. */
+static int grow_window(phmm_scratch *scratch, size_t len)
 {
-    double *coverage;
-    double *mismatches;
-    double *insertions;
-    double *deletions;
-    double *ends;
+    phmm_position *window;
 
-    if (window <= scratch->window) {
+    if (len <= scratch->window_len) {
         return 0;
     }
 
-    coverage   = realloc(scratch->coverage, window * sizeof *coverage);
-    mismatches = realloc(scratch->mismatches, window * sizeof *mismatches);
-    insertions = realloc(scratch->insertions, window * sizeof *insertions);
-    deletions  = realloc(scratch->deletions, window * sizeof *deletions);
-    ends       = realloc(scratch->ends, window * sizeof *ends);
+    window = realloc(scratch->window, len * sizeof *window);
 
-    if (coverage) {
-        scratch->coverage = coverage;
-    }
-    if (mismatches) {
-        scratch->mismatches = mismatches;
-    }
-    if (insertions) {
-        scratch->insertions = insertions;
-    }
-    if (deletions) {
-        scratch->deletions = deletions;
-    }
-    if (ends) {
-        scratch->ends = ends;
-    }
-
-    if (!coverage || !mismatches || !insertions || !deletions || !ends) {
+    if (!window) {
         return -1;
     }
 
-    scratch->window = window;
+    scratch->window     = window;
+    scratch->window_len = len;
 
     return 0;
 }
@@ -1178,11 +1128,7 @@ static void clear_window(const context *ctx)
     phmm_scratch *scratch = ctx->scratch;
     size_t        len     = ctx->window.len;
 
-    memset(scratch->coverage, 0, len * sizeof *scratch->coverage);
-    memset(scratch->mismatches, 0, len * sizeof *scratch->mismatches);
-    memset(scratch->insertions, 0, len * sizeof *scratch->insertions);
-    memset(scratch->deletions, 0, len * sizeof *scratch->deletions);
-    memset(scratch->ends, 0, len * sizeof *scratch->ends);
+    memset(scratch->window, 0, len * sizeof *scratch->window);
 }
 
 static bool prepare(context *ctx)
@@ -1260,11 +1206,7 @@ phmm_status phmm_run(const phmm_rates *rates, const phred *quality,
 
     out->origin     = ctx.window.origin;
     out->len        = ctx.window.len;
-    out->coverage   = scratch->coverage;
-    out->mismatches = scratch->mismatches;
-    out->insertions = scratch->insertions;
-    out->deletions  = scratch->deletions;
-    out->ends       = scratch->ends;
+    out->at     = scratch->window;
 
     return PHMM_OK;
 }

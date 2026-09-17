@@ -52,15 +52,20 @@ typedef struct phmm_scratch phmm_scratch;
 phmm_scratch *phmm_scratch_create(void);
 void          phmm_scratch_destroy(phmm_scratch *scratch);
 
+/* The computed values for one read at one reference position. */
+typedef struct {
+    double coverage;     /* base read there */
+    double mismatches;   /* template differences under the read bases */
+    double insertions;   /* insertions opened after this base */
+    double deletions;    /* deletions opened at this base */
+    double ends;         /* the read's 5'-most pairing lands here */
+} phmm_position;
+
 /* Computed values for one read, in a window around the reference. */
 typedef struct {
-    hts_pos_t     origin;       /* reference position of value 0 */
-    size_t        len;
-    const double *coverage;     /* base read there */
-    const double *mismatches;   /* template differences under the read bases */
-    const double *insertions;   /* insertions opened after this base */
-    const double *deletions;    /* deletions opened at this base */
-    const double *ends;         /* the read's 5'-most pairing lands here */
+    hts_pos_t            origin;  /* reference position of value 0 */
+    size_t               len;
+    const phmm_position *at;      /* one per position of the window */
 } phmm_window;
 
 /* Gives the window indices that fall inside a reference of len bases: from the first to

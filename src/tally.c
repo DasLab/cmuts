@@ -75,13 +75,14 @@ static void add_window(const context *ctx, const phmm_window *window)
     phmm_window_bounds(window, ctx->ref->len, &begin, &end);
 
     for (size_t i = begin; i < end; i++) {
-        size_t pos = (size_t)(window->origin + (hts_pos_t)i);
+        size_t               pos = (size_t)(window->origin + (hts_pos_t)i);
+        const phmm_position *at  = &window->at[i];
 
-        coverage[pos]   += window->coverage[i];
-        mismatches[pos] += window->mismatches[i];
-        insertions[pos] += window->insertions[i];
-        deletions[pos]  += window->deletions[i];
-        ends[pos]       += window->ends[i];
+        coverage[pos]   += at->coverage;
+        mismatches[pos] += at->mismatches;
+        insertions[pos] += at->insertions;
+        deletions[pos]  += at->deletions;
+        ends[pos]       += at->ends;
     }
 }
 
