@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: If you use cmuts, please cite it as below.
+title: cmuts
+type: software
+authors:
+  - family-names: Blair
+    given-names: Hamish M.
+    affiliation: Stanford University
+    orcid: https://orcid.org/0009-0000-0091-2032
+version: 2.0.0
+date-released: 2026-09-17
+doi: 10.5281/zenodo.22805310
+repository-code: https://github.com/DasLab/cmuts
+url: https://daslab.stanford.edu/cmuts
+license: MIT
