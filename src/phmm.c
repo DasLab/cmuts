@@ -36,11 +36,36 @@ typedef struct {
 /* Forward times backward sums to one on the first row within this tolerance. */
 #define NORMALIZATION_TOLERANCE 1e-6
 
+/* Where one row of the band lies: the reference prefix length its first cell stands
+ * for, and its cell count. */
+typedef struct {
+    hts_pos_t origin;
+    hts_pos_t width;
+} row_band;
+
+/* The comparisons of a read base of one quality against a reference base it agrees
+ * with and one it differs from, under one modification rate. Kept across reads: the
+ * qualities a read carries recur, and the rate is one value along most of a reference,
+ * so the divisions that form the comparisons run once for each quality rather than once
+ * for each row. */
+typedef struct {
+    cell_terms agree;
+    cell_terms disagree;
+    double     modification;  /* the rate the two hold for; NaN before any is kept,
+                                 which no rate compares equal to */
+} quality_terms;
+
+/* A slot for each quality a byte can hold, and one for a read storing no qualities. */
+#define QUALITY_SLOTS (PHRED_MAX + 2)
+#define NO_QUALITY    (PHRED_MAX + 1)
+
 /* Rows are stored at the widest row's stride, so a row is located by
  * multiplication. Only the loops are ragged. */
 struct phmm_scratch {
     aln_place *places;     /* one per placed read base, and one before them */
-    double    *scale;      /* reciprocal of each forward row's total */
+    row_band  *bands;      /* one per row */
+    double    *factor;     /* what each forward row is stored multiplied by */
+    double     restore;    /* the reciprocal of the last forward row's total */
     band_cell *forward;    /* rows, each of widest cells */
     cell_terms *terms;     /* one per cell of it */
     /* Two rows suffice: only the current row and the one below it are read. */
@@ -50,7 +75,8 @@ struct phmm_scratch {
     double    *insertions;
     double    *deletions;
     double    *ends;
-    size_t     rows;         /* rows places and scale are sized for */
+    quality_terms by_quality[QUALITY_SLOTS];  /* the comparisons of each quality */
+    size_t     rows;         /* rows places, bands and factor are sized for */
     size_t     matrix_rows;  /* rows the forward matrix is sized for */
     size_t     widest;       /* cells a row of it holds */
     size_t     window;       /* positions the last five are sized for */
@@ -165,13 +191,18 @@ static double phmm_modification(double modification, bool agree, double error)
 /* One read base against the reference                                       */
 /* ------------------------------------------------------------------------ */
 
-/* Returns the chance the base at the given query offset was misread, or zero
- * when the record stores no qualities. */
-static double error_at(const context *ctx, int32_t query)
+/* Returns the quality slot of the base at the given query offset. */
+static int quality_at(const context *ctx, int32_t query)
 {
-    return ctx->read->qual
-         ? phred_error(ctx->quality, ctx->read->qual[query])
-         : 0.0;
+    return ctx->read->qual ? ctx->read->qual[query] : NO_QUALITY;
+}
+
+/* Returns the chance a base of the given quality slot was misread, which is zero for a
+ * read storing no qualities. */
+static double error_of(const context *ctx, int quality)
+{
+    return quality == NO_QUALITY ? 0.0
+                                 : phred_error(ctx->quality, (uint8_t)quality);
 }
 
 /* Returns the emission of an agreeing or disagreeing pairing, and the part of
@@ -185,27 +216,52 @@ static cell_terms terms_from(double m, bool agree, double error)
     };
 }
 
+/* Forms the comparisons of one quality for one modification rate. */
+static void quality_terms_keep(quality_terms *terms, double modification, double error)
+{
+    terms->agree        = terms_from(modification, true, error);
+    terms->disagree     = terms_from(modification, false, error);
+    terms->modification = modification;
+}
+
 /* The parts of one row's comparisons that do not vary along the row: the row's base,
- * whether it names one, and its chance of being misread. The modification rate varies
- * per reference base, so the comparisons themselves are formed per cell. */
+ * whether it names one, its chance of being misread, and the slot its quality keeps
+ * its comparisons in. The modification rate varies per reference base, so the slot is
+ * refilled where a cell reads a rate other than the one it holds. */
 typedef struct {
-    cell_terms neither;
-    double     error;
-    nuc        ours;
-    bool       named;
+    cell_terms     neither;
+    double         error;
+    quality_terms *quality;
+    nuc            ours;
+    bool           named;
 } row_terms;
 
 static row_terms row_terms_of(const context *ctx, size_t i)
 {
-    int32_t query = ctx->span.begin + (int32_t)i - 1;
-    nuc     ours  = nuc_from_read(ctx->read->seq, query);
+    int32_t query   = ctx->span.begin + (int32_t)i - 1;
+    int     quality = quality_at(ctx, query);
+    nuc     ours    = nuc_from_read(ctx->read->seq, query);
 
     return (row_terms){
         .neither = { .emission = UNINFORMATIVE, .modification = 0.0 },
-        .error   = error_at(ctx, query),
+        .error   = error_of(ctx, quality),
+        .quality = &ctx->scratch->by_quality[quality],
         .ours    = ours,
         .named   = nuc_is_base(ours),
     };
+}
+
+/* Returns the comparison of the row's base with a named base under one modification
+ * rate, from the row's quality slot. */
+static cell_terms compared(const row_terms *row, bool agree, double modification)
+{
+    quality_terms *quality = row->quality;
+
+    if (modification != quality->modification) {
+        quality_terms_keep(quality, modification, row->error);
+    }
+
+    return agree ? quality->agree : quality->disagree;
 }
 
 /* Returns the comparison for the cell at reference prefix length j, which
@@ -227,8 +283,7 @@ static cell_terms terms_at(const context *ctx, const row_terms *row,
         return row->neither;
     }
 
-    return terms_from(ctx->rates->modification[j - 1], theirs == row->ours,
-                      row->error);
+    return compared(row, theirs == row->ours, ctx->rates->modification[j - 1]);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -250,12 +305,31 @@ static const band_cell *read_row_of(const context *ctx, size_t i)
     return (const band_cell *)row_of(ctx, i);
 }
 
-/* A forward row and the factor that restores its true values.
+/* The scaling of the passes.
  *
- * The forward pass stores each row divided by the totals of the rows above
- * it, which keeps the values from underflowing over long reads. A stored cell
- * is not a probability on its own. Read cells through forward_at, which
- * applies the factor. */
+ * The forward pass stores each row multiplied by a factor of its own, which keeps the
+ * values from underflowing over long reads, so a stored cell is not a probability on
+ * its own. The factor is formed from the rows two and more above, not from the row
+ * directly above: taking that row's total would put its summation and division on the
+ * chain every cell of the row waits on, whereas the row two above is complete a whole
+ * row earlier. The factor of row i is the reciprocal of the total of row i - 2 times
+ * the factor of row i - 1, and one for the first two rows. It undoes both, so the total
+ * of row i comes out near the product of the decay of rows i - 1 and i, whatever the
+ * rows before them did. A factor taken from the total of row i - 2 alone would leave
+ * each total the one above divided by the one before, which oscillates and grows.
+ *
+ * The backward pass folds the same factor into each step into a row. The product of a
+ * stored forward cell and a stored backward cell is then the posterior divided by the
+ * total of the last row, whose reciprocal forward_at applies. */
+
+/* Returns the factor row i was stored with. */
+static double factor_into(const context *ctx, size_t i)
+{
+    return ctx->scratch->factor[i];
+}
+
+/* A forward row and the factor that restores its true values. Read cells through
+ * forward_at, which applies the factor. */
 typedef struct {
     const band_cell *cell;
     double           scale;
@@ -265,7 +339,7 @@ static scaled_row scaled_row_of(const context *ctx, size_t i)
 {
     return (scaled_row){
         .cell  = read_row_of(ctx, i),
-        .scale = ctx->scratch->scale[i],
+        .scale = ctx->scratch->restore,
     };
 }
 
@@ -299,17 +373,26 @@ static hts_pos_t skip_at(const context *ctx, size_t i)
     return ctx->scratch->places[i].last - ctx->scratch->places[i].first;
 }
 
-/* Returns the cell count of row i: the stretch the CIGAR path crosses on it,
- * plus a half-width on each side. */
+/* Returns where row i lies, from the CIGAR and the band: the stretch the CIGAR path
+ * crosses on it, plus a half-width on each side. */
+static row_band band_of(const context *ctx, size_t i)
+{
+    return (row_band){
+        .origin = ctx->scratch->places[i].first - ctx->half[i],
+        .width  = skip_at(ctx, i) + 2 * (hts_pos_t)ctx->half[i] + 1,
+    };
+}
+
+/* Returns the cell count of row i. */
 static hts_pos_t width_at(const context *ctx, size_t i)
 {
-    return skip_at(ctx, i) + 2 * (hts_pos_t)ctx->half[i] + 1;
+    return ctx->scratch->bands[i].width;
 }
 
 /* Returns the reference prefix length a row's first cell stands for. */
 static hts_pos_t origin_of(const context *ctx, size_t i)
 {
-    return ctx->scratch->places[i].first - ctx->half[i];
+    return ctx->scratch->bands[i].origin;
 }
 
 /* Returns the reference prefix length a cell of a row stands for. */
@@ -359,10 +442,16 @@ static double forward_first_row(const context *ctx)
     return total;
 }
 
-/* The row above one forward row and the transition weights out of it that hold along
- * the row, with the row above's scale factor and the insertion emission folded in. The
- * decision weights vary per cell and are taken at each cell instead. The folded scale
- * factor is why this is the one place a forward row is read without forward_at. */
+/* The row above one forward row and the transition weights that hold along the row: out
+ * of the row above, with the row's factor and the insertion emission folded in, and
+ * along the row itself. The decision weights vary per cell and are taken at each cell
+ * instead. The folded factor is why this is the one place a forward row is read without
+ * forward_at.
+ *
+ * The weights are copied out of the rates so that the loop over the row reads them from
+ * registers; read through the rates, each would be loaded again at every cell, since
+ * the compiler must assume the row's stores can reach them. The factor arrives from the
+ * caller rather than from scratch for the same reason. */
 typedef struct {
     const band_cell *above;
     hts_pos_t        width;
@@ -370,12 +459,13 @@ typedef struct {
     double           scale;
     double           match_to_insertion;
     double           insertion_to_insertion;
+    double           match_to_deletion;
+    double           deletion_to_deletion;
 } descent;
 
-static descent descent_into(const context *ctx, size_t i)
+static descent descent_into(const context *ctx, size_t i, double scale)
 {
     const phmm_rates *rates = ctx->rates;
-    double            scale = ctx->scratch->scale[i - 1];
 
     return (descent){
         .above                  = read_row_of(ctx, i - 1),
@@ -386,6 +476,8 @@ static descent descent_into(const context *ctx, size_t i)
                                 * UNINFORMATIVE,
         .insertion_to_insertion = rates->insertion_to_insertion * scale
                                 * UNINFORMATIVE,
+        .match_to_deletion      = rates->match_to_deletion,
+        .deletion_to_deletion   = rates->deletion_to_deletion,
     };
 }
 
@@ -423,11 +515,11 @@ static double inserted_from(const descent *step, hts_pos_t k)
 }
 
 /* Returns a cell's deletion state, stepped from the cell to its left. */
-static double deleted_from(const phmm_rates *rates, double left_match,
+static double deleted_from(const descent *step, double left_match,
                            double left_deletion)
 {
-    return rates->match_to_deletion    * left_match
-         + rates->deletion_to_deletion * left_deletion;
+    return step->match_to_deletion    * left_match
+         + step->deletion_to_deletion * left_deletion;
 }
 
 /* Returns whether row i can hold a deletion. */
@@ -442,12 +534,11 @@ static bool insertions_live(const context *ctx, size_t i)
     return i > 1 && i + 1 < ctx->rows;
 }
 
-/* Fills row i of the forward pass and returns its unscaled total. Valid only
- * for a row with a row above it. */
-static double forward_row(const context *ctx, size_t i)
+/* Fills row i of the forward pass, stored with the given factor, and returns its
+ * total. Valid only for a row with a row above it. */
+static double forward_row(const context *ctx, size_t i, double scale)
 {
-    const phmm_rates *rates      = ctx->rates;
-    descent           step       = descent_into(ctx, i);
+    descent           step       = descent_into(ctx, i, scale);
     band_cell        *row        = row_of(ctx, i);
     cell_terms       *terms      = terms_of(ctx, i);
     row_terms         each       = row_terms_of(ctx, i);
@@ -473,7 +564,7 @@ static double forward_row(const context *ctx, size_t i)
         paired   = paired_from(&step, &into, k, terms[k].emission);
         inserted = insertions ? inserted_from(&step, k) : 0.0;
         deleted  = deletions && k > 0
-                 ? deleted_from(rates, left_match, left_deletion)
+                 ? deleted_from(&step, left_match, left_deletion)
                  : 0.0;
 
         row[k][STATE_MATCH]     = paired;
@@ -491,10 +582,10 @@ static double forward_row(const context *ctx, size_t i)
     return (total_paired + total_inserted) + total_deleted;
 }
 
-/* Checks row i's total and stores its reciprocal as the row's scale factor.
- * A zero or subnormal total means the band admits no path for this read,
- * which is not a fault. A negative or non-finite total is a fault. */
-static phmm_status record_total(const context *ctx, size_t i, double total)
+/* Checks a row's total and leaves its reciprocal in scale. A zero or subnormal total
+ * means the band admits no path for this read, which is not a fault. A negative or
+ * non-finite total is a fault. */
+static phmm_status check_total(double total, double *scale)
 {
     if (total < 0.0 || !isfinite(total)) {
         return PHMM_UNSOUND;
@@ -504,20 +595,56 @@ static phmm_status record_total(const context *ctx, size_t i, double total)
         return PHMM_NO_PATH;
     }
 
-    ctx->scratch->scale[i] = 1.0 / total;
+    *scale = 1.0 / total;
 
     return PHMM_OK;
 }
 
-/* Runs the forward pass. The first row is filled directly, since it has no row
- * above to step from. */
+/* The reciprocals of the totals of the two rows above the one being filled, and the
+ * factor of the row above, from which the factor of the next row follows. Carried in
+ * registers across the rows. */
+typedef struct {
+    double older;   /* of the row two above */
+    double newer;   /* of the row above */
+    double factor;  /* the row above was stored multiplied by this */
+} recent_rows;
+
+/* Returns the factor of row i, given what is known of the rows above it. */
+static double next_factor(const recent_rows *recent, size_t i)
+{
+    return i < 2 ? 1.0 : recent->older / recent->factor;
+}
+
+/* Fills row i of the forward pass with its factor, records the factor for the backward
+ * pass, and checks the row's total. */
+static phmm_status forward_step(const context *ctx, size_t i, recent_rows *recent)
+{
+    double      factor = next_factor(recent, i);
+    double      total  = i == 0 ? forward_first_row(ctx) : forward_row(ctx, i, factor);
+    double      scale  = 0.0;  /* left where the total fails, which ends the pass */
+    phmm_status status = check_total(total, &scale);
+
+    ctx->scratch->factor[i] = factor;
+
+    recent->older  = recent->newer;
+    recent->newer  = scale;
+    recent->factor = factor;
+
+    return status;
+}
+
+/* Runs the forward pass, leaving the reciprocal of the last row's total in the
+ * scratch for the accumulation to restore the rows with. */
 static phmm_status forward(const context *ctx)
 {
-    phmm_status status = record_total(ctx, 0, forward_first_row(ctx));
+    recent_rows recent = { .older = 1.0, .newer = 1.0, .factor = 1.0 };
+    phmm_status status = PHMM_OK;
 
-    for (size_t i = 1; status == PHMM_OK && i < ctx->rows; i++) {
-        status = record_total(ctx, i, forward_row(ctx, i));
+    for (size_t i = 0; status == PHMM_OK && i < ctx->rows; i++) {
+        status = forward_step(ctx, i, &recent);
     }
+
+    ctx->scratch->restore = recent.newer;
 
     return status;
 }
@@ -627,29 +754,40 @@ static void accumulate_end(const accumulation *acc)
 /* Backward                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* A backward cell holds the chance of every way the alignment can finish
- * from that cell. Each step into a row multiplies in that row's forward scale
- * factor, so a forward cell times a backward cell is a posterior. Each row is
- * accumulated into the window as it is formed. */
+/* A backward cell holds the chance of every way the alignment can finish from that
+ * cell. Each step into a row multiplies in the factor that row was stored with, so a
+ * forward cell read through forward_at times a backward cell is a posterior. Each row
+ * is accumulated into the window as it is formed. */
 
-/* The row below one backward row: its cells, comparisons, scale factor,
- * width, and the shift between the rows. */
+/* The row below one backward row: its cells, comparisons, the factor it was stored
+ * with, its width, and the shift between the rows, with the transition weights that
+ * hold along the row copied out of the rates for the reason descent gives. */
 typedef struct {
     const band_cell  *cell;
     const cell_terms *terms;
     double            scale;
     hts_pos_t         width;
     hts_pos_t         shift;
+    double            match_to_insertion;
+    double            match_to_deletion;
+    double            insertion_to_insertion;
+    double            deletion_to_deletion;
 } ascent;
 
 static ascent ascent_into(const context *ctx, size_t i)
 {
+    const phmm_rates *rates = ctx->rates;
+
     return (ascent){
-        .cell  = read_backward_row_of(ctx, i + 1),
-        .terms = terms_of(ctx, i + 1),
-        .scale = ctx->scratch->scale[i + 1],
-        .width = width_at(ctx, i + 1),
-        .shift = shift_between(ctx, i, i + 1),
+        .cell                   = read_backward_row_of(ctx, i + 1),
+        .terms                  = terms_of(ctx, i + 1),
+        .scale                  = factor_into(ctx, i + 1),
+        .width                  = width_at(ctx, i + 1),
+        .shift                  = shift_between(ctx, i, i + 1),
+        .match_to_insertion     = rates->match_to_insertion,
+        .match_to_deletion      = rates->match_to_deletion,
+        .insertion_to_insertion = rates->insertion_to_insertion,
+        .deletion_to_deletion   = rates->deletion_to_deletion,
     };
 }
 
@@ -683,21 +821,21 @@ static double inserted_below(const ascent *below, hts_pos_t k)
 
 /* Forms a cell's three states from the transitions out of it. The steps into the
  * pairing below carry the decision at that pairing's base. */
-static void backward_cell(const phmm_rates *rates, const decision *below,
+static void backward_cell(const ascent *step, const decision *below,
                           bool insertions, double pairing, double inserted,
                           double deleted, double *cell)
 {
-    cell[STATE_MATCH] = below->match_to_match     * pairing
-                      + rates->match_to_insertion * inserted
-                      + rates->match_to_deletion  * deleted;
+    cell[STATE_MATCH] = below->match_to_match    * pairing
+                      + step->match_to_insertion * inserted
+                      + step->match_to_deletion  * deleted;
 
     cell[STATE_INSERTION] = insertions
-                          ? below->insertion_to_match     * pairing
-                          + rates->insertion_to_insertion * inserted
+                          ? below->insertion_to_match    * pairing
+                          + step->insertion_to_insertion * inserted
                           : 0.0;
 
-    cell[STATE_DELETION] = below->deletion_to_match    * pairing
-                         + rates->deletion_to_deletion * deleted;
+    cell[STATE_DELETION] = below->deletion_to_match   * pairing
+                         + step->deletion_to_deletion * deleted;
 }
 
 /* Fills the last row of the backward pass and accumulates it. The alignment ends on
@@ -731,7 +869,6 @@ static void backward_last_row(const context *ctx)
  * with a row above and a row below. */
 static void backward_row(const context *ctx, size_t i)
 {
-    const phmm_rates *rates      = ctx->rates;
     band_cell        *row        = backward_row_of(ctx, i);
     ascent            below      = ascent_into(ctx, i);
     accumulation      acc        = accumulation_of(ctx, i);
@@ -748,7 +885,7 @@ static void backward_row(const context *ctx, size_t i)
         double   deleted  = k + 1 < width ? right_deletion : 0.0;
         double   cell[N_STATES];
 
-        backward_cell(rates, &into, insertions, pairing, inserted, deleted, cell);
+        backward_cell(&below, &into, insertions, pairing, inserted, deleted, cell);
 
         row[k][STATE_MATCH]     = cell[STATE_MATCH];
         row[k][STATE_INSERTION] = cell[STATE_INSERTION];
@@ -767,7 +904,6 @@ static void backward_row(const context *ctx, size_t i)
  * passes_agree to check. */
 static void backward_first_row(const context *ctx)
 {
-    const phmm_rates *rates = ctx->rates;
     band_cell        *row   = backward_row_of(ctx, 0);
     ascent            below = ascent_into(ctx, 0);
     hts_pos_t         width = width_at(ctx, 0);
@@ -777,8 +913,8 @@ static void backward_first_row(const context *ctx)
         double   pairing  = pairing_below(&below, k);
         double   inserted = inserted_below(&below, k);
 
-        row[k][STATE_MATCH] = into.match_to_match       * pairing
-                            + rates->match_to_insertion * inserted;
+        row[k][STATE_MATCH] = into.match_to_match      * pairing
+                            + below.match_to_insertion * inserted;
 
         /* Neither run reaches the row before the first placed base. */
         row[k][STATE_INSERTION] = 0.0;
@@ -788,8 +924,7 @@ static void backward_first_row(const context *ctx)
 
 /* Returns the first row's total of forward times backward, which is one when
  * the two passes describe the same set of paths. The first row carries the
- * whole backward chain and every forward scale factor, so this checks both
- * passes end to end. */
+ * whole backward chain and every factor, so this checks both passes end to end. */
 static double agreement(const context *ctx)
 {
     scaled_row       front = scaled_row_of(ctx, 0);
@@ -839,9 +974,23 @@ static phmm_status backward(const context *ctx)
 /* Scratch                                                                   */
 /* ------------------------------------------------------------------------ */
 
+/* Marks every quality slot as holding no rate. */
+static void clear_qualities(phmm_scratch *scratch)
+{
+    for (size_t q = 0; q < QUALITY_SLOTS; q++) {
+        scratch->by_quality[q].modification = (double)NAN;
+    }
+}
+
 phmm_scratch *phmm_scratch_create(void)
 {
-    return calloc(1, sizeof(phmm_scratch));
+    phmm_scratch *scratch = calloc(1, sizeof *scratch);
+
+    if (scratch) {
+        clear_qualities(scratch);
+    }
+
+    return scratch;
 }
 
 void phmm_scratch_destroy(phmm_scratch *scratch)
@@ -851,9 +1000,10 @@ void phmm_scratch_destroy(phmm_scratch *scratch)
     }
 
     free(scratch->places);
+    free(scratch->bands);
     free(scratch->forward);
     free(scratch->terms);
-    free(scratch->scale);
+    free(scratch->factor);
     free(scratch->backward);
     free(scratch->coverage);
     free(scratch->mismatches);
@@ -870,23 +1020,28 @@ void phmm_scratch_destroy(phmm_scratch *scratch)
 static int grow_rows(phmm_scratch *scratch, size_t rows)
 {
     aln_place *places;
-    double    *scale;
+    row_band  *bands;
+    double    *factor;
 
     if (rows <= scratch->rows) {
         return 0;
     }
 
     places = realloc(scratch->places, rows * sizeof *places);
-    scale  = realloc(scratch->scale, rows * sizeof *scale);
+    bands  = realloc(scratch->bands, rows * sizeof *bands);
+    factor = realloc(scratch->factor, rows * sizeof *factor);
 
     if (places) {
         scratch->places = places;
     }
-    if (scale) {
-        scratch->scale = scale;
+    if (bands) {
+        scratch->bands = bands;
+    }
+    if (factor) {
+        scratch->factor = factor;
     }
 
-    if (!places || !scale) {
+    if (!places || !bands || !factor) {
         return -1;
     }
 
@@ -982,43 +1137,35 @@ static int grow_window(phmm_scratch *scratch, size_t window)
 /* One read                                                                  */
 /* ------------------------------------------------------------------------ */
 
-/* Returns the width of the widest row, and at least one, which is the stride
- * every row is stored at. */
-static hts_pos_t widest_row(const context *ctx)
+/* Writes where every row lies, and from the rows the stride every row is stored at,
+ * which is the width of the widest row and at least one, and the smallest reference
+ * range that holds every position any row can write. */
+static void lay_out_rows(context *ctx)
 {
+    row_band *bands  = ctx->scratch->bands;
     hts_pos_t widest = 1;
+    hts_pos_t first  = 0;
+    hts_pos_t last   = 0;
 
     for (size_t i = 0; i < ctx->rows; i++) {
-        hts_pos_t width = width_at(ctx, i);
+        row_band  band = band_of(ctx, i);
+        hts_pos_t end  = band.origin + band.width;
 
-        if (width > widest) {
-            widest = width;
+        bands[i] = band;
+
+        if (band.width > widest) {
+            widest = band.width;
+        }
+        if (i == 0 || band.origin < first) {
+            first = band.origin;
+        }
+        if (i == 0 || end > last) {
+            last = end;
         }
     }
 
-    return widest;
-}
-
-/* Returns the smallest reference range that holds every position any row can
- * write. */
-static extent window_of(const context *ctx)
-{
-    hts_pos_t first = origin_of(ctx, 0);
-    hts_pos_t last  = first + width_at(ctx, 0);
-
-    for (size_t i = 1; i < ctx->rows; i++) {
-        hts_pos_t lo = origin_of(ctx, i);
-        hts_pos_t hi = lo + width_at(ctx, i);
-
-        if (lo < first) {
-            first = lo;
-        }
-        if (hi > last) {
-            last = hi;
-        }
-    }
-
-    return (extent){
+    ctx->widest = widest;
+    ctx->window = (extent){
         .origin = first - 1,
         .len    = (size_t)(last - first) + 1,
     };
@@ -1046,15 +1193,14 @@ static bool prepare(context *ctx)
         return false;
     }
 
-    ctx->span   = aln_places(read, ctx->scratch->places);
-    ctx->rows   = (size_t)(ctx->span.end - ctx->span.begin) + 1;
-    ctx->widest = widest_row(ctx);
+    ctx->span = aln_places(read, ctx->scratch->places);
+    ctx->rows = (size_t)(ctx->span.end - ctx->span.begin) + 1;
+
+    lay_out_rows(ctx);
 
     if (grow_band(ctx->scratch, ctx->rows, (size_t)ctx->widest) < 0) {
         return false;
     }
-
-    ctx->window = window_of(ctx);
 
     if (grow_window(ctx->scratch, ctx->window.len) < 0) {
         return false;
