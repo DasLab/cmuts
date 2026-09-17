@@ -90,11 +90,7 @@ scripts/static-deps.sh deps-static
 make STATIC_PREFIX=deps-static
 ```
 
-On macOS system libraries stay dynamic; a musl compiler (`scripts/static-deps.sh deps-static musl-gcc`, or any Alpine gcc) makes the whole link static. `make check STATIC_PREFIX=deps-static` runs the tests against the result.
-
-Pushing a `v*` tag runs the `Release` workflow, which builds these binaries for Linux (x86_64, aarch64, via Alpine containers) and macOS (arm64), runs the test suite against each, and attaches `scripts/package.sh` tarballs to a draft GitHub release.
-
-A first job runs `scripts/check-tag.sh`, which fails where the tag names a version other than the one in `include/version.h` or the one in `CITATION.cff`. The same job runs `scripts/release-notes.sh`, which fails where `CHANGELOG.md` holds no entry under `## [<version>]`. The platform jobs wait on that job, so a tag which disagrees with any of the three files fails before anything is built. Set the version in the header, set the version and release date in `CITATION.cff`, and write the changelog entry before you tag. The draft takes its notes from the entry `scripts/release-notes.sh` prints. Zenodo archives each tag and reads `CITATION.cff` for the record's title, authors and license.
+On macOS system libraries stay dynamic; a musl compiler (`scripts/static-deps.sh deps-static musl-gcc`, or any Alpine gcc) makes the whole link static. `make check STATIC_PREFIX=deps-static` runs the tests against the result. `scripts/package.sh` wraps the result in the tarball a release carries.
 
 # Contributing
 
@@ -115,3 +111,15 @@ Two workflows run on every push to `main` and on every pull request against it.
 On a push to `main`, and only once those pass, `CI` goes on to pin the `DasLab/cmuts-space` Dockerfile to the commit. It then waits for the space to rebuild and redeploy, and fails where that fails, so a change which breaks the space is reported here.
 
 `Documentation` renders the site, and fails if the generated docs are not current, rather than automatically updating them for you. A push to `main` deploys the rendered site as well.
+
+## Releasing
+
+A release is a `v*` tag on `main`. Before tagging, set three files to the version the tag will name:
+
+1. `include/version.h`, which the programs report and the tarballs are named from.
+2. `CITATION.cff`, whose `version` and `date-released` a citation of the software carries. Zenodo archives each tag and reads this file for the record's title, authors and license.
+3. `CHANGELOG.md`, which needs an entry under `## [<version>]`. The release takes its notes from that entry.
+
+Pushing the tag runs the `Release` workflow. Its first job runs `scripts/check-tag.sh`, which fails where the tag disagrees with the header or the citation file, and `scripts/release-notes.sh`, which fails where the changelog holds no entry for the version. The platform jobs wait on that job, so a tag that disagrees with any of the three files fails before anything is built.
+
+The platform jobs build the static binaries for Linux (x86_64, aarch64, via Alpine containers) and macOS (arm64), run the test suite against each, and attach the `scripts/package.sh` tarballs to a draft GitHub release with the changelog entry as its notes. Publishing the draft is a manual step.
