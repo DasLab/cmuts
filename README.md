@@ -2,6 +2,10 @@
 
 Fast, multithreaded pair-HMM counting of MaP-seq mutations.
 
+## Web Server
+
+The [web server](https://huggingface.co/spaces/DasLab/cmuts) runs `cmuts` on Hugging Face, bypassing the need for a local install. It is suitable for jobs of a few references and a few thousand reads.
+
 ## Installing
 
 Each [release](https://github.com/DasLab/cmuts/releases) carries static `cmuts` binaries for Linux (x86_64, aarch64) and macOS (arm64). These bundle htslib and HDF5, so no libraries need to be installed to run them. Alternatively, you can [build from source](https://daslab.stanford.edu/cmuts/from-source), which may provide marginal speedups.

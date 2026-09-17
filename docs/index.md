@@ -2,6 +2,10 @@
 
 `cmuts` is a software suite for processing MaP-seq datasets, as well as its cousins RING-MaP and MOHCA-seq, or more generally any experiment where the readouts are mutations to a known reference sequence.
 
+## Web Server
+
+The [web server](https://huggingface.co/spaces/DasLab/cmuts) runs `cmuts` on Hugging Face, bypassing the need for a local install. It is suitable for jobs of a few references and a few thousand reads.
+
 ## Installing
 
 Each [release](https://github.com/DasLab/cmuts/releases) carries static `cmuts` binaries for Linux (x86_64, aarch64) and macOS (arm64). These bundle htslib and HDF5, so no libraries need to be installed to run them. Alternatively, you can [build from source](from-source.md), which may provide marginal speedups.

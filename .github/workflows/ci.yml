@@ -1,10 +1,21 @@
 name: CI
 
+# Prose alone changes nothing this workflow checks, so a push or pull request
+# touching only the pages below does not start it. Documentation keeps its own
+# unfiltered trigger, since a code change can leave the generated pages stale.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
 
 jobs:
   check:
